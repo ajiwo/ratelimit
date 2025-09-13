@@ -299,29 +299,32 @@ func (m *MemoryBackend) cleanupLoop() {
 
 // cleanup removes expired entries from the backend
 func (m *MemoryBackend) cleanup() {
+	// 1: Collect candidate keys under read lock
 	m.mutex.RLock()
-	keysToCheck := make(map[string]time.Time, len(m.data))
+	now := time.Now()
+	candidates := make([]string, 0)
 	for key, data := range m.data {
-		keysToCheck[key] = data.LastRequest
+		// A key is considered expired if it hasn't been accessed in two cleanup intervals,
+		// providing a grace period before removal.
+		if now.Sub(data.LastRequest) > m.cleanupInterval*2 {
+			candidates = append(candidates, key)
+		}
 	}
 	m.mutex.RUnlock()
 
-	now := time.Now()
-	expiredKeys := make([]string, 0)
-
-	for key, lastRequest := range keysToCheck {
-		// A key is considered expired if it hasn't been accessed in two cleanup intervals,
-		// providing a grace period before removal.
-		if now.Sub(lastRequest) > m.cleanupInterval*2 {
-			expiredKeys = append(expiredKeys, key)
-		}
+	if len(candidates) == 0 {
+		return
 	}
 
-	if len(expiredKeys) > 0 {
-		m.mutex.Lock()
-		for _, key := range expiredKeys {
-			delete(m.data, key)
+	// 2: Re-check and delete under write lock to avoid check-then-act race
+	m.mutex.Lock()
+	defer m.mutex.Unlock()
+	for _, key := range candidates {
+		if data, ok := m.data[key]; ok {
+			// Re-validate with current time to ensure key is still expired
+			if time.Since(data.LastRequest) > m.cleanupInterval*2 {
+				delete(m.data, key)
+			}
 		}
-		m.mutex.Unlock()
 	}
 }
