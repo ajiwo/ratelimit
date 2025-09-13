@@ -4,7 +4,19 @@ import (
 	"fmt"
 )
 
-// NewBackend creates a new backend instance based on the configuration
+// NewStorage creates a new storage instance based on the configuration
+func NewStorage(storageType string, config BackendConfig) (Storage, error) {
+	switch storageType {
+	case "memory":
+		return NewMemoryStorage(config)
+	case "redis":
+		return NewRedisStorage(config)
+	default:
+		return nil, fmt.Errorf("unsupported storage type: %s", storageType)
+	}
+}
+
+// NewBackend creates a new backend instance based on the configuration (for backward compatibility)
 func NewBackend(config BackendConfig) (Backend, error) {
 	switch config.Type {
 	case "memory":
