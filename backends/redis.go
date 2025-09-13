@@ -231,16 +231,6 @@ type RedisBackendStats struct {
 	PoolStats RedisPoolStats
 }
 
-// RedisPoolStats holds Redis connection pool statistics
-type RedisPoolStats struct {
-	Hits       uint32
-	Misses     uint32
-	Timeouts   uint32
-	TotalConns uint32
-	IdleConns  uint32
-	StaleConns uint32
-}
-
 // Ping tests the Redis connection
 func (r *RedisBackend) Ping(ctx context.Context) error {
 	return r.client.Ping(ctx).Err()
