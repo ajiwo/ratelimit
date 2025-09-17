@@ -43,44 +43,37 @@ func main() {
 
 func tokenBucketExample() error {
 	// Create memory backend
-	backendConfig := backends.BackendConfig{
-		Type:            "memory",
-		CleanupInterval: 5 * time.Minute,
-		MaxKeys:         10000,
-	}
-
-	backend, err := backends.NewBackend(backendConfig)
-	if err != nil {
-		return err
-	}
-	defer backend.Close()
+	backend := backends.NewMemoryStorage()
 
 	// Create token bucket strategy
-	strategyConfig := strategies.StrategyConfig{
-		Type:         "token_bucket",
-		RefillRate:   time.Second,
-		RefillAmount: 5,
-		BucketSize:   20,
-	}
-
-	strategy, err := strategies.NewStrategy(strategyConfig)
-	if err != nil {
-		return err
-	}
+	strategy := strategies.NewTokenBucket(backend)
 
 	// Test rate limiting
 	userID := "user:token_bucket:123"
+	config := strategies.TokenBucketConfig{
+		RateLimitConfig: strategies.RateLimitConfig{
+			Key:   userID,
+			Limit: 20,
+		},
+		BurstSize:  20,
+		RefillRate: 5.0, // 5 tokens per second
+	}
 
 	for i := range 25 {
-		result, err := strategy.Allow(context.Background(), backend, userID, 20, time.Minute)
+		allowed, err := strategy.Allow(context.Background(), config)
 		if err != nil {
 			return err
 		}
 
-		if result.Allowed {
+		result, err := strategy.GetResult(context.Background(), config)
+		if err != nil {
+			return err
+		}
+
+		if allowed {
 			fmt.Printf("Request %d: ALLOWED (remaining: %d)\n", i+1, result.Remaining)
 		} else {
-			fmt.Printf("Request %d: BLOCKED (retry after: %v)\n", i+1, result.RetryAfter)
+			fmt.Printf("Request %d: BLOCKED\n", i+1)
 		}
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -89,42 +82,36 @@ func tokenBucketExample() error {
 
 func fixedWindowExample() error {
 	// Create memory backend
-	backendConfig := backends.BackendConfig{
-		Type:            "memory",
-		CleanupInterval: 5 * time.Minute,
-		MaxKeys:         10000,
-	}
-
-	backend, err := backends.NewBackend(backendConfig)
-	if err != nil {
-		return err
-	}
-	defer backend.Close()
+	backend := backends.NewMemoryStorage()
 
 	// Create fixed window strategy
-	strategyConfig := strategies.StrategyConfig{
-		Type:           "fixed_window",
-		WindowDuration: 10 * time.Second, // Short window for demo
-	}
-
-	strategy, err := strategies.NewStrategy(strategyConfig)
-	if err != nil {
-		return err
-	}
+	strategy := strategies.NewFixedWindow(backend)
 
 	// Test rate limiting
 	userID := "user:fixed_window:456"
+	config := strategies.FixedWindowConfig{
+		RateLimitConfig: strategies.RateLimitConfig{
+			Key:   userID,
+			Limit: 10,
+		},
+		Window: 10 * time.Second, // Short window for demo
+	}
 
 	for i := range 15 {
-		result, err := strategy.Allow(context.Background(), backend, userID, 10, 10*time.Second)
+		allowed, err := strategy.Allow(context.Background(), config)
 		if err != nil {
 			return err
 		}
 
-		if result.Allowed {
+		result, err := strategy.GetResult(context.Background(), config)
+		if err != nil {
+			return err
+		}
+
+		if allowed {
 			fmt.Printf("Request %d: ALLOWED (remaining: %d)\n", i+1, result.Remaining)
 		} else {
-			fmt.Printf("Request %d: BLOCKED (retry after: %v)\n", i+1, result.RetryAfter)
+			fmt.Printf("Request %d: BLOCKED\n", i+1)
 		}
 		time.Sleep(500 * time.Millisecond)
 	}
@@ -139,46 +126,71 @@ func tokenBucketRedisExample() error {
 	}
 
 	// Create Redis backend
-	backendConfig := backends.BackendConfig{
-		Type:          "redis",
-		RedisAddress:  redisAddr,
-		RedisPassword: "", // Assuming no password for local Redis
-		RedisDB:       0,  // Default DB
-		RedisPoolSize: 10,
+	redisConfig := backends.RedisConfig{
+		Addr:     redisAddr,
+		Password: "", // Assuming no password for local Redis
+		DB:       0,  // Default DB
+		PoolSize: 10,
 	}
 
-	backend, err := backends.NewBackend(backendConfig)
+	backend, err := backends.NewRedisStorage(redisConfig)
 	if err != nil {
-		return err
+		// If Redis is not available, skip this example
+		fmt.Println("Redis not available, skipping example")
+		return nil
 	}
-	defer backend.Close()
+
+	defer func() {
+		if err := backend.Close(); err != nil {
+			fmt.Printf("Error closing Redis backend: %v\n", err)
+		}
+	}()
 
 	// Create token bucket strategy
-	strategyConfig := strategies.StrategyConfig{
-		Type:         "token_bucket",
-		RefillRate:   time.Second,
-		RefillAmount: 3,
-		BucketSize:   15,
-	}
-
-	strategy, err := strategies.NewStrategy(strategyConfig)
-	if err != nil {
-		return err
-	}
+	strategy := strategies.NewTokenBucket(backend)
 
 	// Test rate limiting
 	userID := "user:token_bucket:redis:789"
+	config := strategies.TokenBucketConfig{
+		RateLimitConfig: strategies.RateLimitConfig{
+			Key:   userID,
+			Limit: 15,
+		},
+		BurstSize:  15,
+		RefillRate: 3.0, // 3 tokens per second
+	}
 
 	for i := range 20 {
-		result, err := strategy.Allow(context.Background(), backend, userID, 15, time.Minute)
-		if err != nil {
-			return err
+		// Reset the bucket for each request to avoid conflicts with previous runs
+		if i == 0 {
+			err := strategy.Reset(context.Background(), config)
+			if err != nil {
+				fmt.Printf("Error in Reset: %v\n", err)
+				// Continue with the example even if there's an error
+				continue
+			}
 		}
 
-		if result.Allowed {
+		allowed, err := strategy.Allow(context.Background(), config)
+		if err != nil {
+			fmt.Printf("Error in Allow: %v\n", err)
+			// Continue with the example even if there's an error
+			fmt.Printf("Request %d: ERROR\n", i+1)
+			continue
+		}
+
+		result, err := strategy.GetResult(context.Background(), config)
+		if err != nil {
+			fmt.Printf("Error in GetResult: %v\n", err)
+			// Continue with the example even if there's an error
+			fmt.Printf("Request %d: ERROR\n", i+1)
+			continue
+		}
+
+		if allowed {
 			fmt.Printf("Request %d: ALLOWED (remaining: %d)\n", i+1, result.Remaining)
 		} else {
-			fmt.Printf("Request %d: BLOCKED (retry after: %v)\n", i+1, result.RetryAfter)
+			fmt.Printf("Request %d: BLOCKED\n", i+1)
 		}
 		time.Sleep(200 * time.Millisecond)
 	}
@@ -187,54 +199,52 @@ func tokenBucketRedisExample() error {
 
 func statusExample() error {
 	// Create memory backend
-	backendConfig := backends.BackendConfig{
-		Type:            "memory",
-		CleanupInterval: 5 * time.Minute,
-		MaxKeys:         10000,
-	}
-
-	backend, err := backends.NewBackend(backendConfig)
-	if err != nil {
-		return err
-	}
-	defer backend.Close()
+	backend := backends.NewMemoryStorage()
 
 	// Create token bucket strategy
-	strategyConfig := strategies.StrategyConfig{
-		Type:         "token_bucket",
-		RefillRate:   time.Second,
-		RefillAmount: 2,
-		BucketSize:   10,
+	strategy := strategies.NewTokenBucket(backend)
+
+	userID := "user:status:789"
+	config := strategies.TokenBucketConfig{
+		RateLimitConfig: strategies.RateLimitConfig{
+			Key:   userID,
+			Limit: 10,
+		},
+		BurstSize:  10,
+		RefillRate: 2.0, // 2 tokens per second
 	}
 
-	strategy, err := strategies.NewStrategy(strategyConfig)
+	// Reset the bucket to start fresh
+	err := strategy.Reset(context.Background(), config)
 	if err != nil {
 		return err
 	}
-
-	userID := "user:status:789"
 
 	// Make some requests to consume tokens
 	for i := range 5 {
-		result, err := strategy.Allow(context.Background(), backend, userID, 10, time.Minute)
+		allowed, err := strategy.Allow(context.Background(), config)
 		if err != nil {
 			return err
 		}
-		fmt.Printf("Made request %d: allowed=%v, remaining=%d\n", i+1, result.Allowed, result.Remaining)
+
+		result, err := strategy.GetResult(context.Background(), config)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Made request %d: allowed=%v, remaining=%d\n", i+1, allowed, result.Remaining)
 		time.Sleep(200 * time.Millisecond)
 	}
 
 	// Get current status
-	status, err := strategy.GetStatus(context.Background(), backend, userID, 10, time.Minute)
+	result, err := strategy.GetResult(context.Background(), config)
 	if err != nil {
 		return err
 	}
 
 	fmt.Printf("\nCurrent Status:\n")
-	fmt.Printf("  Limit: %d\n", status.Limit)
-	fmt.Printf("  Remaining: %d\n", status.Remaining)
-	fmt.Printf("  Window Start: %v\n", status.WindowStart)
-	fmt.Printf("  Window Duration: %v\n", status.WindowDuration)
-	fmt.Printf("  Total Requests: %d\n", status.TotalRequests)
+	fmt.Printf("  Allowed: %v\n", result.Allowed)
+	fmt.Printf("  Remaining: %d\n", result.Remaining)
+	fmt.Printf("  Reset Time: %v\n", result.Reset)
 	return nil
 }

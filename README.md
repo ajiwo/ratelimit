@@ -1,6 +1,15 @@
-# ratelimit
+# Rate Limiting Library
 
-A rate limiting library for Go applications with multiple backends and algorithm strategies.
+This is a Go library that implements rate limiting functionality with multiple algorithms and storage backends, including high-level multi-tier rate limiting support.
+
+## Features
+
+- Multiple rate limiting algorithms:
+  - Fixed Window
+  - Token Bucket
+- Multiple storage backends:
+  - In-Memory (single instance)
+  - Redis (distributed)
 
 ## Installation
 
@@ -8,123 +17,146 @@ A rate limiting library for Go applications with multiple backends and algorithm
 go get github.com/ajiwo/ratelimit
 ```
 
-## Quick Start
+## Usage
+
+### Multi-Tier Rate Limiting
+
+The library provides a high-level multi-tier rate limiting interface that allows you to configure multiple time-based rate limits simultaneously:
 
 ```go
-package main
+import "github.com/ajiwo/ratelimit"
 
-import (
-    "context"
-    "fmt"
-    "time"
-
-    "github.com/ajiwo/ratelimit/backends"
-    "github.com/ajiwo/ratelimit/strategies"
+// Create a rate limiter using functional options
+limiter, err := ratelimit.New(
+    ratelimit.WithMemoryBackend(),
+    ratelimit.WithFixedWindowStrategy(
+        ratelimit.TierConfig{Interval: time.Minute, Limit: 5},    // 5 requests per minute
+        ratelimit.TierConfig{Interval: time.Hour, Limit: 100},   // 100 requests per hour
+        ratelimit.TierConfig{Interval: 24 * time.Hour, Limit: 1000}, // 1000 requests per day
+    ),
+    ratelimit.WithBaseKey("user:123"),
 )
-
-func main() {
-    // Create memory backend
-    backendConfig := backends.BackendConfig{
-        Type:            "memory",
-        CleanupInterval: 5 * time.Minute,
-        MaxKeys:         10000,
-    }
-
-    backend, err := backends.NewBackend(backendConfig)
-    if err != nil {
-        panic(err)
-    }
-    defer backend.Close()
-
-    // Create token bucket strategy
-    strategyConfig := strategies.StrategyConfig{
-        Type:         "token_bucket",
-        RefillRate:   time.Second,
-        RefillAmount: 5,
-        BucketSize:   20,
-    }
-
-    strategy, err := strategies.NewStrategy(strategyConfig)
-    if err != nil {
-        panic(err)
-    }
-
-    // Test rate limiting
-    userID := "user:123"
-    
-    for i := range 5 {
-        result, err := strategy.Allow(context.Background(), backend, userID, 20, time.Minute)
-        if err != nil {
-            panic(err)
-        }
-
-        if result.Allowed {
-            fmt.Printf("Request %d: ALLOWED (remaining: %d)\n", i+1, result.Remaining)
-        } else {
-            fmt.Printf("Request %d: BLOCKED\n", i+1)
-        }
-    }
+if err != nil {
+    panic(err)
 }
+defer limiter.Close()
+
+// Check if request is allowed
+allowed, err := limiter.Allow(ctx)
 ```
 
-## Strategies
+The multi-tier limiter enforces ALL tiers simultaneously - a request is only allowed if it passes ALL configured rate limit tiers.
 
-### Token Bucket
+**Supported strategies:**
+- `ratelimit.StrategyFixedWindow`
+- `ratelimit.StrategyTokenBucket`
 
-The token bucket algorithm provides a flexible rate limiting approach that allows for bursts of traffic while maintaining an average rate limit.
+**Available functional options:**
+- `WithMemoryBackend()` - Use in-memory storage
+- `WithRedisBackend(config)` - Use Redis storage
+- `WithFixedWindowStrategy(tiers...)` - Fixed window algorithm
+- `WithTokenBucketStrategy(burstSize, refillRate, tiers...)` - Token bucket algorithm
+- `WithBaseKey(key)` - Set the base key for rate limiting
+- `WithTiers(tiers...)` - Override default tiers for any strategy
+
+**Limits and Constraints:**
+- Maximum 12 tiers per configuration
+- Minimum interval: 5 seconds
+- Each tier must have a positive limit
+- Arbitrary time intervals are supported (30 seconds, 5 minutes, 2 hours, etc.)
+
+### Storage Backends
+
+The library supports multiple storage backends:
+
+### 1. In-Memory Storage
 
 ```go
-strategyConfig := strategies.StrategyConfig{
-    Type:         "token_bucket",
-    RefillRate:   time.Second,     // Refill tokens every second
-    RefillAmount: 5,               // Add 5 tokens per refill
-    BucketSize:   20,              // Maximum 20 tokens in bucket
-}
+storage := backends.NewMemoryStorage()
 ```
 
-### Fixed Window
-
-The fixed window algorithm divides time into fixed intervals and allows a maximum number of requests per interval.
+### 2. Redis Storage
 
 ```go
-strategyConfig := strategies.StrategyConfig{
-    Type:           "fixed_window",
-    WindowDuration: 10 * time.Second, // Fixed window of 10 seconds
+config := backends.RedisConfig{
+    Addr:     "localhost:6379",
+    Password: "",
+    DB:       0,
 }
+storage, err := backends.NewRedisStorage(config)
 ```
 
-## Backends
 
-### Memory
 
-In-memory backend for single-instance applications.
+### Rate Limiting Strategies
+
+After creating a storage backend, you can use it with different rate limiting strategies:
+
+#### Fixed Window
 
 ```go
-backendConfig := backends.BackendConfig{
-    Type:            "memory",
-    CleanupInterval: 5 * time.Minute,
-    MaxKeys:         10000,
+// Create a fixed window strategy
+strategy := strategies.NewFixedWindow(storage)
+
+// Configure rate limiting
+config := strategies.FixedWindowConfig{
+    RateLimitConfig: strategies.RateLimitConfig{
+        Key:   "user:123",
+        Limit: 100,
+    },
+    Window: time.Minute, // Time window
+}
+
+// Check if request is allowed
+allowed, err := strategy.Allow(ctx, config)
+if err != nil {
+    // Handle error
+}
+if allowed {
+    // Process request
+} else {
+    // Reject request
 }
 ```
 
-### Redis
-
-Redis backend for distributed applications.
+#### Token Bucket
 
 ```go
-backendConfig := backends.BackendConfig{
-    Type:          "redis",
-    RedisAddress:  "localhost:6379",
-    RedisPassword: "",
-    RedisDB:       0,
-    RedisPoolSize: 10,
+// Create a token bucket strategy
+strategy := strategies.NewTokenBucket(storage)
+
+// Configure rate limiting
+config := strategies.TokenBucketConfig{
+    RateLimitConfig: strategies.RateLimitConfig{
+        Key:   "user:123",
+        Limit: 100,
+    },
+    BurstSize:  10,
+    RefillRate: 1.0, // 1 token per second
+}
+
+// Check if request is allowed
+allowed, err := strategy.Allow(ctx, config)
+if err != nil {
+    // Handle error
+}
+if allowed {
+    // Process request
+} else {
+    // Reject request
 }
 ```
 
-## Examples
+## Testing
 
-See [examples/main.go](examples/main.go) for comprehensive usage examples.
+Run tests with:
+
+```bash
+./test.sh
+```
+
+Note: Some tests require running Redis instances for integration testing.
 
 ## License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+MIT
