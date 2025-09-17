@@ -1,242 +1,344 @@
 package strategies
 
 import (
-	"context"
+	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func setupTokenBucketTest(t *testing.T) (context.Context, *TokenBucketStrategy, backends.Backend) {
-	ctx := t.Context()
-	backend, err := backends.NewMemoryBackend(backends.BackendConfig{})
-	assert.NoError(t, err)
-
-	strategy, err := NewTokenBucketStrategy(StrategyConfig{
-		BucketSize:   20,
-		RefillRate:   time.Second,
-		RefillAmount: 10,
-	})
-	assert.NoError(t, err)
-
-	t.Cleanup(func() {
-		backend.Close()
-	})
-
-	return ctx, strategy, backend
-}
-
-func TestTokenBucket_Allow(t *testing.T) {
+func TestTokenBucket_GetResult(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		ctx, strategy, backend := setupTokenBucketTest(t)
-		key := "tb_allow_test"
+		ctx := t.Context()
+		storage := backends.NewMemoryStorage()
+		strategy := NewTokenBucket(storage)
 
-		// Consume all 20 tokens (burst)
-		for i := 0; i < int(strategy.bucketSize); i++ {
-			res, err := strategy.Allow(ctx, backend, key, strategy.bucketSize, time.Minute)
-			assert.NoError(t, err)
-			assert.True(t, res.Allowed)
+		config := TokenBucketConfig{
+			RateLimitConfig: RateLimitConfig{
+				Key:   "result-test-key",
+				Limit: 10,
+			},
+			BurstSize:  10,
+			RefillRate: 10.0, // 10 tokens per second
 		}
 
-		// 21st request should be denied as bucket is empty
-		res, err := strategy.Allow(ctx, backend, key, strategy.bucketSize, time.Minute)
-		assert.NoError(t, err)
-		assert.False(t, res.Allowed)
-		assert.Equal(t, int64(0), res.Remaining)
-		assert.Greater(t, res.RetryAfter, time.Duration(0))
-	})
-}
+		// Test GetResult with no existing data
+		result, err := strategy.GetResult(ctx, config)
+		require.NoError(t, err)
+		assert.True(t, result.Allowed, "Result should be allowed initially")
+		assert.Equal(t, 10, result.Remaining, "Remaining should be 10 initially")
 
-func TestTokenBucket_Refill(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		ctx, strategy, backend := setupTokenBucketTest(t)
-		key := "tb_refill_test"
-
-		// Consume all 20 tokens
-		for i := 0; i < int(strategy.bucketSize); i++ {
-			_, err := strategy.Allow(ctx, backend, key, strategy.bucketSize, time.Minute)
-			assert.NoError(t, err)
+		// Make some requests
+		for i := range 5 {
+			allowed, err := strategy.Allow(ctx, config)
+			require.NoError(t, err)
+			assert.True(t, allowed, "Request %d should be allowed", i)
 		}
 
-		// Check that it's limited
-		res, err := strategy.Allow(ctx, backend, key, strategy.bucketSize, time.Minute)
-		assert.NoError(t, err)
-		assert.False(t, res.Allowed)
+		// Test GetResult after requests
+		result, err = strategy.GetResult(ctx, config)
+		require.NoError(t, err)
+		assert.True(t, result.Allowed, "Result should still be allowed")
+		assert.Equal(t, 5, result.Remaining, "Remaining should be 5 after 5 requests")
 
-		// Wait for a refill cycle (refills 10 tokens)
-		time.Sleep(strategy.refillRate)
-
-		// Now 10 requests should be allowed
-		for i := 0; i < int(strategy.refillAmount); i++ {
-			res, err := strategy.Allow(ctx, backend, key, strategy.bucketSize, time.Minute)
-			assert.NoError(t, err)
-			assert.True(t, res.Allowed)
+		// Use all tokens
+		for i := range 5 {
+			allowed, err := strategy.Allow(ctx, config)
+			require.NoError(t, err)
+			assert.True(t, allowed, "Request %d should be allowed", i+5)
 		}
 
-		// The next one should be denied
-		res, err = strategy.Allow(ctx, backend, key, strategy.bucketSize, time.Minute)
-		assert.NoError(t, err)
-		assert.False(t, res.Allowed)
-	})
-}
+		// Next request should be denied
+		allowed, err := strategy.Allow(ctx, config)
+		require.NoError(t, err)
+		assert.False(t, allowed, "Request should be denied when no tokens")
 
-func TestTokenBucket_GetStatus(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		ctx, strategy, backend := setupTokenBucketTest(t)
-		key := "tb_status_test"
-
-		status, err := strategy.GetStatus(ctx, backend, key, strategy.bucketSize, time.Minute)
-		assert.NoError(t, err)
-		assert.Equal(t, strategy.bucketSize, status.Remaining)
-		assert.False(t, status.Remaining == 0)
-
-		// Consume 5 tokens
-		for range 5 {
-			_, err := strategy.Allow(ctx, backend, key, strategy.bucketSize, time.Minute)
-			assert.NoError(t, err)
-		}
-
-		status, err = strategy.GetStatus(ctx, backend, key, strategy.bucketSize, time.Minute)
-		assert.NoError(t, err)
-		assert.Equal(t, strategy.bucketSize-5, status.Remaining)
-		assert.False(t, status.Remaining == 0)
+		// Test invalid config type
+		_, err = strategy.GetResult(ctx, FixedWindowConfig{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "requires TokenBucketConfig")
 	})
 }
 
 func TestTokenBucket_Reset(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		ctx, strategy, backend := setupTokenBucketTest(t)
-		key := "tb_manual_reset_test"
+		ctx := t.Context()
+		storage := backends.NewMemoryStorage()
+		strategy := NewTokenBucket(storage)
 
-		// Consume all tokens
-		for i := 0; i < int(strategy.bucketSize); i++ {
-			_, err := strategy.Allow(ctx, backend, key, strategy.bucketSize, time.Minute)
-			assert.NoError(t, err)
+		config := TokenBucketConfig{
+			RateLimitConfig: RateLimitConfig{
+				Key:   "reset-test-key",
+				Limit: 3,
+			},
+			BurstSize:  3,
+			RefillRate: 1.0, // 1 token per second
 		}
 
-		// Check it's limited
-		res, err := strategy.Allow(ctx, backend, key, strategy.bucketSize, time.Minute)
-		assert.NoError(t, err)
-		assert.False(t, res.Allowed)
+		// Use all tokens
+		for i := range 3 {
+			allowed, err := strategy.Allow(ctx, config)
+			require.NoError(t, err)
+			assert.True(t, allowed, "Request %d should be allowed", i)
+		}
 
-		// Reset the key
-		err = strategy.Reset(ctx, backend, key)
-		assert.NoError(t, err)
+		// Next request should be denied
+		allowed, err := strategy.Allow(ctx, config)
+		require.NoError(t, err)
+		assert.False(t, allowed, "Request should be denied (no tokens)")
 
-		// Check that the bucket is full again
-		status, err := strategy.GetStatus(ctx, backend, key, strategy.bucketSize, time.Minute)
-		assert.NoError(t, err)
-		assert.Equal(t, strategy.bucketSize, status.Remaining)
+		// Reset the bucket
+		err = strategy.Reset(ctx, config)
+		require.NoError(t, err)
 
-		res, err = strategy.Allow(ctx, backend, key, strategy.bucketSize, time.Minute)
-		assert.NoError(t, err)
-		assert.True(t, res.Allowed)
+		// After reset, requests should be allowed again
+		allowed, err = strategy.Allow(ctx, config)
+		require.NoError(t, err)
+		assert.True(t, allowed, "Request after reset should be allowed")
+
+		// Test invalid config type
+		err = strategy.Reset(ctx, FixedWindowConfig{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "requires TokenBucketConfig")
 	})
 }
 
-func TestTokenBucket_Name(t *testing.T) {
-	_, strategy, _ := setupTokenBucketTest(t)
-	assert.Equal(t, "token_bucket", strategy.Name())
-}
+func TestTokenBucket_Allow(t *testing.T) {
+	// Test initial bucket should allow requests
+	t.Run("initial bucket should allow requests", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			ctx := t.Context()
+			storage := backends.NewMemoryStorage()
+			strategy := NewTokenBucket(storage)
 
-func TestTokenBucket_GetBucketInfo(t *testing.T) {
-	_, strategy, _ := setupTokenBucketTest(t)
-	info := strategy.GetBucketInfo()
-	assert.Equal(t, time.Second, info.RefillRate)
-	assert.Equal(t, int64(10), info.RefillAmount)
-	assert.Equal(t, int64(20), info.BucketSize)
-}
+			config := TokenBucketConfig{
+				RateLimitConfig: RateLimitConfig{
+					Key:   "test_initial",
+					Limit: 10,
+				},
+				BurstSize:  10,
+				RefillRate: 10.0, // 10 tokens per second
+			}
 
-func TestTokenBucket_SetRefillRate(t *testing.T) {
-	_, strategy, _ := setupTokenBucketTest(t)
-
-	// Test setting a new refill rate
-	newRate := 30 * time.Second
-	strategy.SetRefillRate(newRate)
-	info := strategy.GetBucketInfo()
-	assert.Equal(t, newRate, info.RefillRate)
-
-	// Test that setting zero rate doesn't change it
-	strategy.SetRefillRate(0)
-	info = strategy.GetBucketInfo()
-	assert.Equal(t, newRate, info.RefillRate)
-}
-
-func TestTokenBucket_SetRefillAmount(t *testing.T) {
-	_, strategy, _ := setupTokenBucketTest(t)
-
-	// Test setting a new refill amount
-	newAmount := int64(5)
-	strategy.SetRefillAmount(newAmount)
-	info := strategy.GetBucketInfo()
-	assert.Equal(t, newAmount, info.RefillAmount)
-
-	// Test that setting zero amount doesn't change it
-	strategy.SetRefillAmount(0)
-	info = strategy.GetBucketInfo()
-	assert.Equal(t, newAmount, info.RefillAmount)
-}
-
-func TestTokenBucket_CalculateOptimalRefillRate(t *testing.T) {
-	// Test with low rate
-	rate, amount := CalculateOptimalRefillRate(5, 10)
-	assert.Equal(t, time.Minute/5, rate)
-	assert.Equal(t, int64(1), amount)
-
-	// Test with medium rate
-	rate, amount = CalculateOptimalRefillRate(30, 20)
-	assert.Equal(t, time.Minute/12, rate) // Max 12 refills per minute
-	assert.Equal(t, int64(2), amount)     // 30/12 = 2.5, rounded down to 2
-
-	// Test with high rate
-	rate, amount = CalculateOptimalRefillRate(100, 50)
-	assert.Equal(t, time.Minute/12, rate) // Max 12 refills per minute
-	assert.Equal(t, int64(8), amount)     // 100/12 = 8.33, rounded down to 8
-
-	// Test with invalid input
-	rate, amount = CalculateOptimalRefillRate(0, 10)
-	assert.Equal(t, time.Minute, rate)
-	assert.Equal(t, int64(1), amount)
-}
-
-func TestTokenBucket_NewTokenBucketStrategy(t *testing.T) {
-	// Test with default configuration (zero values)
-	strategy, err := NewTokenBucketStrategy(StrategyConfig{})
-	assert.NoError(t, err)
-	assert.Equal(t, time.Minute, strategy.refillRate)
-	assert.Equal(t, int64(1), strategy.refillAmount)
-	assert.Equal(t, int64(1), strategy.bucketSize)
-
-	// Test with custom configuration
-	strategy, err = NewTokenBucketStrategy(StrategyConfig{
-		RefillRate:   30 * time.Second,
-		RefillAmount: 5,
-		BucketSize:   20,
+			allowed, err := strategy.Allow(ctx, config)
+			require.NoError(t, err)
+			assert.True(t, allowed)
+		})
 	})
-	assert.NoError(t, err)
-	assert.Equal(t, 30*time.Second, strategy.refillRate)
-	assert.Equal(t, int64(5), strategy.refillAmount)
-	assert.Equal(t, int64(20), strategy.bucketSize)
+
+	// Test should respect capacity limit
+	t.Run("should respect capacity limit", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			ctx := t.Context()
+			storage := backends.NewMemoryStorage()
+			strategy := NewTokenBucket(storage)
+
+			config := TokenBucketConfig{
+				RateLimitConfig: RateLimitConfig{
+					Key:   "test_capacity",
+					Limit: 3,
+				},
+				BurstSize:  3,
+				RefillRate: 1.0, // 1 token per second
+			}
+
+			// First 3 requests should be allowed
+			for i := range 3 {
+				allowed, err := strategy.Allow(ctx, config)
+				require.NoError(t, err)
+				assert.True(t, allowed, "Request %d should be allowed", i)
+			}
+
+			// 4th request should be denied
+			allowed, err := strategy.Allow(ctx, config)
+			require.NoError(t, err)
+			assert.False(t, allowed)
+		})
+	})
+
+	// Test basic refill functionality
+	t.Run("basic refill functionality", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			ctx := t.Context()
+			storage := backends.NewMemoryStorage()
+			strategy := NewTokenBucket(storage)
+
+			config := TokenBucketConfig{
+				RateLimitConfig: RateLimitConfig{
+					Key:   "test_refill",
+					Limit: 3,
+				},
+				BurstSize:  3,
+				RefillRate: 1.0, // 1 token per second
+			}
+
+			// Use all tokens
+			for i := range 3 {
+				allowed, err := strategy.Allow(ctx, config)
+				require.NoError(t, err)
+				assert.True(t, allowed, "Request %d should be allowed", i)
+			}
+
+			// Next request should be denied
+			allowed, err := strategy.Allow(ctx, config)
+			require.NoError(t, err)
+			assert.False(t, allowed)
+
+			// Wait for a significant time to ensure refill
+			time.Sleep(1500 * time.Millisecond)
+			synctest.Wait()
+
+			// At least one request should be allowed after waiting
+			allowed, err = strategy.Allow(ctx, config)
+			require.NoError(t, err)
+			assert.True(t, allowed, "At least one request should be allowed after refill")
+		})
+	})
+
+	// Test should handle multiple keys independently
+	t.Run("should handle multiple keys independently", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			ctx := t.Context()
+			storage := backends.NewMemoryStorage()
+			strategy := NewTokenBucket(storage)
+
+			config1 := TokenBucketConfig{
+				RateLimitConfig: RateLimitConfig{
+					Key:   "user1",
+					Limit: 2,
+				},
+				BurstSize:  2,
+				RefillRate: 2.0, // 2 tokens per second
+			}
+			config2 := TokenBucketConfig{
+				RateLimitConfig: RateLimitConfig{
+					Key:   "user2",
+					Limit: 2,
+				},
+				BurstSize:  2,
+				RefillRate: 2.0, // 2 tokens per second
+			}
+
+			// Use all tokens for key1
+			for i := range 2 {
+				allowed, err := strategy.Allow(ctx, config1)
+				require.NoError(t, err)
+				assert.True(t, allowed, "Key1 request %d should be allowed", i)
+			}
+
+			// key1 should be denied
+			allowed, err := strategy.Allow(ctx, config1)
+			require.NoError(t, err)
+			assert.False(t, allowed)
+
+			// key2 should still be allowed
+			for i := range 2 {
+				allowed, err := strategy.Allow(ctx, config2)
+				require.NoError(t, err)
+				assert.True(t, allowed, "Key2 request %d should be allowed", i)
+			}
+
+			// key2 should now be denied
+			allowed, err = strategy.Allow(ctx, config2)
+			require.NoError(t, err)
+			assert.False(t, allowed)
+		})
+	})
+
+	// Test fractional refill rate functionality
+	t.Run("fractional refill rate functionality", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			ctx := t.Context()
+			storage := backends.NewMemoryStorage()
+			strategy := NewTokenBucket(storage)
+
+			config := TokenBucketConfig{
+				RateLimitConfig: RateLimitConfig{
+					Key:   "test_fractional",
+					Limit: 10,
+				},
+				BurstSize:  10,
+				RefillRate: 2.0, // 2 tokens per second
+			}
+
+			// Use all tokens
+			for i := range 10 {
+				allowed, err := strategy.Allow(ctx, config)
+				require.NoError(t, err)
+				assert.True(t, allowed, "Request %d should be allowed", i)
+			}
+
+			// Next request should be denied
+			allowed, err := strategy.Allow(ctx, config)
+			require.NoError(t, err)
+			assert.False(t, allowed)
+
+			// Wait for some time to get fractional tokens
+			time.Sleep(1200 * time.Millisecond)
+			synctest.Wait()
+
+			// At least one request should be allowed after waiting
+			allowed, err = strategy.Allow(ctx, config)
+			require.NoError(t, err)
+			assert.True(t, allowed, "At least one request should be allowed after fractional refill")
+		})
+	})
 }
 
-func TestTokenBucket_CalculateTimeToNextToken(t *testing.T) {
-	_, strategy, _ := setupTokenBucketTest(t)
+func TestTokenBucket_ConcurrentAccess(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		storage := backends.NewMemoryStorage()
+		strategy := NewTokenBucket(storage)
 
-	// Test when we already have tokens
-	duration := strategy.calculateTimeToNextToken(1.5)
-	assert.Equal(t, time.Duration(0), duration)
+		config := TokenBucketConfig{
+			RateLimitConfig: RateLimitConfig{
+				Key:   "concurrent-key",
+				Limit: 5,
+			},
+			BurstSize:  5,
+			RefillRate: 5.0,
+		}
 
-	// Test when we have no tokens
-	duration = strategy.calculateTimeToNextToken(0.0)
-	expected := time.Duration(float64(strategy.refillRate) / float64(strategy.refillAmount))
-	assert.Equal(t, expected, duration)
+		ctx := t.Context()
 
-	// Test when we have partial tokens
-	duration = strategy.calculateTimeToNextToken(0.5)
-	fractionNeeded := 0.5 / float64(strategy.refillAmount)
-	expected = time.Duration(fractionNeeded * float64(strategy.refillRate))
-	assert.Equal(t, expected, duration)
+		// Start multiple goroutines that will try to make requests concurrently
+		results := make(chan bool, 10)
+		waitGroup := &sync.WaitGroup{}
+
+		// Launch 10 goroutines that will all try to make a request
+		for range 10 {
+			waitGroup.Go(func() {
+				allowed, err := strategy.Allow(ctx, config)
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+					return
+				}
+				results <- allowed
+			})
+		}
+
+		// Wait for all goroutines to complete
+		waitGroup.Wait()
+		close(results)
+
+		// Collect results
+		var allowedCount int
+		for allowed := range results {
+			if allowed {
+				allowedCount++
+			}
+		}
+
+		// Exactly 5 requests should be allowed (the limit)
+		assert.Equal(t, 5, allowedCount, "Exactly 5 requests should be allowed")
+
+		// Verify that we can't make any more requests
+		allowed, err := strategy.Allow(ctx, config)
+		require.NoError(t, err)
+		assert.False(t, allowed, "11th request should be denied")
+	})
 }
