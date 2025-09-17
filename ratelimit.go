@@ -199,6 +199,8 @@ func createStrategy(strategyType StrategyType, storage backends.Backend) (strate
 		return strategies.NewFixedWindow(storage), nil
 	case StrategyTokenBucket:
 		return strategies.NewTokenBucket(storage), nil
+	case StrategyLeakyBucket:
+		return strategies.NewLeakyBucket(storage), nil
 	default:
 		return nil, fmt.Errorf("unknown strategy type: %s", strategyType)
 	}

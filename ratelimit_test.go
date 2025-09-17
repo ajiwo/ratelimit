@@ -183,9 +183,7 @@ func TestMultiTierLimiter_Allow_LeakyBucket(t *testing.T) {
 		WithLeakyBucketStrategy(5, 2.0, tiers...), // capacity 5, leak 2/sec
 	)
 
-	// Note: Leaky bucket is not implemented yet, so this should fail
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "failed to create strategy")
+	require.NoError(t, err)
 }
 
 func TestMultiTierLimiter_GetStats(t *testing.T) {
@@ -598,7 +596,7 @@ func TestMultiTierLimiter_MixedStrategyTypes(t *testing.T) {
 		{
 			name:       "Leaky Bucket",
 			option:     WithLeakyBucketStrategy(5, 2.0, TierConfig{Interval: time.Minute, Limit: 10}),
-			shouldFail: true, // Not implemented yet
+			shouldFail: false,
 		},
 	}
 
