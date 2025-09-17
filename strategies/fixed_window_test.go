@@ -1,237 +1,375 @@
 package strategies
 
 import (
-	"context"
+	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
-
-func setupFixedWindowTest(t *testing.T) (context.Context, *FixedWindowStrategy, backends.Backend) {
-	ctx := t.Context()
-	backend, err := backends.NewMemoryBackend(backends.BackendConfig{})
-	assert.NoError(t, err)
-
-	strategy, err := NewFixedWindowStrategy(StrategyConfig{
-		WindowDuration: time.Minute,
-	})
-	assert.NoError(t, err)
-
-	t.Cleanup(func() {
-		backend.Close()
-	})
-
-	return ctx, strategy, backend
-}
 
 func TestFixedWindow_Allow(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		ctx, strategy, backend := setupFixedWindowTest(t)
-		key := "fw_allow_test"
+		storage := backends.NewMemoryStorage()
+		strategy := NewFixedWindow(storage)
 
-		// Allow 10 requests
-		for i := range 10 {
-			res, err := strategy.Allow(ctx, backend, key, 10, time.Minute)
-			assert.NoError(t, err)
-			assert.True(t, res.Allowed)
-			assert.Equal(t, int64(10-i-1), res.Remaining)
+		config := FixedWindowConfig{
+			RateLimitConfig: RateLimitConfig{
+				Key:   "test-key",
+				Limit: 5,
+			},
+			Window: time.Minute,
 		}
 
-		// 11th request should be denied
-		res, err := strategy.Allow(ctx, backend, key, 10, time.Minute)
-		assert.NoError(t, err)
-		assert.False(t, res.Allowed)
-		assert.Equal(t, int64(0), res.Remaining)
-		assert.Greater(t, res.RetryAfter, time.Duration(0))
+		ctx := t.Context()
+
+		// First 5 requests should be allowed
+		for i := range 5 {
+			allowed, err := strategy.Allow(ctx, config)
+			require.NoError(t, err)
+			assert.True(t, allowed, "Request %d should be allowed", i)
+		}
+
+		// 6th request should be denied
+		allowed, err := strategy.Allow(ctx, config)
+		require.NoError(t, err)
+		assert.False(t, allowed, "6th request should be denied")
 	})
 }
 
 func TestFixedWindow_WindowReset(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		ctx, strategy, backend := setupFixedWindowTest(t)
-		key := "fw_reset_test"
-		limit := int64(5)
-		window := time.Second * 2
+		storage := backends.NewMemoryStorage()
+		strategy := NewFixedWindow(storage)
 
-		// Exhaust the limit
-		for range 5 {
-			res, err := strategy.Allow(ctx, backend, key, limit, window)
-			assert.NoError(t, err)
-			assert.True(t, res.Allowed)
+		config := FixedWindowConfig{
+			RateLimitConfig: RateLimitConfig{
+				Key:   "test-key",
+				Limit: 2,
+			},
+			Window: time.Second, // Window duration
 		}
 
-		// One more should be denied
-		res, err := strategy.Allow(ctx, backend, key, limit, window)
-		assert.NoError(t, err)
-		assert.False(t, res.Allowed)
+		ctx := t.Context()
 
-		// Wait for the window to pass
-		time.Sleep(window)
+		// Use up the limit
+		for i := range 2 {
+			allowed, err := strategy.Allow(ctx, config)
+			require.NoError(t, err)
+			assert.True(t, allowed, "Request %d should be allowed", i)
+		}
 
-		// The next request should be allowed
-		res, err = strategy.Allow(ctx, backend, key, limit, window)
-		assert.NoError(t, err)
-		assert.True(t, res.Allowed)
-		assert.Equal(t, limit-1, res.Remaining)
+		// 3rd request should be denied
+		allowed, err := strategy.Allow(ctx, config)
+		require.NoError(t, err)
+		assert.False(t, allowed, "3rd request should be denied")
+
+		// Advance time past the window duration
+		time.Sleep(1100 * time.Millisecond)
+		synctest.Wait()
+
+		// New request should be allowed in new window
+		allowed, err = strategy.Allow(ctx, config)
+		require.NoError(t, err)
+		assert.True(t, allowed, "Request in new window should be allowed")
 	})
 }
 
-func TestFixedWindow_GetStatus(t *testing.T) {
+func TestFixedWindow_MultipleKeys(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		ctx, strategy, backend := setupFixedWindowTest(t)
-		key := "fw_status_test"
-		limit := int64(10)
-		window := time.Minute
+		storage := backends.NewMemoryStorage()
+		strategy := NewFixedWindow(storage)
 
-		status, err := strategy.GetStatus(ctx, backend, key, limit, window)
-		assert.NoError(t, err)
-		assert.Equal(t, limit, status.Remaining)
-		assert.False(t, status.Remaining == 0)
+		config1 := FixedWindowConfig{
+			RateLimitConfig: RateLimitConfig{
+				Key:   "user1",
+				Limit: 1,
+			},
+			Window: time.Minute,
+		}
 
-		// Use 3 requests
+		config2 := FixedWindowConfig{
+			RateLimitConfig: RateLimitConfig{
+				Key:   "user2",
+				Limit: 1,
+			},
+			Window: time.Minute,
+		}
+
+		ctx := t.Context()
+
+		// First request for user1 should be allowed
+		allowed, err := strategy.Allow(ctx, config1)
+		require.NoError(t, err)
+		assert.True(t, allowed, "First request for user1 should be allowed")
+
+		// Second request for user1 should be denied
+		allowed, err = strategy.Allow(ctx, config1)
+		require.NoError(t, err)
+		assert.False(t, allowed, "Second request for user1 should be denied")
+
+		// First request for user2 should be allowed (different key)
+		allowed, err = strategy.Allow(ctx, config2)
+		require.NoError(t, err)
+		assert.True(t, allowed, "First request for user2 should be allowed")
+	})
+}
+
+func TestFixedWindow_InvalidConfig(t *testing.T) {
+	storage := backends.NewMemoryStorage()
+	strategy := NewFixedWindow(storage)
+
+	ctx := t.Context()
+
+	// Test with wrong config type
+	allowed, err := strategy.Allow(ctx, TokenBucketConfig{})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "requires FixedWindowConfig")
+	assert.False(t, allowed)
+}
+
+func TestFixedWindow_ZeroLimit(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		storage := backends.NewMemoryStorage()
+		strategy := NewFixedWindow(storage)
+
+		config := FixedWindowConfig{
+			RateLimitConfig: RateLimitConfig{
+				Key:   "test-key",
+				Limit: 0,
+			},
+			Window: time.Minute,
+		}
+
+		ctx := t.Context()
+
+		// Any request should be denied when limit is 0
+		allowed, err := strategy.Allow(ctx, config)
+		require.NoError(t, err)
+		assert.False(t, allowed, "Request should be denied when limit is 0")
+	})
+}
+
+func TestFixedWindow_GetResult(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		storage := backends.NewMemoryStorage()
+		strategy := NewFixedWindow(storage)
+
+		config := FixedWindowConfig{
+			RateLimitConfig: RateLimitConfig{
+				Key:   "result-test-key",
+				Limit: 5,
+			},
+			Window: time.Minute,
+		}
+
+		ctx := t.Context()
+
+		// Test GetResult with no existing data
+		result, err := strategy.GetResult(ctx, config)
+		require.NoError(t, err)
+		assert.True(t, result.Allowed, "Result should be allowed initially")
+		assert.Equal(t, 5, result.Remaining, "Remaining should be 5 initially")
+		assert.WithinDuration(t, time.Now().Add(time.Minute), result.Reset, time.Second, "Reset time should be approximately 1 minute from now")
+
+		// Make some requests
 		for range 3 {
-			_, err := strategy.Allow(ctx, backend, key, limit, window)
-			assert.NoError(t, err)
+			allowed, err := strategy.Allow(ctx, config)
+			require.NoError(t, err)
+			assert.True(t, allowed, "Request should be allowed")
 		}
 
-		status, err = strategy.GetStatus(ctx, backend, key, limit, window)
-		assert.NoError(t, err)
-		assert.Equal(t, limit-3, status.Remaining)
-		assert.False(t, status.Remaining == 0)
+		// Test GetResult after requests
+		result, err = strategy.GetResult(ctx, config)
+		require.NoError(t, err)
+		assert.True(t, result.Allowed, "Result should still be allowed")
+		assert.Equal(t, 2, result.Remaining, "Remaining should be 2 after 3 requests")
 
-		// Use all remaining requests
-		for range 7 {
-			_, err := strategy.Allow(ctx, backend, key, limit, window)
-			assert.NoError(t, err)
+		// Make remaining requests to hit the limit
+		for range 2 {
+			allowed, err := strategy.Allow(ctx, config)
+			require.NoError(t, err)
+			assert.True(t, allowed, "Request should be allowed")
 		}
 
-		status, err = strategy.GetStatus(ctx, backend, key, limit, window)
-		assert.NoError(t, err)
-		assert.Equal(t, int64(0), status.Remaining)
-		assert.True(t, status.Remaining == 0)
+		// Next request should be denied
+		allowed, err := strategy.Allow(ctx, config)
+		require.NoError(t, err)
+		assert.False(t, allowed, "Request should be denied")
+
+		// Test GetResult when at limit
+		result, err = strategy.GetResult(ctx, config)
+		require.NoError(t, err)
+		assert.False(t, result.Allowed, "Result should not be allowed when at limit")
+		assert.Equal(t, 0, result.Remaining, "Remaining should be 0 when at limit")
+
+		// Test invalid config type
+		_, err = strategy.GetResult(ctx, TokenBucketConfig{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "requires FixedWindowConfig")
 	})
 }
 
 func TestFixedWindow_Reset(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		ctx, strategy, backend := setupFixedWindowTest(t)
-		key := "fw_manual_reset_test"
-		limit := int64(5)
-		window := time.Minute
+		storage := backends.NewMemoryStorage()
+		strategy := NewFixedWindow(storage)
 
-		// Use all requests
-		for range 5 {
-			_, err := strategy.Allow(ctx, backend, key, limit, window)
-			assert.NoError(t, err)
+		config := FixedWindowConfig{
+			RateLimitConfig: RateLimitConfig{
+				Key:   "reset-test-key",
+				Limit: 2,
+			},
+			Window: time.Minute,
 		}
 
-		// Check it's limited
-		res, err := strategy.Allow(ctx, backend, key, limit, window)
-		assert.NoError(t, err)
-		assert.False(t, res.Allowed)
+		ctx := t.Context()
 
-		// Reset the key
-		err = strategy.Reset(ctx, backend, key)
-		assert.NoError(t, err)
+		// Make requests to use up the limit
+		for i := range 2 {
+			allowed, err := strategy.Allow(ctx, config)
+			require.NoError(t, err)
+			assert.True(t, allowed, "Request %d should be allowed", i)
+		}
 
-		// Check that it's allowed again
-		res, err = strategy.Allow(ctx, backend, key, limit, window)
-		assert.NoError(t, err)
-		assert.True(t, res.Allowed)
-		assert.Equal(t, limit-1, res.Remaining)
+		// Next request should be denied
+		allowed, err := strategy.Allow(ctx, config)
+		require.NoError(t, err)
+		assert.False(t, allowed, "Request should be denied (limit exceeded)")
+
+		// Reset the counter
+		err = strategy.Reset(ctx, config)
+		require.NoError(t, err)
+
+		// After reset, requests should be allowed again
+		allowed, err = strategy.Allow(ctx, config)
+		require.NoError(t, err)
+		assert.True(t, allowed, "Request after reset should be allowed")
+
+		// Test invalid config type
+		err = strategy.Reset(ctx, TokenBucketConfig{})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "requires FixedWindowConfig")
 	})
 }
 
-func TestFixedWindow_Name(t *testing.T) {
-	_, strategy, _ := setupFixedWindowTest(t)
-	assert.Equal(t, "fixed_window", strategy.Name())
-}
-
-func TestFixedWindow_GetWindowInfo(t *testing.T) {
-	_, strategy, _ := setupFixedWindowTest(t)
-	info := strategy.GetWindowInfo()
-	assert.Equal(t, time.Minute, info.WindowDuration)
-}
-
-func TestFixedWindow_SetWindowDuration(t *testing.T) {
-	_, strategy, _ := setupFixedWindowTest(t)
-
-	// Test setting a new duration
-	newDuration := 30 * time.Second
-	strategy.SetWindowDuration(newDuration)
-	info := strategy.GetWindowInfo()
-	assert.Equal(t, newDuration, info.WindowDuration)
-
-	// Test that setting zero duration doesn't change it
-	strategy.SetWindowDuration(0)
-	info = strategy.GetWindowInfo()
-	assert.Equal(t, newDuration, info.WindowDuration)
-}
-
-func TestFixedWindow_CalculateOptimalWindowDuration(t *testing.T) {
-	// Test with low rate
-	duration := CalculateOptimalWindowDuration(5, 0)
-	assert.Equal(t, time.Minute, duration)
-
-	// Test with medium rate and no desired granularity
-	duration = CalculateOptimalWindowDuration(30, 0)
-	assert.Equal(t, 30*time.Second, duration)
-
-	// Test with medium rate and desired granularity
-	duration = CalculateOptimalWindowDuration(30, 10*time.Second)
-	assert.Equal(t, 10*time.Second, duration)
-
-	// Test with high rate and no desired granularity
-	duration = CalculateOptimalWindowDuration(100, 0)
-	assert.Equal(t, 15*time.Second, duration)
-
-	// Test with high rate and desired granularity
-	duration = CalculateOptimalWindowDuration(100, 5*time.Second)
-	assert.Equal(t, 5*time.Second, duration)
-
-	// Test with invalid input
-	duration = CalculateOptimalWindowDuration(0, 0)
-	assert.Equal(t, time.Minute, duration)
-}
-
-func TestFixedWindow_GetCurrentWindow(t *testing.T) {
+func TestFixedWindow_ConcurrentAccess(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		now := time.Now()
-		_, strategy, _ := setupFixedWindowTest(t)
+		storage := backends.NewMemoryStorage()
+		strategy := NewFixedWindow(storage)
 
-		// Test with default window duration
-		windowInfo := strategy.GetCurrentWindow(now, 0)
-		expectedStart := now.Truncate(time.Minute)
-		assert.Equal(t, expectedStart, windowInfo.Start)
-		assert.Equal(t, expectedStart.Add(time.Minute), windowInfo.End)
-		assert.Equal(t, time.Minute, windowInfo.Duration)
-		assert.Equal(t, now.Sub(expectedStart), windowInfo.Progress)
+		config := FixedWindowConfig{
+			RateLimitConfig: RateLimitConfig{
+				Key:   "concurrent-key",
+				Limit: 5,
+			},
+			Window: time.Minute,
+		}
 
-		// Test with custom window duration
-		customWindow := 30 * time.Second
-		windowInfo = strategy.GetCurrentWindow(now, customWindow)
-		expectedStart = now.Truncate(customWindow)
-		assert.Equal(t, expectedStart, windowInfo.Start)
-		assert.Equal(t, expectedStart.Add(customWindow), windowInfo.End)
-		assert.Equal(t, customWindow, windowInfo.Duration)
-		assert.Equal(t, now.Sub(expectedStart), windowInfo.Progress)
+		ctx := t.Context()
+
+		// Start multiple goroutines that will try to make requests concurrently
+		results := make(chan bool, 10)
+		waitGroup := &sync.WaitGroup{}
+
+		// Launch 10 goroutines that will all try to make a request
+		for range 10 {
+			waitGroup.Go(func() {
+				allowed, err := strategy.Allow(ctx, config)
+				if err != nil {
+					t.Errorf("Unexpected error: %v", err)
+					return
+				}
+				results <- allowed
+			})
+		}
+
+		// Wait for all goroutines to complete
+		waitGroup.Wait()
+		close(results)
+
+		// Collect results
+		var allowedCount int
+		for allowed := range results {
+			if allowed {
+				allowedCount++
+			}
+		}
+
+		// Exactly 5 requests should be allowed (the limit)
+		assert.Equal(t, 5, allowedCount, "Exactly 5 requests should be allowed")
+
+		// Verify that we can't make any more requests
+		allowed, err := strategy.Allow(ctx, config)
+		require.NoError(t, err)
+		assert.False(t, allowed, "11th request should be denied")
 	})
 }
 
-func TestFixedWindow_NewFixedWindowStrategy(t *testing.T) {
-	// Test with default configuration (zero window duration)
-	strategy, err := NewFixedWindowStrategy(StrategyConfig{})
-	assert.NoError(t, err)
-	assert.Equal(t, time.Minute, strategy.windowDuration)
+func TestFixedWindow_PreciseTiming(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		storage := backends.NewMemoryStorage()
+		strategy := NewFixedWindow(storage)
 
-	// Test with custom window duration
-	customDuration := 30 * time.Second
-	strategy, err = NewFixedWindowStrategy(StrategyConfig{
-		WindowDuration: customDuration,
+		config := FixedWindowConfig{
+			RateLimitConfig: RateLimitConfig{
+				Key:   "timing-key",
+				Limit: 3,
+			},
+			Window: 5 * time.Second,
+		}
+
+		ctx := t.Context()
+
+		// Make requests at different times within the window
+		allowed, err := strategy.Allow(ctx, config)
+		require.NoError(t, err)
+		assert.True(t, allowed, "First request should be allowed")
+
+		// Advance time by 2 seconds
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+
+		allowed, err = strategy.Allow(ctx, config)
+		require.NoError(t, err)
+		assert.True(t, allowed, "Second request should be allowed")
+
+		// Advance time by 2 more seconds (4 seconds total)
+		time.Sleep(2 * time.Second)
+		synctest.Wait()
+
+		allowed, err = strategy.Allow(ctx, config)
+		require.NoError(t, err)
+		assert.True(t, allowed, "Third request should be allowed")
+
+		// Advance time by 1 more second (5 seconds total, window should reset)
+		time.Sleep(1 * time.Second)
+		synctest.Wait()
+
+		// Wait a bit more to ensure window reset
+		time.Sleep(1 * time.Millisecond)
+		synctest.Wait()
+
+		// This request should be allowed because we're in a new window
+		allowed, err = strategy.Allow(ctx, config)
+		require.NoError(t, err)
+		assert.True(t, allowed, "Fourth request should be allowed in new window")
+
+		// Use up the rest of the limit in the new window
+		allowed, err = strategy.Allow(ctx, config)
+		require.NoError(t, err)
+		assert.True(t, allowed, "Fifth request should be allowed")
+
+		allowed, err = strategy.Allow(ctx, config)
+		require.NoError(t, err)
+		assert.True(t, allowed, "Sixth request should be allowed")
+
+		// This one should be denied
+		allowed, err = strategy.Allow(ctx, config)
+		require.NoError(t, err)
+		assert.False(t, allowed, "Seventh request should be denied")
 	})
-	assert.NoError(t, err)
-	assert.Equal(t, customDuration, strategy.windowDuration)
 }
