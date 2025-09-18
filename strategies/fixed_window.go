@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
@@ -19,22 +18,16 @@ type FixedWindow struct {
 
 // FixedWindowStrategy implements the fixed window rate limiting algorithm
 type FixedWindowStrategy struct {
-	storage backends.Backend
-	mu      sync.Map // per-key locks
+	BaseStrategy
 }
 
 // NewFixedWindow creates a new fixed window strategy
 func NewFixedWindow(storage backends.Backend) *FixedWindowStrategy {
 	return &FixedWindowStrategy{
-		storage: storage,
-		mu:      sync.Map{},
+		BaseStrategy: BaseStrategy{
+			storage: storage,
+		},
 	}
-}
-
-// getLock returns a mutex for the given key
-func (f *FixedWindowStrategy) getLock(key string) *sync.Mutex {
-	actual, _ := f.mu.LoadOrStore(key, &sync.Mutex{})
-	return actual.(*sync.Mutex)
 }
 
 // Allow checks if a request is allowed based on fixed window algorithm
@@ -191,4 +184,9 @@ func (f *FixedWindowStrategy) Reset(ctx context.Context, config any) error {
 
 	// Delete the key from storage to reset the counter
 	return f.storage.Delete(ctx, fixedConfig.Key)
+}
+
+// Cleanup removes stale locks
+func (f *FixedWindowStrategy) Cleanup(maxAge time.Duration) {
+	f.CleanupLocks(maxAge)
 }

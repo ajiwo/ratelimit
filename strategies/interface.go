@@ -2,6 +2,7 @@ package strategies
 
 import (
 	"context"
+	"sync"
 	"time"
 )
 
@@ -39,6 +40,13 @@ type Result struct {
 	Reset     time.Time // When the current window resets
 }
 
+// LockInfo tracks information about a lock for cleanup purposes
+type LockInfo struct {
+	mutex    *sync.Mutex
+	mu       sync.Mutex // protects lastUsed
+	lastUsed time.Time
+}
+
 // Strategy defines the interface for rate limiting strategies
 type Strategy interface {
 	// Allow checks if a request is allowed based on the strategy
@@ -49,4 +57,7 @@ type Strategy interface {
 
 	// Reset resets the rate limit counter (mainly for testing)
 	Reset(ctx context.Context, config any) error
+
+	// Cleanup removes stale locks and data
+	Cleanup(maxAge time.Duration)
 }

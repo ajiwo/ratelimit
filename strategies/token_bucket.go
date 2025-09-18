@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math"
-	"sync"
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
@@ -19,23 +18,17 @@ type TokenBucket struct {
 	RefillRate float64   `json:"refill_rate"` // tokens per second
 }
 
-// TokenBucket implements the token bucket rate limiting algorithm
+// TokenBucketStrategy implements the token bucket rate limiting algorithm
 type TokenBucketStrategy struct {
-	storage backends.Backend
-	mu      sync.Map // per-key locks
+	BaseStrategy
 }
 
 func NewTokenBucket(storage backends.Backend) *TokenBucketStrategy {
 	return &TokenBucketStrategy{
-		storage: storage,
-		mu:      sync.Map{},
+		BaseStrategy: BaseStrategy{
+			storage: storage,
+		},
 	}
-}
-
-// getLock returns a mutex for the given key
-func (t *TokenBucketStrategy) getLock(key string) *sync.Mutex {
-	actual, _ := t.mu.LoadOrStore(key, &sync.Mutex{})
-	return actual.(*sync.Mutex)
 }
 
 // Allow checks if a request is allowed based on token bucket algorithm
@@ -184,4 +177,9 @@ func (t *TokenBucketStrategy) Reset(ctx context.Context, config any) error {
 
 	// Delete the key from storage to reset the bucket
 	return t.storage.Delete(ctx, tokenConfig.Key)
+}
+
+// Cleanup removes stale locks
+func (t *TokenBucketStrategy) Cleanup(maxAge time.Duration) {
+	t.CleanupLocks(maxAge)
 }

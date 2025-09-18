@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"sync"
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
@@ -20,22 +19,16 @@ type LeakyBucket struct {
 
 // LeakyBucketStrategy implements the leaky bucket rate limiting algorithm
 type LeakyBucketStrategy struct {
-	storage backends.Backend
-	mu      sync.Map // per-key locks
+	BaseStrategy
 }
 
 // NewLeakyBucket creates a new leaky bucket strategy
 func NewLeakyBucket(storage backends.Backend) *LeakyBucketStrategy {
 	return &LeakyBucketStrategy{
-		storage: storage,
-		mu:      sync.Map{},
+		BaseStrategy: BaseStrategy{
+			storage: storage,
+		},
 	}
-}
-
-// getLock returns a mutex for the given key
-func (l *LeakyBucketStrategy) getLock(key string) *sync.Mutex {
-	actual, _ := l.mu.LoadOrStore(key, &sync.Mutex{})
-	return actual.(*sync.Mutex)
 }
 
 // Allow checks if a request is allowed based on leaky bucket algorithm
@@ -205,4 +198,9 @@ func (l *LeakyBucketStrategy) Reset(ctx context.Context, config any) error {
 
 	// Delete the key from storage to reset the bucket
 	return l.storage.Delete(ctx, leakyConfig.Key)
+}
+
+// Cleanup removes stale locks
+func (l *LeakyBucketStrategy) Cleanup(maxAge time.Duration) {
+	l.CleanupLocks(maxAge)
 }
