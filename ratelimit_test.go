@@ -43,27 +43,35 @@ func TestNew_DefaultConfiguration(t *testing.T) {
 }
 
 func TestNew_WithOptions(t *testing.T) {
-	customTiers := []TierConfig{
-		{Interval: 5 * time.Second, Limit: 5},
-		{Interval: time.Minute, Limit: 100},
-	}
+	synctest.Test(t, func(t *testing.T) {
+		customTiers := []TierConfig{
+			{Interval: 5 * time.Second, Limit: 5},
+			{Interval: time.Minute, Limit: 100},
+		}
 
-	limiter, err := New(
-		WithBaseKey("test-key"),
-		WithFixedWindowStrategy(customTiers...),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
+		limiter, err := New(
+			WithBaseKey("test-key"),
+			WithFixedWindowStrategy(customTiers...),
+			WithCleanupInterval(time.Hour),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, limiter)
 
-	config := limiter.GetConfig()
-	assert.Equal(t, "test-key", config.BaseKey)
-	assert.Equal(t, StrategyFixedWindow, config.Strategy)
-	assert.Len(t, config.Tiers, 2)
-	assert.Equal(t, 5*time.Second, config.Tiers[0].Interval)
-	assert.Equal(t, 5, config.Tiers[0].Limit)
+		config := limiter.GetConfig()
+		assert.Equal(t, "test-key", config.BaseKey)
+		assert.Equal(t, StrategyFixedWindow, config.Strategy)
+		assert.Len(t, config.Tiers, 2)
+		assert.Equal(t, 5*time.Second, config.Tiers[0].Interval)
+		assert.Equal(t, 5, config.Tiers[0].Limit)
 
-	err = limiter.Close()
-	require.NoError(t, err)
+		// Wait for cleanup to run
+		time.Sleep(time.Hour + time.Nanosecond)
+		synctest.Wait()
+		// the cleanup goroutine area should be covered at this point
+
+		err = limiter.Close()
+		require.NoError(t, err)
+	})
 }
 
 func TestNew_WithRedisBackend(t *testing.T) {

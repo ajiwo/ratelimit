@@ -15,6 +15,9 @@ const (
 
 	// MinInterval is the minimum allowed interval for any tier
 	MinInterval = 5 * time.Second
+
+	// DefaultCleanupInterval is the default interval for cleaning up stale locks
+	DefaultCleanupInterval = 10 * time.Minute
 )
 
 // TierConfig defines a single tier in multi-tier rate limiting
@@ -45,6 +48,9 @@ type MultiTierConfig struct {
 	RefillRate float64 // For token bucket
 	Capacity   int     // For leaky bucket
 	LeakRate   float64 // For leaky bucket
+
+	// Cleanup configuration
+	CleanupInterval time.Duration // Interval for cleaning up stale locks (0 to disable)
 }
 
 // Result represents the result of a rate limiting check
@@ -68,6 +74,10 @@ type MultiTierLimiter struct {
 	config MultiTierConfig
 	// Create separate strategy instances for each tier
 	strategies map[string]strategies.Strategy
+
+	// Cleanup ticker for managing stale locks
+	cleanupTicker *time.Ticker
+	cleanupStop   chan bool
 }
 
 // newMultiTierLimiter creates a new multi-tier rate limiter
@@ -92,6 +102,27 @@ func newMultiTierLimiter(config MultiTierConfig) (*MultiTierLimiter, error) {
 		}
 
 		limiter.strategies[tierName] = strategy
+	}
+
+	// Start cleanup ticker if cleanup is enabled
+	if config.CleanupInterval > 0 {
+		limiter.cleanupStop = make(chan bool)
+		limiter.cleanupTicker = time.NewTicker(config.CleanupInterval)
+
+		// Start cleanup goroutine
+		go func() {
+			for {
+				select {
+				case <-limiter.cleanupTicker.C:
+					// Perform cleanup for all strategies
+					for _, strategy := range limiter.strategies {
+						strategy.Cleanup(config.CleanupInterval * 2) // Cleanup locks older than 2x the interval
+					}
+				case <-limiter.cleanupStop:
+					return
+				}
+			}
+		}()
 	}
 
 	return limiter, nil
@@ -271,6 +302,12 @@ func (m *MultiTierLimiter) Reset(ctx context.Context) error {
 
 // Close cleans up resources used by the rate limiter
 func (m *MultiTierLimiter) Close() error {
+	// Stop the cleanup ticker if it's running
+	if m.cleanupTicker != nil {
+		m.cleanupTicker.Stop()
+		close(m.cleanupStop)
+	}
+
 	// Close the storage backend
 	if m.config.Storage != nil {
 		return m.config.Storage.Close()
@@ -295,6 +332,8 @@ func New(opts ...Option) (*MultiTierLimiter, error) {
 		RefillRate: 1.0,
 		Capacity:   10,
 		LeakRate:   1.0,
+		// Default cleanup interval
+		CleanupInterval: DefaultCleanupInterval,
 	}
 
 	// Apply default storage (memory backend)

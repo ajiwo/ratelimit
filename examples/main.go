@@ -7,6 +7,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/ajiwo/ratelimit"
 	"github.com/ajiwo/ratelimit/backends"
 	"github.com/ajiwo/ratelimit/strategies"
 )
@@ -36,6 +37,13 @@ func main() {
 	// Example 4: Get rate limit status
 	fmt.Println("\n=== Getting Rate Limit Status ===")
 	if err := statusExample(); err != nil {
+		log.Println(err)
+		os.Exit(1)
+	}
+
+	// Example 5: Custom cleanup interval
+	fmt.Println("\n=== Custom Cleanup Interval ===")
+	if err := customCleanupExample(); err != nil {
 		log.Println(err)
 		os.Exit(1)
 	}
@@ -246,5 +254,58 @@ func statusExample() error {
 	fmt.Printf("  Allowed: %v\n", result.Allowed)
 	fmt.Printf("  Remaining: %d\n", result.Remaining)
 	fmt.Printf("  Reset Time: %v\n", result.Reset)
+	return nil
+}
+
+func customCleanupExample() error {
+	// Create a rate limiter with a custom cleanup interval
+	limiter, err := ratelimit.New(
+		ratelimit.WithMemoryBackend(),
+		ratelimit.WithFixedWindowStrategy(
+			ratelimit.TierConfig{
+				Interval: time.Second * 30, // 30 second window
+				Limit:    50,               // 50 requests per window
+			},
+		),
+		ratelimit.WithCleanupInterval(time.Minute*5), // Cleanup every 5 minutes
+		ratelimit.WithBaseKey("user:custom_cleanup:123"),
+	)
+	if err != nil {
+		return err
+	}
+	defer func() {
+		_ = limiter.Close()
+	}()
+
+	fmt.Println("Rate limiter created with 5-minute cleanup interval")
+	fmt.Println("Making requests...")
+
+	// Make a few requests
+	for i := range 10 {
+		allowed, err := limiter.Allow(context.Background())
+		if err != nil {
+			return err
+		}
+
+		stats, err := limiter.GetStats(context.Background())
+		if err != nil {
+			return err
+		}
+
+		if allowed {
+			fmt.Printf("Request %d: ALLOWED\n", i+1)
+		} else {
+			fmt.Printf("Request %d: BLOCKED\n", i+1)
+		}
+
+		// Print stats for the first tier
+		for tierName, tierStats := range stats {
+			fmt.Printf("  Tier %s: remaining=%d, used=%d\n", tierName, tierStats.Remaining, tierStats.Used)
+			break // Just show the first tier for brevity
+		}
+
+		time.Sleep(100 * time.Millisecond)
+	}
+
 	return nil
 }
