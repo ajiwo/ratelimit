@@ -1,0 +1,56 @@
+version: "2"
+linters:
+  default: none
+  enable:
+    - asciicheck
+    - bodyclose
+    - errcheck
+    - gocritic
+    - gocyclo
+    - gosec
+    - govet
+    - iface
+    - ineffassign
+    - staticcheck
+    - unused
+  exclusions:
+    generated: lax
+    presets:
+      - comments
+      - common-false-positives
+      - legacy
+      - std-error-handling
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+  settings:
+    gocritic:
+      disabled-checks:
+        - appendAssign
+    gocyclo:
+      min-complexity: 14
+    iface:
+      enable:
+        - identical
+#       - unused
+        - unexported
+
+formatters:
+  enable:
+    - gofmt
+    - goimports
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+  settings:
+    gofmt:
+      rewrite-rules:
+        - pattern: 'interface{}'
+          replacement: 'any'
+        - pattern: 'a[b:len(a)]'
+          replacement: 'a[b:]'
+
