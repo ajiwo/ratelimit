@@ -29,6 +29,8 @@ type TierConfig struct {
 // StrategyType defines the rate limiting strategy to use
 type StrategyType string
 
+type Limiter = MultiTierLimiter
+
 const (
 	StrategyFixedWindow StrategyType = "fixed_window"
 	StrategyTokenBucket StrategyType = "token_bucket"
@@ -53,7 +55,7 @@ type MultiTierConfig struct {
 	CleanupInterval time.Duration // Interval for cleaning up stale locks (0 to disable)
 }
 
-// Result represents the result of a rate limiting check
+// Result represents the result of a rate limiting strategy check
 type Result struct {
 	Allowed     bool              // Whether the request is allowed
 	Results     map[string]Result // Individual tier results

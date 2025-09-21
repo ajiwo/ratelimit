@@ -42,7 +42,7 @@ if err != nil {
 defer limiter.Close()
 
 // Check if request is allowed
-allowed, err := limiter.Allow(ctx)
+allowed, err := limiter.Allow(ratelimit.WithContext(ctx))
 ```
 
 The multi-tier limiter enforces ALL tiers simultaneously - a request is only allowed if it passes ALL configured rate limit tiers.
@@ -82,6 +82,7 @@ config := backends.RedisConfig{
     Addr:     "localhost:6379",
     Password: "",
     DB:       0,
+    PoolSize: 10,
 }
 storage, err := backends.NewRedisStorage(config)
 ```
