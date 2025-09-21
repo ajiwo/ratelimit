@@ -128,8 +128,8 @@ func newMultiTierLimiter(config MultiTierConfig) (*MultiTierLimiter, error) {
 	return limiter, nil
 }
 
-// Allow checks if a request is allowed across all configured tiers
-func (m *MultiTierLimiter) Allow(ctx context.Context) (bool, error) {
+// AllowWithKey checks if a request is allowed across all configured tiers with a dynamic key
+func (m *MultiTierLimiter) AllowWithKey(ctx context.Context, key string) (bool, error) {
 	// Check each tier
 	results := make(map[string]Result)
 	deniedTiers := []string{}
@@ -138,7 +138,7 @@ func (m *MultiTierLimiter) Allow(ctx context.Context) (bool, error) {
 		tierName := getTierName(tier.Interval)
 
 		// Create strategy-specific config for this tier
-		config, err := m.createTierConfig(tierName, tier.Limit, tier.Interval)
+		config, err := m.createTierConfig(key, tierName, tier.Limit, tier.Interval)
 		if err != nil {
 			return false, fmt.Errorf("failed to create config for tier %s: %w", tierName, err)
 		}
@@ -166,8 +166,8 @@ func (m *MultiTierLimiter) Allow(ctx context.Context) (bool, error) {
 }
 
 // createTierConfig creates strategy-specific configuration for a tier
-func (m *MultiTierLimiter) createTierConfig(tierName string, limit int, interval time.Duration) (any, error) {
-	key := fmt.Sprintf("%s:%s", m.config.BaseKey, tierName)
+func (m *MultiTierLimiter) createTierConfig(dynamicKey string, tierName string, limit int, interval time.Duration) (any, error) {
+	key := fmt.Sprintf("%s:%s:%s", m.config.BaseKey, dynamicKey, tierName)
 
 	switch m.config.Strategy {
 	case StrategyFixedWindow:
@@ -247,15 +247,15 @@ func (m *MultiTierLimiter) GetConfig() MultiTierConfig {
 	return m.config
 }
 
-// GetStats returns detailed statistics for all tiers
-func (m *MultiTierLimiter) GetStats(ctx context.Context) (map[string]TierResult, error) {
+// GetStatsWithKey returns detailed statistics for all tiers with a dynamic key
+func (m *MultiTierLimiter) GetStatsWithKey(ctx context.Context, key string) (map[string]TierResult, error) {
 	stats := make(map[string]TierResult)
 
 	for _, tier := range m.config.Tiers {
 		tierName := getTierName(tier.Interval)
 
 		// Create strategy-specific config for this tier
-		config, err := m.createTierConfig(tierName, tier.Limit, tier.Interval)
+		config, err := m.createTierConfig(key, tierName, tier.Limit, tier.Interval)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create config for tier %s: %w", tierName, err)
 		}
@@ -279,13 +279,13 @@ func (m *MultiTierLimiter) GetStats(ctx context.Context) (map[string]TierResult,
 	return stats, nil
 }
 
-// Reset resets the rate limit counters for all tiers (mainly for testing)
-func (m *MultiTierLimiter) Reset(ctx context.Context) error {
+// ResetWithKey resets the rate limit counters for all tiers with a dynamic key (mainly for testing)
+func (m *MultiTierLimiter) ResetWithKey(ctx context.Context, key string) error {
 	for _, tier := range m.config.Tiers {
 		tierName := getTierName(tier.Interval)
 
 		// Create strategy-specific config for this tier
-		config, err := m.createTierConfig(tierName, tier.Limit, tier.Interval)
+		config, err := m.createTierConfig(key, tierName, tier.Limit, tier.Interval)
 		if err != nil {
 			return fmt.Errorf("failed to create config for tier %s: %w", tierName, err)
 		}
@@ -313,6 +313,24 @@ func (m *MultiTierLimiter) Close() error {
 		return m.config.Storage.Close()
 	}
 	return nil
+}
+
+// Allow checks if a request is allowed across all configured tiers
+// This method calls AllowWithKey with a default key of "default"
+func (m *MultiTierLimiter) Allow(ctx context.Context) (bool, error) {
+	return m.AllowWithKey(ctx, "default")
+}
+
+// GetStats returns detailed statistics for all tiers
+// This method calls GetStatsWithKey with a default key of "default"
+func (m *MultiTierLimiter) GetStats(ctx context.Context) (map[string]TierResult, error) {
+	return m.GetStatsWithKey(ctx, "default")
+}
+
+// Reset resets the rate limit counters for all tiers
+// This method calls ResetWithKey with a default key of "default"
+func (m *MultiTierLimiter) Reset(ctx context.Context) error {
+	return m.ResetWithKey(ctx, "default")
 }
 
 // New creates a new rate limiter with functional options

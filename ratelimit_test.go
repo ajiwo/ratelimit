@@ -636,3 +636,227 @@ func TestMultiTierLimiter_MixedStrategyTypes(t *testing.T) {
 		})
 	}
 }
+
+func TestDynamicKey_SingleLimiterMultipleKeys(t *testing.T) {
+	tiers := []TierConfig{
+		{Interval: time.Minute, Limit: 2},
+	}
+
+	// Create a single limiter with a base key prefix
+	limiter, err := New(
+		WithBaseKey("user"), // This is now a prefix, not a complete key
+		WithFixedWindowStrategy(tiers...),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, limiter)
+
+	ctx := t.Context()
+
+	// Use up limit for user1
+	for i := range 2 {
+		allowed, err := limiter.AllowWithKey(ctx, "123")
+		require.NoError(t, err)
+		assert.True(t, allowed, "User1 request %d should be allowed", i)
+	}
+
+	// User1 should be denied
+	allowed, err := limiter.AllowWithKey(ctx, "123")
+	require.NoError(t, err)
+	assert.False(t, allowed, "User1 should be denied after limit exceeded")
+
+	// User2 should still be able to make requests (different key)
+	for i := range 2 {
+		allowed, err := limiter.AllowWithKey(ctx, "456")
+		require.NoError(t, err)
+		assert.True(t, allowed, "User2 request %d should be allowed", i)
+	}
+
+	// User2 should be denied
+	allowed, err = limiter.AllowWithKey(ctx, "456")
+	require.NoError(t, err)
+	assert.False(t, allowed, "User2 should be denied after limit exceeded")
+
+	allowed, err = limiter.Allow(ctx)
+	require.NoError(t, err)
+	assert.True(t, allowed)
+
+	err = limiter.Close()
+	require.NoError(t, err)
+}
+
+func TestDynamicKey_GetStatsWithKey(t *testing.T) {
+	tiers := []TierConfig{
+		{Interval: time.Minute, Limit: 5},
+	}
+
+	limiter, err := New(
+		WithBaseKey("api"), // Prefix
+		WithFixedWindowStrategy(tiers...),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, limiter)
+
+	ctx := t.Context()
+
+	// Make requests for user1
+	for i := range 3 {
+		allowed, err := limiter.AllowWithKey(ctx, "user1")
+		require.NoError(t, err)
+		assert.True(t, allowed, "User1 request %d should be allowed", i)
+	}
+
+	// Get stats for user1
+	stats, err := limiter.GetStatsWithKey(ctx, "user1")
+	require.NoError(t, err)
+	assert.Len(t, stats, 1)
+
+	minuteStats := stats["minute"]
+	assert.Equal(t, 5, minuteStats.Total)
+	assert.Equal(t, 2, minuteStats.Remaining)
+	assert.Equal(t, 3, minuteStats.Used)
+
+	// Get stats for user2 (should be fresh)
+	stats, err = limiter.GetStatsWithKey(ctx, "user2")
+	require.NoError(t, err)
+	assert.Len(t, stats, 1)
+
+	minuteStats = stats["minute"]
+	assert.Equal(t, 5, minuteStats.Total)
+	assert.Equal(t, 5, minuteStats.Remaining)
+	assert.Equal(t, 0, minuteStats.Used)
+
+	err = limiter.Close()
+	require.NoError(t, err)
+}
+
+func TestDynamicKey_ResetWithKey(t *testing.T) {
+	tiers := []TierConfig{
+		{Interval: time.Minute, Limit: 2},
+	}
+
+	limiter, err := New(
+		WithBaseKey("test"),
+		WithFixedWindowStrategy(tiers...),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, limiter)
+
+	ctx := t.Context()
+
+	// Use up limit for user1
+	for range 2 {
+		allowed, err := limiter.AllowWithKey(ctx, "user1")
+		require.NoError(t, err)
+		assert.True(t, allowed)
+	}
+
+	// User1 should be denied
+	allowed, err := limiter.AllowWithKey(ctx, "user1")
+	require.NoError(t, err)
+	assert.False(t, allowed)
+
+	// Reset only user1
+	err = limiter.ResetWithKey(ctx, "user1")
+	require.NoError(t, err)
+
+	// User1 should now be allowed again
+	allowed, err = limiter.AllowWithKey(ctx, "user1")
+	require.NoError(t, err)
+	assert.True(t, allowed)
+
+	// User2 should still be fresh (not affected by user1 reset)
+	allowed, err = limiter.AllowWithKey(ctx, "user2")
+	require.NoError(t, err)
+	assert.True(t, allowed)
+
+	err = limiter.Close()
+	require.NoError(t, err)
+}
+
+func TestDynamicKey_DefaultBaseKey(t *testing.T) {
+	tiers := []TierConfig{
+		{Interval: time.Minute, Limit: 3},
+	}
+
+	limiter, err := New(
+		WithBaseKey("test"),
+		WithFixedWindowStrategy(tiers...),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, limiter)
+
+	ctx := t.Context()
+
+	for i := range 3 {
+		allowed, err := limiter.Allow(ctx)
+		require.NoError(t, err)
+		assert.Truef(t, allowed, "request #%d should be allowed", i)
+	}
+
+	// Should be denied
+	allowed, err := limiter.Allow(ctx)
+	require.NoError(t, err)
+	assert.False(t, allowed)
+
+	stats, err := limiter.GetStats(ctx)
+	require.NoError(t, err)
+	assert.Len(t, stats, 1)
+
+	minuteStats := stats["minute"]
+	assert.Equal(t, 3, minuteStats.Total)
+	assert.Equal(t, 0, minuteStats.Remaining)
+	assert.Equal(t, 3, minuteStats.Used)
+
+	err = limiter.Reset(ctx)
+	require.NoError(t, err)
+
+	// Should be allowed again
+	allowed, err = limiter.Allow(ctx)
+	require.NoError(t, err)
+	assert.True(t, allowed)
+
+	err = limiter.Close()
+	require.NoError(t, err)
+}
+
+func TestDynamicKey_MiddlewareExample(t *testing.T) {
+	// This test demonstrates the new efficient middleware pattern
+	tiers := []TierConfig{
+		{Interval: time.Minute, Limit: 5},
+	}
+
+	// Create ONE limiter instance for the entire app
+	rateLimiter, err := New(
+		WithBaseKey("user"), // Prefix
+		WithFixedWindowStrategy(tiers...),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, rateLimiter)
+	defer rateLimiter.Close()
+
+	ctx := t.Context()
+
+	// Simulate middleware handling different users
+	users := []string{"123", "456", "789"}
+
+	for _, userID := range users {
+		// Simulate multiple requests per user
+		for i := range 3 {
+			// Pass dynamic key to the shared limiter
+			allowed, err := rateLimiter.AllowWithKey(ctx, userID)
+			require.NoError(t, err)
+			assert.True(t, allowed, "User %s request %d should be allowed", userID, i)
+		}
+	}
+
+	// Each user should have made 3 requests and have 2 remaining
+	for _, userID := range users {
+		stats, err := rateLimiter.GetStatsWithKey(ctx, userID)
+		require.NoError(t, err)
+
+		minuteStats := stats["minute"]
+		assert.Equal(t, 5, minuteStats.Total)
+		assert.Equal(t, 2, minuteStats.Remaining)
+		assert.Equal(t, 3, minuteStats.Used)
+	}
+}
