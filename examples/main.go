@@ -282,12 +282,12 @@ func customCleanupExample() error {
 
 	// Make a few requests
 	for i := range 10 {
-		allowed, err := limiter.Allow(context.Background())
+		allowed, err := limiter.Allow(ratelimit.WithContext(context.Background()))
 		if err != nil {
 			return err
 		}
 
-		stats, err := limiter.GetStats(context.Background())
+		stats, err := limiter.GetStats(ratelimit.WithContext(context.Background()))
 		if err != nil {
 			return err
 		}

@@ -1,6 +1,33 @@
 package ratelimit
 
-import "fmt"
+import (
+	"fmt"
+	"unicode"
+)
+
+// validateKey validates that a key meets the requirements:
+// - Maximum 64 bytes length
+// - Contains only alphanumeric ASCII characters, underscore (_), hyphen (-), and colon (:)
+func validateKey(key string, keyType string) error {
+	if len(key) == 0 {
+		return fmt.Errorf("%s cannot be empty", keyType)
+	}
+
+	if len(key) > 64 {
+		return fmt.Errorf("%s cannot exceed 64 bytes, got %d bytes", keyType, len(key))
+	}
+
+	for i, r := range key {
+		isValid := (unicode.IsLetter(r) && r <= 127) || // ASCII letters only
+			(unicode.IsDigit(r) && r <= 127) || // ASCII digits only
+			r == '_' || r == '-' || r == ':'
+		if !isValid {
+			return fmt.Errorf("%s contains invalid character '%c' at position %d. Only alphanumeric ASCII, underscore (_), hyphen (-), and colon (:) are allowed", keyType, r, i)
+		}
+	}
+
+	return nil
+}
 
 // validateMultiTierConfig validates the multi-tier configuration
 func validateMultiTierConfig(config MultiTierConfig) error {
@@ -18,8 +45,8 @@ func validateMultiTierConfig(config MultiTierConfig) error {
 
 // validateBasicConfig validates basic configuration fields
 func validateBasicConfig(config MultiTierConfig) error {
-	if config.BaseKey == "" {
-		return fmt.Errorf("base key cannot be empty")
+	if err := validateKey(config.BaseKey, "base key"); err != nil {
+		return err
 	}
 	if config.Storage == nil {
 		return fmt.Errorf("storage backend cannot be nil")

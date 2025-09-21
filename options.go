@@ -1,6 +1,7 @@
 package ratelimit
 
 import (
+	"context"
 	"fmt"
 	"time"
 
@@ -121,6 +122,37 @@ func WithTiers(tiers ...TierConfig) Option {
 func WithCleanupInterval(interval time.Duration) Option {
 	return func(config *MultiTierConfig) error {
 		config.CleanupInterval = interval
+		return nil
+	}
+}
+
+// AccessOption defines a functional option for rate limiter access methods
+type AccessOption func(*accessOptions) error
+
+// accessOptions holds the configuration for a rate limiter access operation
+type accessOptions struct {
+	ctx context.Context
+	key string
+}
+
+// WithContext provides a context for the rate limiter operation
+func WithContext(ctx context.Context) AccessOption {
+	return func(opts *accessOptions) error {
+		if ctx == nil {
+			return fmt.Errorf("context cannot be nil")
+		}
+		opts.ctx = ctx
+		return nil
+	}
+}
+
+// WithKey provides a dynamic key for the rate limiter operation
+func WithKey(key string) AccessOption {
+	return func(opts *accessOptions) error {
+		if err := validateKey(key, "dynamic key"); err != nil {
+			return err
+		}
+		opts.key = key
 		return nil
 	}
 }

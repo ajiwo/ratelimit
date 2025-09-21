@@ -128,8 +128,30 @@ func newMultiTierLimiter(config MultiTierConfig) (*MultiTierLimiter, error) {
 	return limiter, nil
 }
 
-// AllowWithKey checks if a request is allowed across all configured tiers with a dynamic key
-func (m *MultiTierLimiter) AllowWithKey(ctx context.Context, key string) (bool, error) {
+// parseAccessOptions parses the provided access options and returns the configuration
+func (m *MultiTierLimiter) parseAccessOptions(opts []AccessOption) (*accessOptions, error) {
+	result := &accessOptions{
+		ctx: context.Background(), // Default context
+		key: "default",            // Default key
+	}
+
+	for _, opt := range opts {
+		if err := opt(result); err != nil {
+			return nil, err
+		}
+	}
+
+	return result, nil
+}
+
+// Allow checks if a request is allowed across all configured tiers
+func (m *MultiTierLimiter) Allow(opts ...AccessOption) (bool, error) {
+	// Parse access options
+	accessOpts, err := m.parseAccessOptions(opts)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse access options: %w", err)
+	}
+
 	// Check each tier
 	results := make(map[string]Result)
 	deniedTiers := []string{}
@@ -138,14 +160,14 @@ func (m *MultiTierLimiter) AllowWithKey(ctx context.Context, key string) (bool, 
 		tierName := getTierName(tier.Interval)
 
 		// Create strategy-specific config for this tier
-		config, err := m.createTierConfig(key, tierName, tier.Limit, tier.Interval)
+		config, err := m.createTierConfig(accessOpts.key, tierName, tier.Limit, tier.Interval)
 		if err != nil {
 			return false, fmt.Errorf("failed to create config for tier %s: %w", tierName, err)
 		}
 
 		// Check if request is allowed for this tier
 		strategy := m.strategies[tierName]
-		allowed, err := strategy.Allow(ctx, config)
+		allowed, err := strategy.Allow(accessOpts.ctx, config)
 		if err != nil {
 			return false, fmt.Errorf("tier %s check failed: %w", tierName, err)
 		}
@@ -247,22 +269,28 @@ func (m *MultiTierLimiter) GetConfig() MultiTierConfig {
 	return m.config
 }
 
-// GetStatsWithKey returns detailed statistics for all tiers with a dynamic key
-func (m *MultiTierLimiter) GetStatsWithKey(ctx context.Context, key string) (map[string]TierResult, error) {
+// GetStats returns detailed statistics for all tiers
+func (m *MultiTierLimiter) GetStats(opts ...AccessOption) (map[string]TierResult, error) {
+	// Parse access options
+	accessOpts, err := m.parseAccessOptions(opts)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse access options: %w", err)
+	}
+
 	stats := make(map[string]TierResult)
 
 	for _, tier := range m.config.Tiers {
 		tierName := getTierName(tier.Interval)
 
 		// Create strategy-specific config for this tier
-		config, err := m.createTierConfig(key, tierName, tier.Limit, tier.Interval)
+		config, err := m.createTierConfig(accessOpts.key, tierName, tier.Limit, tier.Interval)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create config for tier %s: %w", tierName, err)
 		}
 
 		// Get stats from this tier's strategy
 		strategy := m.strategies[tierName]
-		result, err := strategy.GetResult(ctx, config)
+		result, err := strategy.GetResult(accessOpts.ctx, config)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get stats for tier %s: %w", tierName, err)
 		}
@@ -279,20 +307,26 @@ func (m *MultiTierLimiter) GetStatsWithKey(ctx context.Context, key string) (map
 	return stats, nil
 }
 
-// ResetWithKey resets the rate limit counters for all tiers with a dynamic key (mainly for testing)
-func (m *MultiTierLimiter) ResetWithKey(ctx context.Context, key string) error {
+// Reset resets the rate limit counters for all tiers (mainly for testing)
+func (m *MultiTierLimiter) Reset(opts ...AccessOption) error {
+	// Parse access options
+	accessOpts, err := m.parseAccessOptions(opts)
+	if err != nil {
+		return fmt.Errorf("failed to parse access options: %w", err)
+	}
+
 	for _, tier := range m.config.Tiers {
 		tierName := getTierName(tier.Interval)
 
 		// Create strategy-specific config for this tier
-		config, err := m.createTierConfig(key, tierName, tier.Limit, tier.Interval)
+		config, err := m.createTierConfig(accessOpts.key, tierName, tier.Limit, tier.Interval)
 		if err != nil {
 			return fmt.Errorf("failed to create config for tier %s: %w", tierName, err)
 		}
 
 		// Reset this tier's strategy
 		strategy := m.strategies[tierName]
-		if err := strategy.Reset(ctx, config); err != nil {
+		if err := strategy.Reset(accessOpts.ctx, config); err != nil {
 			return fmt.Errorf("failed to reset tier %s: %w", tierName, err)
 		}
 	}
@@ -313,24 +347,6 @@ func (m *MultiTierLimiter) Close() error {
 		return m.config.Storage.Close()
 	}
 	return nil
-}
-
-// Allow checks if a request is allowed across all configured tiers
-// This method calls AllowWithKey with a default key of "default"
-func (m *MultiTierLimiter) Allow(ctx context.Context) (bool, error) {
-	return m.AllowWithKey(ctx, "default")
-}
-
-// GetStats returns detailed statistics for all tiers
-// This method calls GetStatsWithKey with a default key of "default"
-func (m *MultiTierLimiter) GetStats(ctx context.Context) (map[string]TierResult, error) {
-	return m.GetStatsWithKey(ctx, "default")
-}
-
-// Reset resets the rate limit counters for all tiers
-// This method calls ResetWithKey with a default key of "default"
-func (m *MultiTierLimiter) Reset(ctx context.Context) error {
-	return m.ResetWithKey(ctx, "default")
 }
 
 // New creates a new rate limiter with functional options
