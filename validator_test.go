@@ -68,18 +68,16 @@ func TestValidateKey(t *testing.T) {
 			errorMsg:    "contains invalid character ' '",
 		},
 		{
-			name:        "Key with special character",
+			name:        "Key with @ symbol - valid",
 			key:         "user@123",
 			keyType:     "dynamic key",
-			expectError: true,
-			errorMsg:    "contains invalid character '@'",
+			expectError: false,
 		},
 		{
-			name:        "Key with dot",
+			name:        "Key with dot - valid",
 			key:         "user.123",
 			keyType:     "base key",
-			expectError: true,
-			errorMsg:    "contains invalid character '.'",
+			expectError: false,
 		},
 		{
 			name:        "Key with slash",
@@ -182,10 +180,25 @@ func TestDynamicKeyValidation(t *testing.T) {
 			expectError: false,
 		},
 		{
+			name:        "Valid dynamic key with @",
+			dynamicKey:  "user@domain.com",
+			expectError: false,
+		},
+		{
+			name:        "Valid dynamic key with .",
+			dynamicKey:  "api.endpoint.v2",
+			expectError: false,
+		},
+		{
+			name:        "Valid dynamic key with both . and @",
+			dynamicKey:  "user@domain.com:session",
+			expectError: false,
+		},
+		{
 			name:        "Invalid dynamic key with special char",
-			dynamicKey:  "session@abc123",
+			dynamicKey:  "session#abc123",
 			expectError: true,
-			errorMsg:    "contains invalid character '@'",
+			errorMsg:    "contains invalid character '#'",
 		},
 		{
 			name:        "Empty dynamic key",

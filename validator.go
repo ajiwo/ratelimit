@@ -16,13 +16,13 @@ func validateKey(key string, keyType string) error {
 	if len(key) > 64 {
 		return fmt.Errorf("%s cannot exceed 64 bytes, got %d bytes", keyType, len(key))
 	}
-
+	const hint = "Only alphanumeric ASCII, underscore (_), hyphen (-), colon (:), period (.), and at (@) are allowed"
 	for i, r := range key {
 		isValid := (unicode.IsLetter(r) && r <= 127) || // ASCII letters only
 			(unicode.IsDigit(r) && r <= 127) || // ASCII digits only
-			r == '_' || r == '-' || r == ':'
+			r == '_' || r == '-' || r == ':' || r == '.' || r == '@'
 		if !isValid {
-			return fmt.Errorf("%s contains invalid character '%c' at position %d. Only alphanumeric ASCII, underscore (_), hyphen (-), and colon (:) are allowed", keyType, r, i)
+			return fmt.Errorf("%s contains invalid character '%c' at position %d. %s", keyType, r, i, hint)
 		}
 	}
 
