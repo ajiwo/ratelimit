@@ -3,6 +3,7 @@ package ratelimit
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
@@ -191,7 +192,14 @@ func (m *MultiTierLimiter) Allow(opts ...AccessOption) (bool, error) {
 
 // createTierConfig creates strategy-specific configuration for a tier
 func (m *MultiTierLimiter) createTierConfig(dynamicKey string, tierName string, limit int, interval time.Duration) (any, error) {
-	key := fmt.Sprintf("%s:%s:%s", m.config.BaseKey, dynamicKey, tierName)
+	var keyBuilder strings.Builder
+	keyBuilder.Grow(len(m.config.BaseKey) + len(dynamicKey) + len(tierName) + 2) // +2 for the colons
+	keyBuilder.WriteString(m.config.BaseKey)
+	keyBuilder.WriteByte(':')
+	keyBuilder.WriteString(dynamicKey)
+	keyBuilder.WriteByte(':')
+	keyBuilder.WriteString(tierName)
+	key := keyBuilder.String()
 
 	switch m.config.Strategy {
 	case StrategyFixedWindow:
