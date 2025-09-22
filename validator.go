@@ -2,8 +2,22 @@ package ratelimit
 
 import (
 	"fmt"
-	"unicode"
 )
+
+// allowedCharsArray is a precomputed boolean array for O(1) character validation
+var allowedCharsArray [128]bool
+
+func init() {
+	// Initialize all characters as not allowed
+	for i := range 128 {
+		allowedCharsArray[i] = false
+	}
+
+	// Set allowed characters to true
+	for _, c := range "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-:.@" {
+		allowedCharsArray[c] = true
+	}
+}
 
 // validateKey validates that a key meets the requirements:
 // - Maximum 64 bytes length
@@ -16,12 +30,17 @@ func validateKey(key string, keyType string) error {
 	if len(key) > 64 {
 		return fmt.Errorf("%s cannot exceed 64 bytes, got %d bytes", keyType, len(key))
 	}
+
 	const hint = "Only alphanumeric ASCII, underscore (_), hyphen (-), colon (:), period (.), and at (@) are allowed"
+
 	for i, r := range key {
-		isValid := (unicode.IsLetter(r) && r <= 127) || // ASCII letters only
-			(unicode.IsDigit(r) && r <= 127) || // ASCII digits only
-			r == '_' || r == '-' || r == ':' || r == '.' || r == '@'
-		if !isValid {
+		// Check if character is within ASCII range
+		if r >= 128 {
+			return fmt.Errorf("%s contains invalid character '%c' at position %d. %s", keyType, r, i, hint)
+		}
+
+		// Check if character is allowed
+		if !allowedCharsArray[r] {
 			return fmt.Errorf("%s contains invalid character '%c' at position %d. %s", keyType, r, i, hint)
 		}
 	}
