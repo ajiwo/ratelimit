@@ -31,6 +31,18 @@ func WithRedisBackend(redisConfig backends.RedisConfig) Option {
 	}
 }
 
+// WithPostgresBackend configures the rate limiter to use PostgreSQL storage
+func WithPostgresBackend(postgresConfig backends.PostgresConfig) Option {
+	return func(config *MultiTierConfig) error {
+		storage, err := backends.NewPostgresStorage(postgresConfig)
+		if err != nil {
+			return fmt.Errorf("failed to create PostgreSQL storage: %w", err)
+		}
+		config.Storage = storage
+		return nil
+	}
+}
+
 // WithFixedWindowStrategy configures the rate limiter to use fixed window strategy
 func WithFixedWindowStrategy(tiers ...TierConfig) Option {
 	return func(config *MultiTierConfig) error {
