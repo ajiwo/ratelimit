@@ -7,6 +7,11 @@ import (
 	"github.com/ajiwo/ratelimit/backends"
 )
 
+// checkV1Header validates that the string starts with "v1|"
+func checkV1Header(s string) bool {
+	return len(s) >= 3 && s[0] == 'v' && s[1] == '1' && s[2] == '|'
+}
+
 // BaseStrategy provides common functionality for all rate limiting strategies
 type BaseStrategy struct {
 	storage backends.Backend

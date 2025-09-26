@@ -2,8 +2,9 @@ package strategies
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
@@ -60,10 +61,11 @@ func (f *FixedWindowStrategy) Allow(ctx context.Context, config any) (bool, erro
 			Duration: fixedConfig.Window,
 		}
 	} else {
-		// Parse existing window state
-		err := json.Unmarshal([]byte(data), &window)
-		if err != nil {
-			return false, fmt.Errorf("failed to parse window state: %w", err)
+		// Parse existing window state (compact format only)
+		if w, ok := decodeFixedWindow(data); ok {
+			window = w
+		} else {
+			return false, fmt.Errorf("failed to parse window state: invalid encoding")
 		}
 
 		// Check if current window has expired
@@ -77,14 +79,11 @@ func (f *FixedWindowStrategy) Allow(ctx context.Context, config any) (bool, erro
 
 	// Check if limit has been reached
 	if window.Count >= fixedConfig.Limit {
-		// Save window state even when denying request
-		windowData, err := json.Marshal(window)
-		if err != nil {
-			return false, fmt.Errorf("failed to marshal window state: %w", err)
-		}
+		// Save window state even when denying request (persist compact state)
+		windowData := encodeFixedWindow(window)
 
 		// Save the updated window state with expiration set to window duration
-		err = f.storage.Set(ctx, fixedConfig.Key, string(windowData), window.Duration)
+		err = f.storage.Set(ctx, fixedConfig.Key, windowData, window.Duration)
 		if err != nil {
 			return false, fmt.Errorf("failed to save window state: %w", err)
 		}
@@ -95,14 +94,11 @@ func (f *FixedWindowStrategy) Allow(ctx context.Context, config any) (bool, erro
 	// Increment request count
 	window.Count += 1
 
-	// Save updated window state
-	windowData, err := json.Marshal(window)
-	if err != nil {
-		return false, fmt.Errorf("failed to marshal window state: %w", err)
-	}
+	// Save updated window state in compact format
+	windowData := encodeFixedWindow(window)
 
 	// Save the updated window state with expiration set to window duration
-	err = f.storage.Set(ctx, fixedConfig.Key, string(windowData), window.Duration)
+	err = f.storage.Set(ctx, fixedConfig.Key, windowData, window.Duration)
 	if err != nil {
 		return false, fmt.Errorf("failed to save window state: %w", err)
 	}
@@ -141,10 +137,11 @@ func (f *FixedWindowStrategy) GetResult(ctx context.Context, config any) (Result
 		}, nil
 	}
 
-	// Parse existing window state
-	err = json.Unmarshal([]byte(data), &window)
-	if err != nil {
-		return Result{}, fmt.Errorf("failed to parse window state: %w", err)
+	// Parse existing window state (compact format only)
+	if w, ok := decodeFixedWindow(data); ok {
+		window = w
+	} else {
+		return Result{}, fmt.Errorf("failed to parse window state: invalid encoding")
 	}
 
 	// Check if current window has expired
@@ -184,6 +181,79 @@ func (f *FixedWindowStrategy) Reset(ctx context.Context, config any) error {
 
 	// Delete the key from storage to reset the counter
 	return f.storage.Delete(ctx, fixedConfig.Key)
+}
+
+// encodeFixedWindow serializes FixedWindow into a compact ASCII format:
+// v1|count|start_unix_nano|duration_nano
+func encodeFixedWindow(w FixedWindow) string {
+	var b strings.Builder
+	b.Grow(2 + 1 + 20 + 1 + 20 + 1 + 20) // rough capacity
+	b.WriteString("v1|")
+	b.WriteString(strconv.Itoa(w.Count))
+	b.WriteByte('|')
+	b.WriteString(strconv.FormatInt(w.Start.UnixNano(), 10))
+	b.WriteByte('|')
+	b.WriteString(strconv.FormatInt(int64(w.Duration), 10))
+	return b.String()
+}
+
+// parseFixedWindowFields parses the fields from a fixed window string representation
+func parseFixedWindowFields(data string) (int, int64, int64, bool) {
+	// Parse count (first field)
+	pos1 := 0
+	for pos1 < len(data) && data[pos1] != '|' {
+		pos1++
+	}
+	if pos1 == len(data) {
+		return 0, 0, 0, false
+	}
+
+	count, err1 := strconv.Atoi(data[:pos1])
+	if err1 != nil {
+		return 0, 0, 0, false
+	}
+
+	// Parse start time (second field)
+	pos2 := pos1 + 1
+	for pos2 < len(data) && data[pos2] != '|' {
+		pos2++
+	}
+	if pos2 == len(data) {
+		return 0, 0, 0, false
+	}
+
+	startNS, err2 := strconv.ParseInt(data[pos1+1:pos2], 10, 64)
+	if err2 != nil {
+		return 0, 0, 0, false
+	}
+
+	// Parse duration (third field)
+	durNS, err3 := strconv.ParseInt(data[pos2+1:], 10, 64)
+	if err3 != nil {
+		return 0, 0, 0, false
+	}
+
+	return count, startNS, durNS, true
+}
+
+// decodeFixedWindow deserializes from compact format; returns ok=false if not compact.
+func decodeFixedWindow(s string) (FixedWindow, bool) {
+	if !checkV1Header(s) {
+		return FixedWindow{}, false
+	}
+
+	data := s[3:] // Skip "v1|"
+
+	count, startNS, durNS, ok := parseFixedWindowFields(data)
+	if !ok {
+		return FixedWindow{}, false
+	}
+
+	return FixedWindow{
+		Count:    count,
+		Start:    time.Unix(0, startNS),
+		Duration: time.Duration(durNS),
+	}, true
 }
 
 // Cleanup removes stale locks

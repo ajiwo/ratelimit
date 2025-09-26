@@ -2,8 +2,9 @@ package strategies
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
@@ -65,10 +66,11 @@ func (l *LeakyBucketStrategy) Allow(ctx context.Context, config any) (bool, erro
 			LeakRate: leakRate,
 		}
 	} else {
-		// Parse existing bucket state
-		err := json.Unmarshal([]byte(data), &bucket)
-		if err != nil {
-			return false, fmt.Errorf("failed to parse bucket state: %w", err)
+		// Parse existing bucket state (compact format only)
+		if b, ok := decodeLeakyBucket(data); ok {
+			bucket = b
+		} else {
+			return false, fmt.Errorf("failed to parse bucket state: invalid encoding")
 		}
 
 		// Leak requests based on elapsed time
@@ -80,12 +82,8 @@ func (l *LeakyBucketStrategy) Allow(ctx context.Context, config any) (bool, erro
 
 	// Check if bucket would be full after adding request
 	if bucket.Requests+1 > bucket.Capacity {
-		// Save updated bucket state even when denying request
-		// We still need to save the leaked state
-		bucketData, err := json.Marshal(bucket)
-		if err != nil {
-			return false, fmt.Errorf("failed to marshal bucket state: %w", err)
-		}
+		// Save updated bucket state even when denying request (persist leaked state)
+		bucketData := encodeLeakyBucket(bucket)
 
 		// Use a reasonable expiration time (based on capacity and leak rate)
 		// Ensure minimum expiration of 1 second
@@ -96,7 +94,7 @@ func (l *LeakyBucketStrategy) Allow(ctx context.Context, config any) (bool, erro
 		expiration := time.Duration(expirationSeconds) * time.Second
 
 		// Save the updated bucket state
-		err = l.storage.Set(ctx, leakyConfig.Key, string(bucketData), expiration)
+		err = l.storage.Set(ctx, leakyConfig.Key, bucketData, expiration)
 		if err != nil {
 			return false, fmt.Errorf("failed to save bucket state: %w", err)
 		}
@@ -107,11 +105,8 @@ func (l *LeakyBucketStrategy) Allow(ctx context.Context, config any) (bool, erro
 	// Add request to bucket
 	bucket.Requests += 1
 
-	// Save updated bucket state
-	bucketData, err := json.Marshal(bucket)
-	if err != nil {
-		return false, fmt.Errorf("failed to marshal bucket state: %w", err)
-	}
+	// Save updated bucket state in compact format
+	bucketData := encodeLeakyBucket(bucket)
 
 	// Use a reasonable expiration time (based on capacity and leak rate)
 	// Ensure minimum expiration of 1 second
@@ -122,7 +117,7 @@ func (l *LeakyBucketStrategy) Allow(ctx context.Context, config any) (bool, erro
 	expiration := time.Duration(expirationSeconds) * time.Second
 
 	// Save the updated bucket state
-	err = l.storage.Set(ctx, leakyConfig.Key, string(bucketData), expiration)
+	err = l.storage.Set(ctx, leakyConfig.Key, bucketData, expiration)
 	if err != nil {
 		return false, fmt.Errorf("failed to save bucket state: %w", err)
 	}
@@ -161,10 +156,11 @@ func (l *LeakyBucketStrategy) GetResult(ctx context.Context, config any) (Result
 		}, nil
 	}
 
-	// Parse existing bucket state
-	err = json.Unmarshal([]byte(data), &bucket)
-	if err != nil {
-		return Result{}, fmt.Errorf("failed to parse bucket state: %w", err)
+	// Parse existing bucket state (compact format only)
+	if b, ok := decodeLeakyBucket(data); ok {
+		bucket = b
+	} else {
+		return Result{}, fmt.Errorf("failed to parse bucket state: invalid encoding")
 	}
 
 	// Leak requests based on time elapsed
@@ -198,6 +194,96 @@ func (l *LeakyBucketStrategy) Reset(ctx context.Context, config any) error {
 
 	// Delete the key from storage to reset the bucket
 	return l.storage.Delete(ctx, leakyConfig.Key)
+}
+
+// encodeLeakyBucket serializes LeakyBucket into a compact ASCII format:
+// v1|requests|lastleak_unix_nano|capacity|leak_rate
+func encodeLeakyBucket(b LeakyBucket) string {
+	var sb strings.Builder
+	sb.Grow(2 + 1 + 24 + 1 + 20 + 1 + 24 + 1 + 24)
+	sb.WriteString("v1|")
+	sb.WriteString(strconv.FormatFloat(b.Requests, 'g', -1, 64))
+	sb.WriteByte('|')
+	sb.WriteString(strconv.FormatInt(b.LastLeak.UnixNano(), 10))
+	sb.WriteByte('|')
+	sb.WriteString(strconv.FormatFloat(b.Capacity, 'g', -1, 64))
+	sb.WriteByte('|')
+	sb.WriteString(strconv.FormatFloat(b.LeakRate, 'g', -1, 64))
+	return sb.String()
+}
+
+// parseLeakyBucketFields parses the fields from a leaky bucket string representation
+func parseLeakyBucketFields(data string) (float64, int64, float64, float64, bool) {
+	// Parse requests (first field)
+	pos1 := 0
+	for pos1 < len(data) && data[pos1] != '|' {
+		pos1++
+	}
+	if pos1 == len(data) {
+		return 0, 0, 0, 0, false
+	}
+
+	req, err1 := strconv.ParseFloat(data[:pos1], 64)
+	if err1 != nil {
+		return 0, 0, 0, 0, false
+	}
+
+	// Parse last leak (second field)
+	pos2 := pos1 + 1
+	for pos2 < len(data) && data[pos2] != '|' {
+		pos2++
+	}
+	if pos2 == len(data) {
+		return 0, 0, 0, 0, false
+	}
+
+	last, err2 := strconv.ParseInt(data[pos1+1:pos2], 10, 64)
+	if err2 != nil {
+		return 0, 0, 0, 0, false
+	}
+
+	// Parse capacity (third field)
+	pos3 := pos2 + 1
+	for pos3 < len(data) && data[pos3] != '|' {
+		pos3++
+	}
+	if pos3 == len(data) {
+		return 0, 0, 0, 0, false
+	}
+
+	capf, err3 := strconv.ParseFloat(data[pos2+1:pos3], 64)
+	if err3 != nil {
+		return 0, 0, 0, 0, false
+	}
+
+	// Parse leak rate (fourth field)
+	lrate, err4 := strconv.ParseFloat(data[pos3+1:], 64)
+	if err4 != nil {
+		return 0, 0, 0, 0, false
+	}
+
+	return req, last, capf, lrate, true
+}
+
+// decodeLeakyBucket deserializes from compact format; returns ok=false if not compact.
+func decodeLeakyBucket(s string) (LeakyBucket, bool) {
+	if !checkV1Header(s) {
+		return LeakyBucket{}, false
+	}
+
+	data := s[3:] // Skip "v1|"
+
+	req, last, capf, lrate, ok := parseLeakyBucketFields(data)
+	if !ok {
+		return LeakyBucket{}, false
+	}
+
+	return LeakyBucket{
+		Requests: req,
+		LastLeak: time.Unix(0, last),
+		Capacity: capf,
+		LeakRate: lrate,
+	}, true
 }
 
 // Cleanup removes stale locks

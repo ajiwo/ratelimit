@@ -2,9 +2,10 @@ package strategies
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"math"
+	"strconv"
+	"strings"
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
@@ -65,10 +66,11 @@ func (t *TokenBucketStrategy) Allow(ctx context.Context, config any) (bool, erro
 			RefillRate: refillRate,
 		}
 	} else {
-		// Parse existing bucket state
-		err := json.Unmarshal([]byte(data), &bucket)
-		if err != nil {
-			return false, fmt.Errorf("failed to parse bucket state: %w", err)
+		// Parse existing bucket state (compact format only)
+		if b, ok := decodeTokenBucket(data); ok {
+			bucket = b
+		} else {
+			return false, fmt.Errorf("failed to parse bucket state: invalid encoding")
 		}
 
 		// Refill tokens based on elapsed time
@@ -86,11 +88,8 @@ func (t *TokenBucketStrategy) Allow(ctx context.Context, config any) (bool, erro
 	// Consume one token
 	bucket.Tokens -= 1
 
-	// Save updated bucket state
-	bucketData, err := json.Marshal(bucket)
-	if err != nil {
-		return false, fmt.Errorf("failed to marshal bucket state: %w", err)
-	}
+	// Save updated bucket state in compact format
+	bucketData := encodeTokenBucket(bucket)
 
 	// Use a reasonable expiration time (based on burst size and refill rate)
 	// Ensure minimum expiration of 1 second
@@ -101,7 +100,7 @@ func (t *TokenBucketStrategy) Allow(ctx context.Context, config any) (bool, erro
 	expiration := time.Duration(expirationSeconds) * time.Second
 
 	// Save the updated bucket state
-	err = t.storage.Set(ctx, tokenConfig.Key, string(bucketData), expiration)
+	err = t.storage.Set(ctx, tokenConfig.Key, bucketData, expiration)
 	if err != nil {
 		return false, fmt.Errorf("failed to save bucket state: %w", err)
 	}
@@ -140,10 +139,11 @@ func (t *TokenBucketStrategy) GetResult(ctx context.Context, config any) (Result
 		}, nil
 	}
 
-	// Parse existing bucket state
-	err = json.Unmarshal([]byte(data), &bucket)
-	if err != nil {
-		return Result{}, fmt.Errorf("failed to parse bucket state: %w", err)
+	// Parse existing bucket state (compact format only)
+	if b, ok := decodeTokenBucket(data); ok {
+		bucket = b
+	} else {
+		return Result{}, fmt.Errorf("failed to parse bucket state: invalid encoding")
 	}
 
 	// Refill tokens based on time elapsed
@@ -177,6 +177,97 @@ func (t *TokenBucketStrategy) Reset(ctx context.Context, config any) error {
 
 	// Delete the key from storage to reset the bucket
 	return t.storage.Delete(ctx, tokenConfig.Key)
+}
+
+// encodeTokenBucket serializes TokenBucket into a compact ASCII format:
+// v1|tokens|lastrefill_unix_nano|capacity|refill_rate
+func encodeTokenBucket(b TokenBucket) string {
+	var sb strings.Builder
+	// rough capacity
+	sb.Grow(2 + 1 + 24 + 1 + 20 + 1 + 24 + 1 + 24)
+	sb.WriteString("v1|")
+	sb.WriteString(strconv.FormatFloat(b.Tokens, 'g', -1, 64))
+	sb.WriteByte('|')
+	sb.WriteString(strconv.FormatInt(b.LastRefill.UnixNano(), 10))
+	sb.WriteByte('|')
+	sb.WriteString(strconv.FormatFloat(b.Capacity, 'g', -1, 64))
+	sb.WriteByte('|')
+	sb.WriteString(strconv.FormatFloat(b.RefillRate, 'g', -1, 64))
+	return sb.String()
+}
+
+// parseTokenBucketFields parses the fields from a token bucket string representation
+func parseTokenBucketFields(data string) (float64, int64, float64, float64, bool) {
+	// Parse tokens (first field)
+	pos1 := 0
+	for pos1 < len(data) && data[pos1] != '|' {
+		pos1++
+	}
+	if pos1 == len(data) {
+		return 0, 0, 0, 0, false
+	}
+
+	tokens, err1 := strconv.ParseFloat(data[:pos1], 64)
+	if err1 != nil {
+		return 0, 0, 0, 0, false
+	}
+
+	// Parse last refill (second field)
+	pos2 := pos1 + 1
+	for pos2 < len(data) && data[pos2] != '|' {
+		pos2++
+	}
+	if pos2 == len(data) {
+		return 0, 0, 0, 0, false
+	}
+
+	last, err2 := strconv.ParseInt(data[pos1+1:pos2], 10, 64)
+	if err2 != nil {
+		return 0, 0, 0, 0, false
+	}
+
+	// Parse capacity (third field)
+	pos3 := pos2 + 1
+	for pos3 < len(data) && data[pos3] != '|' {
+		pos3++
+	}
+	if pos3 == len(data) {
+		return 0, 0, 0, 0, false
+	}
+
+	capf, err3 := strconv.ParseFloat(data[pos2+1:pos3], 64)
+	if err3 != nil {
+		return 0, 0, 0, 0, false
+	}
+
+	// Parse refill rate (fourth field)
+	rrate, err4 := strconv.ParseFloat(data[pos3+1:], 64)
+	if err4 != nil {
+		return 0, 0, 0, 0, false
+	}
+
+	return tokens, last, capf, rrate, true
+}
+
+// decodeTokenBucket deserializes from compact format; returns ok=false if not compact.
+func decodeTokenBucket(s string) (TokenBucket, bool) {
+	if !checkV1Header(s) {
+		return TokenBucket{}, false
+	}
+
+	data := s[3:] // Skip "v1|"
+
+	tokens, last, capf, rrate, ok := parseTokenBucketFields(data)
+	if !ok {
+		return TokenBucket{}, false
+	}
+
+	return TokenBucket{
+		Tokens:     tokens,
+		LastRefill: time.Unix(0, last),
+		Capacity:   capf,
+		RefillRate: rrate,
+	}, true
 }
 
 // Cleanup removes stale locks
