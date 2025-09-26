@@ -380,12 +380,6 @@ func New(opts ...Option) (*MultiTierLimiter, error) {
 		CleanupInterval: DefaultCleanupInterval,
 	}
 
-	// Apply default storage (memory backend)
-	defaultStorageOpt := WithMemoryBackend()
-	if err := defaultStorageOpt(&config); err != nil {
-		return nil, fmt.Errorf("failed to set default storage: %w", err)
-	}
-
 	// Apply provided options
 	for _, opt := range opts {
 		if err := opt(&config); err != nil {

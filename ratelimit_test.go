@@ -8,39 +8,15 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
+	_ "github.com/ajiwo/ratelimit/backends/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNew_DefaultConfiguration(t *testing.T) {
 	limiter, err := New()
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-
-	// Verify default configuration
-	config := limiter.GetConfig()
-	assert.Equal(t, "default", config.BaseKey)
-	assert.Equal(t, StrategyFixedWindow, config.Strategy)
-	assert.Len(t, config.Tiers, 1)
-	assert.Equal(t, time.Minute, config.Tiers[0].Interval)
-	assert.Equal(t, 100, config.Tiers[0].Limit)
-	assert.NotNil(t, config.Storage)
-
-	// Verify default strategy-specific values
-	assert.Equal(t, 10, config.BurstSize)
-	assert.Equal(t, 1.0, config.RefillRate)
-	assert.Equal(t, 10, config.Capacity)
-	assert.Equal(t, 1.0, config.LeakRate)
-
-	// Test basic functionality
-	ctx := t.Context()
-	allowed, err := limiter.Allow(WithContext(ctx))
-	require.NoError(t, err)
-	assert.True(t, allowed, "First request should be allowed")
-
-	// Clean up
-	err = limiter.Close()
-	require.NoError(t, err)
+	require.Error(t, err)
+	require.Nil(t, limiter)
 }
 
 func TestNew_WithOptions(t *testing.T) {
@@ -54,6 +30,7 @@ func TestNew_WithOptions(t *testing.T) {
 			WithBaseKey("test-key"),
 			WithFixedWindowStrategy(customTiers...),
 			WithCleanupInterval(time.Hour),
+			WithMemoryBackend(),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, limiter)
@@ -74,7 +51,6 @@ func TestNew_WithOptions(t *testing.T) {
 		require.NoError(t, err)
 	})
 }
-
 func TestNew_WithRedisBackend(t *testing.T) {
 	redisConfig := backends.RedisConfig{
 		Addr:     "localhost:6379",
@@ -83,7 +59,7 @@ func TestNew_WithRedisBackend(t *testing.T) {
 	}
 
 	limiter, err := New(
-		WithRedisBackend(redisConfig),
+		WithRedisBackend(redisConfig.Addr, redisConfig.Password, redisConfig.DB, redisConfig.PoolSize),
 		WithBaseKey("redis-test"),
 	)
 
@@ -112,6 +88,7 @@ func TestMultiTierLimiter_Allow_FixedWindow(t *testing.T) {
 		limiter, err := New(
 			WithBaseKey("multi-tier-test"),
 			WithFixedWindowStrategy(tiers...),
+			WithMemoryBackend(),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, limiter)
@@ -153,6 +130,7 @@ func TestMultiTierLimiter_Allow_TokenBucket(t *testing.T) {
 	limiter, err := New(
 		WithBaseKey("token-bucket-test"),
 		WithTokenBucketStrategy(10, 5.0, tiers...), // burst 10, refill 5/sec
+		WithMemoryBackend(),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
@@ -190,6 +168,7 @@ func TestMultiTierLimiter_Allow_LeakyBucket(t *testing.T) {
 	_, err := New(
 		WithBaseKey("leaky-bucket-test"),
 		WithLeakyBucketStrategy(5, 2.0, tiers...), // capacity 5, leak 2/sec
+		WithMemoryBackend(),
 	)
 
 	require.NoError(t, err)
@@ -204,6 +183,7 @@ func TestMultiTierLimiter_GetStats(t *testing.T) {
 	limiter, err := New(
 		WithBaseKey("stats-test"),
 		WithFixedWindowStrategy(tiers...),
+		WithMemoryBackend(),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
@@ -266,6 +246,7 @@ func TestMultiTierLimiter_Reset(t *testing.T) {
 	limiter, err := New(
 		WithBaseKey("reset-test"),
 		WithFixedWindowStrategy(tiers...),
+		WithMemoryBackend(),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
@@ -305,6 +286,7 @@ func TestMultiTierLimiter_ConcurrentAccess(t *testing.T) {
 	limiter, err := New(
 		WithBaseKey("concurrent-test"),
 		WithFixedWindowStrategy(tiers...),
+		WithMemoryBackend(),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
@@ -363,12 +345,14 @@ func TestMultiTierLimiter_MultipleKeys(t *testing.T) {
 	limiter1, err := New(
 		WithBaseKey("user1"),
 		WithFixedWindowStrategy(tiers...),
+		WithMemoryBackend(),
 	)
 	require.NoError(t, err)
 
 	limiter2, err := New(
 		WithBaseKey("user2"),
 		WithFixedWindowStrategy(tiers...),
+		WithMemoryBackend(),
 	)
 	require.NoError(t, err)
 
@@ -408,6 +392,7 @@ func TestMultiTierLimiter_TimeBehavior(t *testing.T) {
 		limiter, err := New(
 			WithBaseKey("time-test"),
 			WithFixedWindowStrategy(tiers...),
+			WithMemoryBackend(),
 		)
 		require.NoError(t, err)
 		require.NotNil(t, limiter)
@@ -459,6 +444,7 @@ func TestMultiTierLimiter_InvalidConfiguration(t *testing.T) {
 	_, err = New(
 		WithBaseKey("test"),
 		WithTiers(), // Empty tiers
+		WithMemoryBackend(),
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "at least one tier must be provided")
@@ -475,6 +461,7 @@ func TestMultiTierLimiter_InvalidConfiguration(t *testing.T) {
 	_, err = New(
 		WithBaseKey("test"),
 		WithTiers(tooManyTiers...),
+		WithMemoryBackend(),
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "maximum 12 tiers allowed")
@@ -486,6 +473,7 @@ func TestMultiTierLimiter_InvalidConfiguration(t *testing.T) {
 			Interval: time.Second, // Less than MinInterval
 			Limit:    100,
 		}),
+		WithMemoryBackend(),
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "interval must be at least")
@@ -497,6 +485,7 @@ func TestMultiTierLimiter_InvalidConfiguration(t *testing.T) {
 			Interval: time.Minute,
 			Limit:    0, // Invalid limit
 		}),
+		WithMemoryBackend(),
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "limit must be positive")
@@ -505,6 +494,7 @@ func TestMultiTierLimiter_InvalidConfiguration(t *testing.T) {
 	_, err = New(
 		WithBaseKey("test"),
 		WithTokenBucketStrategy(0, 1.0), // Invalid burst size
+		WithMemoryBackend(),
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "burst size must be positive")
@@ -512,6 +502,7 @@ func TestMultiTierLimiter_InvalidConfiguration(t *testing.T) {
 	_, err = New(
 		WithBaseKey("test"),
 		WithTokenBucketStrategy(10, 0), // Invalid refill rate
+		WithMemoryBackend(),
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "refill rate must be positive")
@@ -520,6 +511,7 @@ func TestMultiTierLimiter_InvalidConfiguration(t *testing.T) {
 	_, err = New(
 		WithBaseKey("test"),
 		WithLeakyBucketStrategy(0, 1.0), // Invalid capacity
+		WithMemoryBackend(),
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "capacity must be positive")
@@ -527,6 +519,7 @@ func TestMultiTierLimiter_InvalidConfiguration(t *testing.T) {
 	_, err = New(
 		WithBaseKey("test"),
 		WithLeakyBucketStrategy(10, 0), // Invalid leak rate
+		WithMemoryBackend(),
 	)
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "leak rate must be positive")
@@ -539,6 +532,7 @@ func TestMultiTierLimiter_BackendOperations(t *testing.T) {
 			Interval: time.Minute,
 			Limit:    5,
 		}),
+		WithMemoryBackend(),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
@@ -614,6 +608,7 @@ func TestMultiTierLimiter_MixedStrategyTypes(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				limiter, err := New(
 					WithBaseKey(fmt.Sprintf("strategy-test-%s", strings.ReplaceAll(tc.name, " ", "_"))),
+					WithMemoryBackend(),
 					tc.option,
 				)
 
@@ -647,6 +642,7 @@ func TestAccessOptions_SingleLimiterMultipleKeys(t *testing.T) {
 	limiter, err := New(
 		WithBaseKey("user"), // This is now a prefix, not a complete key
 		WithFixedWindowStrategy(tiers...),
+		WithMemoryBackend(),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
@@ -694,6 +690,7 @@ func TestAccessOptions_GetStats(t *testing.T) {
 	limiter, err := New(
 		WithBaseKey("api"), // Prefix
 		WithFixedWindowStrategy(tiers...),
+		WithMemoryBackend(),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
@@ -739,6 +736,7 @@ func TestAccessOptions_Reset(t *testing.T) {
 	limiter, err := New(
 		WithBaseKey("test"),
 		WithFixedWindowStrategy(tiers...),
+		WithMemoryBackend(),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
@@ -783,6 +781,7 @@ func TestAccessOptions_DefaultBehavior(t *testing.T) {
 	limiter, err := New(
 		WithBaseKey("test"),
 		WithFixedWindowStrategy(tiers...),
+		WithMemoryBackend(),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
@@ -831,6 +830,7 @@ func TestAccessOptions_MiddlewareExample(t *testing.T) {
 	rateLimiter, err := New(
 		WithBaseKey("user"), // Prefix
 		WithFixedWindowStrategy(tiers...),
+		WithMemoryBackend(),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, rateLimiter)
@@ -871,6 +871,7 @@ func TestAccessOptions_ValidationErrors(t *testing.T) {
 	limiter, err := New(
 		WithBaseKey("test"),
 		WithFixedWindowStrategy(tiers...),
+		WithMemoryBackend(),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)

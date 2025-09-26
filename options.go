@@ -14,15 +14,25 @@ type Option func(*MultiTierConfig) error
 // WithMemoryBackend configures the rate limiter to use memory storage
 func WithMemoryBackend() Option {
 	return func(config *MultiTierConfig) error {
-		config.Storage = backends.NewMemoryStorage()
+		storage, err := backends.Create("memory", nil)
+		if err != nil {
+			return fmt.Errorf("failed to create memory storage: %w", err)
+		}
+		config.Storage = storage
 		return nil
 	}
 }
 
 // WithRedisBackend configures the rate limiter to use Redis storage
-func WithRedisBackend(redisConfig backends.RedisConfig) Option {
+func WithRedisBackend(redisAddr, password string, db int, poolSize int) Option {
 	return func(config *MultiTierConfig) error {
-		storage, err := backends.NewRedisStorage(redisConfig)
+		redisConfig := backends.RedisConfig{
+			Addr:     redisAddr,
+			Password: password,
+			DB:       db,
+			PoolSize: poolSize,
+		}
+		storage, err := backends.Create("redis", redisConfig)
 		if err != nil {
 			return fmt.Errorf("failed to create Redis storage: %w", err)
 		}
@@ -32,9 +42,14 @@ func WithRedisBackend(redisConfig backends.RedisConfig) Option {
 }
 
 // WithPostgresBackend configures the rate limiter to use PostgreSQL storage
-func WithPostgresBackend(postgresConfig backends.PostgresConfig) Option {
+func WithPostgresBackend(connString string, maxConns, minConns int32) Option {
 	return func(config *MultiTierConfig) error {
-		storage, err := backends.NewPostgresStorage(postgresConfig)
+		pgConfig := backends.PostgresConfig{
+			ConnString: connString,
+			MaxConns:   maxConns,
+			MinConns:   minConns,
+		}
+		storage, err := backends.Create("postgres", pgConfig)
 		if err != nil {
 			return fmt.Errorf("failed to create PostgreSQL storage: %w", err)
 		}

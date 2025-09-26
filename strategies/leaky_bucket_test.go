@@ -5,14 +5,14 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/ajiwo/ratelimit/backends"
+	_ "github.com/ajiwo/ratelimit/backends/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestLeakyBucketAllow(t *testing.T) {
 	ctx := t.Context()
-	storage := backends.NewMemoryStorage()
+	storage := testCreateMemoryStorage(t)
 
 	strategy := NewLeakyBucket(storage)
 
@@ -41,7 +41,7 @@ func TestLeakyBucketAllow(t *testing.T) {
 func TestLeakyBucketLeak(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
-		storage := backends.NewMemoryStorage()
+		storage := testCreateMemoryStorage(t)
 
 		strategy := NewLeakyBucket(storage)
 
@@ -79,7 +79,7 @@ func TestLeakyBucketLeak(t *testing.T) {
 
 func TestLeakyBucketGetResult(t *testing.T) {
 	ctx := t.Context()
-	storage := backends.NewMemoryStorage()
+	storage := testCreateMemoryStorage(t)
 	strategy := NewLeakyBucket(storage)
 
 	config := LeakyBucketConfig{
@@ -132,7 +132,7 @@ func TestLeakyBucketGetResult(t *testing.T) {
 
 func TestLeakyBucketReset(t *testing.T) {
 	ctx := t.Context()
-	storage := backends.NewMemoryStorage()
+	storage := testCreateMemoryStorage(t)
 	strategy := NewLeakyBucket(storage)
 
 	config := LeakyBucketConfig{
@@ -173,7 +173,7 @@ func TestLeakyBucketReset(t *testing.T) {
 
 func TestLeakyBucketInvalidConfig(t *testing.T) {
 	ctx := t.Context()
-	storage := backends.NewMemoryStorage()
+	storage := testCreateMemoryStorage(t)
 
 	strategy := NewLeakyBucket(storage)
 

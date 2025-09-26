@@ -1,7 +1,6 @@
-package backends
+package redis
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"sync"
@@ -11,18 +10,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupPostgresTest(t *testing.T) (*PostgresStorage, func()) {
+func setupRedisTest(t *testing.T) (*RedisStorage, func()) {
 	t.Helper()
-
-	postgresConn := os.Getenv("TEST_POSTGRES_DSN")
-	if postgresConn == "" {
-		postgresConn = "postgres://postgres:postgres@localhost:5432/ratelimit_test?sslmode=disable"
+	redisAddr := os.Getenv("REDIS_ADDR")
+	if redisAddr == "" {
+		redisAddr = "localhost:6379"
 	}
 
-	storage, err := NewPostgresStorage(PostgresConfig{
-		ConnString: postgresConn,
-		MaxConns:   5,
-		MinConns:   1,
+	storage, err := NewRedisStorage(RedisConfig{
+		Addr:     redisAddr,
+		Password: "",
+		DB:       0,
 	})
 
 	if err != nil {
@@ -30,21 +28,20 @@ func setupPostgresTest(t *testing.T) (*PostgresStorage, func()) {
 	}
 
 	teardown := func() {
-		ctx := context.Background()
-		_, _ = storage.GetPool().Exec(ctx, `TRUNCATE TABLE ratelimit_kv`)
-		_ = storage.Close()
+		_ = storage.GetClient().FlushAll(t.Context())
+		_ = storage.GetClient().Close()
 	}
 
 	return storage, teardown
 }
 
-func TestPostgresStorage_Get(t *testing.T) {
+func TestRedisStorage_Get(t *testing.T) {
 	ctx := t.Context()
-	storage, teardown := setupPostgresTest(t)
+	storage, teardown := setupRedisTest(t)
 	defer teardown()
 
 	if storage == nil {
-		t.Skip("PostgreSQL not available, skipping tests")
+		t.Skip("Redis not available, skipping tests")
 	}
 
 	t.Run("Get non-existent key", func(t *testing.T) {
@@ -83,12 +80,12 @@ func TestPostgresStorage_Get(t *testing.T) {
 	})
 }
 
-func TestPostgresStorage_Set(t *testing.T) {
+func TestRedisStorage_Set(t *testing.T) {
 	ctx := t.Context()
-	storage, teardown := setupPostgresTest(t)
+	storage, teardown := setupRedisTest(t)
 	defer teardown()
 	if storage == nil {
-		t.Skip("PostgreSQL not available, skipping tests")
+		t.Skip("Redis not available, skipping tests")
 	}
 
 	t.Run("Set string value", func(t *testing.T) {
@@ -113,31 +110,21 @@ func TestPostgresStorage_Set(t *testing.T) {
 		err := storage.Set(ctx, "zeroexp", "value", 0)
 		require.NoError(t, err)
 
+		// Note: Redis treats zero expiration as "no expiration" (permanent key)
+		// This is different from the memory backend behavior
 		val, err := storage.Get(ctx, "zeroexp")
 		require.NoError(t, err)
 		require.Equal(t, "value", val)
 	})
-
-	t.Run("Update existing key", func(t *testing.T) {
-		err := storage.Set(ctx, "updatekey", "oldvalue", time.Hour)
-		require.NoError(t, err)
-
-		err = storage.Set(ctx, "updatekey", "newvalue", time.Hour)
-		require.NoError(t, err)
-
-		val, err := storage.Get(ctx, "updatekey")
-		require.NoError(t, err)
-		require.Equal(t, "newvalue", val)
-	})
 }
 
-func TestPostgresStorage_Delete(t *testing.T) {
+func TestRedisStorage_Delete(t *testing.T) {
 	ctx := t.Context()
-	storage, teardown := setupPostgresTest(t)
+	storage, teardown := setupRedisTest(t)
 	defer teardown()
 
 	if storage == nil {
-		t.Skip("PostgreSQL not available, skipping tests")
+		t.Skip("Redis not available, skipping tests")
 	}
 
 	t.Run("Delete existing key", func(t *testing.T) {
@@ -158,13 +145,13 @@ func TestPostgresStorage_Delete(t *testing.T) {
 	})
 }
 
-func TestPostgresStorage_ConcurrentAccess(t *testing.T) {
+func TestRedisStorage_ConcurrentAccess(t *testing.T) {
 	ctx := t.Context()
-	storage, teardown := setupPostgresTest(t)
+	storage, teardown := setupRedisTest(t)
 	defer teardown()
 
 	if storage == nil {
-		t.Skip("PostgreSQL not available, skipping tests")
+		t.Skip("Redis not available, skipping tests")
 	}
 
 	const numGoroutines = 10
@@ -218,34 +205,39 @@ func TestPostgresStorage_ConcurrentAccess(t *testing.T) {
 	}
 }
 
-func TestPostgresStorage_Close(t *testing.T) {
-	postgresConn := os.Getenv("POSTGRES_CONN")
-	if postgresConn == "" {
-		postgresConn = "postgres://postgres:postgres@localhost:5432/ratelimit_test?sslmode=disable"
+func TestRedisStorage_Close(t *testing.T) {
+	redisAddr := os.Getenv("REDIS_ADDR")
+	if redisAddr == "" {
+		redisAddr = "localhost:6379"
 	}
 
-	storage, err := NewPostgresStorage(PostgresConfig{
-		ConnString: postgresConn,
-		MaxConns:   5,
-		MinConns:   1,
+	storage, err := NewRedisStorage(RedisConfig{
+		Addr:     redisAddr,
+		Password: "",
+		DB:       0,
 	})
 
+	// If Redis is not available, skip the test
 	if err != nil {
-		t.Skipf("PostgreSQL not available, skipping Close test: %v", err)
+		t.Skipf("Redis not available, skipping Close test: %v", err)
 	}
 
 	ctx := t.Context()
 
+	// Add some data to Redis
 	err = storage.Set(ctx, "test_close_key", "test_value", time.Hour)
 	require.NoError(t, err)
 
+	// Verify data exists
 	val, err := storage.Get(ctx, "test_close_key")
 	require.NoError(t, err)
 	require.Equal(t, "test_value", val)
 
+	// Close the Redis connection
 	err = storage.Close()
 	require.NoError(t, err)
 
+	// After closing, operations should fail
 	_, err = storage.Get(ctx, "test_close_key")
 	require.Error(t, err, "Expected error after closing connection")
 }

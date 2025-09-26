@@ -6,14 +6,14 @@ import (
 	"testing/synctest"
 	"time"
 
-	"github.com/ajiwo/ratelimit/backends"
+	_ "github.com/ajiwo/ratelimit/backends/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestFixedWindow_Allow(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		storage := backends.NewMemoryStorage()
+		storage := testCreateMemoryStorage(t)
 		strategy := NewFixedWindow(storage)
 
 		config := FixedWindowConfig{
@@ -42,7 +42,7 @@ func TestFixedWindow_Allow(t *testing.T) {
 
 func TestFixedWindow_WindowReset(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		storage := backends.NewMemoryStorage()
+		storage := testCreateMemoryStorage(t)
 		strategy := NewFixedWindow(storage)
 
 		config := FixedWindowConfig{
@@ -80,7 +80,7 @@ func TestFixedWindow_WindowReset(t *testing.T) {
 
 func TestFixedWindow_MultipleKeys(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		storage := backends.NewMemoryStorage()
+		storage := testCreateMemoryStorage(t)
 		strategy := NewFixedWindow(storage)
 
 		config1 := FixedWindowConfig{
@@ -119,7 +119,7 @@ func TestFixedWindow_MultipleKeys(t *testing.T) {
 }
 
 func TestFixedWindow_InvalidConfig(t *testing.T) {
-	storage := backends.NewMemoryStorage()
+	storage := testCreateMemoryStorage(t)
 	strategy := NewFixedWindow(storage)
 
 	ctx := t.Context()
@@ -133,7 +133,7 @@ func TestFixedWindow_InvalidConfig(t *testing.T) {
 
 func TestFixedWindow_ZeroLimit(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		storage := backends.NewMemoryStorage()
+		storage := testCreateMemoryStorage(t)
 		strategy := NewFixedWindow(storage)
 
 		config := FixedWindowConfig{
@@ -155,7 +155,7 @@ func TestFixedWindow_ZeroLimit(t *testing.T) {
 
 func TestFixedWindow_GetResult(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		storage := backends.NewMemoryStorage()
+		storage := testCreateMemoryStorage(t)
 		strategy := NewFixedWindow(storage)
 
 		config := FixedWindowConfig{
@@ -215,7 +215,7 @@ func TestFixedWindow_GetResult(t *testing.T) {
 
 func TestFixedWindow_Reset(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		storage := backends.NewMemoryStorage()
+		storage := testCreateMemoryStorage(t)
 		strategy := NewFixedWindow(storage)
 
 		config := FixedWindowConfig{
@@ -258,7 +258,7 @@ func TestFixedWindow_Reset(t *testing.T) {
 
 func TestFixedWindow_ConcurrentAccess(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		storage := backends.NewMemoryStorage()
+		storage := testCreateMemoryStorage(t)
 		strategy := NewFixedWindow(storage)
 
 		config := FixedWindowConfig{
@@ -311,7 +311,7 @@ func TestFixedWindow_ConcurrentAccess(t *testing.T) {
 
 func TestFixedWindow_PreciseTiming(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		storage := backends.NewMemoryStorage()
+		storage := testCreateMemoryStorage(t)
 		strategy := NewFixedWindow(storage)
 
 		config := FixedWindowConfig{

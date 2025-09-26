@@ -1,48 +1,23 @@
-package backends
+package memory
 
 import (
+	"context"
 	"fmt"
-	"os"
-	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 )
 
-func setupRedisTest(t *testing.T) (*RedisStorage, func()) {
-	t.Helper()
-	redisAddr := os.Getenv("REDIS_ADDR")
-	if redisAddr == "" {
-		redisAddr = "localhost:6379"
-	}
-
-	storage, err := NewRedisStorage(RedisConfig{
-		Addr:     redisAddr,
-		Password: "",
-		DB:       0,
-	})
-
-	if err != nil {
-		return nil, func() {}
-	}
-
-	teardown := func() {
-		_ = storage.GetClient().FlushAll(t.Context())
-		_ = storage.GetClient().Close()
-	}
-
-	return storage, teardown
+func TestNewMemoryStorage(t *testing.T) {
+	storage := NewMemoryStorage()
+	require.NotNil(t, storage)
+	require.NotNil(t, storage.values)
 }
 
-func TestRedisStorage_Get(t *testing.T) {
-	ctx := t.Context()
-	storage, teardown := setupRedisTest(t)
-	defer teardown()
-
-	if storage == nil {
-		t.Skip("Redis not available, skipping tests")
-	}
+func TestMemoryStorage_Get(t *testing.T) {
+	storage := NewMemoryStorage()
+	ctx := context.Background()
 
 	t.Run("Get non-existent key", func(t *testing.T) {
 		val, err := storage.Get(ctx, "nonexistent")
@@ -80,13 +55,9 @@ func TestRedisStorage_Get(t *testing.T) {
 	})
 }
 
-func TestRedisStorage_Set(t *testing.T) {
+func TestMemoryStorage_Set(t *testing.T) {
+	storage := NewMemoryStorage()
 	ctx := t.Context()
-	storage, teardown := setupRedisTest(t)
-	defer teardown()
-	if storage == nil {
-		t.Skip("Redis not available, skipping tests")
-	}
 
 	t.Run("Set string value", func(t *testing.T) {
 		err := storage.Set(ctx, "stringkey", "testvalue", time.Hour)
@@ -110,22 +81,16 @@ func TestRedisStorage_Set(t *testing.T) {
 		err := storage.Set(ctx, "zeroexp", "value", 0)
 		require.NoError(t, err)
 
-		// Note: Redis treats zero expiration as "no expiration" (permanent key)
-		// This is different from the memory backend behavior
+		time.Sleep(time.Millisecond * 10)
 		val, err := storage.Get(ctx, "zeroexp")
 		require.NoError(t, err)
-		require.Equal(t, "value", val)
+		require.Equal(t, "", val)
 	})
 }
 
-func TestRedisStorage_Delete(t *testing.T) {
-	ctx := t.Context()
-	storage, teardown := setupRedisTest(t)
-	defer teardown()
-
-	if storage == nil {
-		t.Skip("Redis not available, skipping tests")
-	}
+func TestMemoryStorage_Delete(t *testing.T) {
+	storage := NewMemoryStorage()
+	ctx := context.Background()
 
 	t.Run("Delete existing key", func(t *testing.T) {
 		err := storage.Set(ctx, "deletekey", "value", time.Hour)
@@ -145,25 +110,19 @@ func TestRedisStorage_Delete(t *testing.T) {
 	})
 }
 
-func TestRedisStorage_ConcurrentAccess(t *testing.T) {
-	ctx := t.Context()
-	storage, teardown := setupRedisTest(t)
-	defer teardown()
-
-	if storage == nil {
-		t.Skip("Redis not available, skipping tests")
-	}
+func TestMemoryStorage_ConcurrentAccess(t *testing.T) {
+	storage := NewMemoryStorage()
+	ctx := context.Background()
 
 	const numGoroutines = 10
-	const numOperations = 50
+	const numOperations = 100
 
-	var wg sync.WaitGroup
+	done := make(chan bool, numGoroutines)
 	errors := make(chan error, numGoroutines*numOperations)
 
 	for i := range numGoroutines {
-		wg.Add(1)
 		go func(id int) {
-			defer wg.Done()
+			defer func() { done <- true }()
 
 			for j := range numOperations {
 				key := fmt.Sprintf("key_%d_%d", id, j)
@@ -195,9 +154,11 @@ func TestRedisStorage_ConcurrentAccess(t *testing.T) {
 		}(i)
 	}
 
-	wg.Wait()
-	close(errors)
+	for range numGoroutines {
+		<-done
+	}
 
+	close(errors)
 	for err := range errors {
 		if err != nil {
 			t.Errorf("Concurrent access error: %v", err)
@@ -205,39 +166,56 @@ func TestRedisStorage_ConcurrentAccess(t *testing.T) {
 	}
 }
 
-func TestRedisStorage_Close(t *testing.T) {
-	redisAddr := os.Getenv("REDIS_ADDR")
-	if redisAddr == "" {
-		redisAddr = "localhost:6379"
-	}
+func TestMemoryStorage_cleanup(t *testing.T) {
+	storage := NewMemoryStorage()
+	ctx := context.Background()
 
-	storage, err := NewRedisStorage(RedisConfig{
-		Addr:     redisAddr,
-		Password: "",
-		DB:       0,
+	t.Run("Cleanup removes expired entries", func(t *testing.T) {
+		err := storage.Set(ctx, "expired1", "value1", time.Millisecond*10)
+		require.NoError(t, err)
+
+		err = storage.Set(ctx, "expired2", "value2", time.Millisecond*10)
+		require.NoError(t, err)
+
+		err = storage.Set(ctx, "valid", "value3", time.Hour)
+		require.NoError(t, err)
+
+		time.Sleep(time.Millisecond * 20)
+
+		storage.mu.Lock()
+		storage.cleanup()
+		storage.mu.Unlock()
+
+		val, _ := storage.Get(ctx, "expired1")
+		require.Equal(t, "", val, "Expected expired1 to be cleaned up, got %q", val)
+		val, _ = storage.Get(ctx, "expired2")
+		require.Equal(t, "", val, "Expected expired2 to be cleaned up, got %q", val)
+		val, _ = storage.Get(ctx, "valid")
+		require.Equal(t, "value3", val, "Expected valid to remain, got %q", val)
 	})
+}
 
-	// If Redis is not available, skip the test
-	if err != nil {
-		t.Skipf("Redis not available, skipping Close test: %v", err)
-	}
-
+func TestMemoryStorage_Close(t *testing.T) {
+	storage := NewMemoryStorage()
 	ctx := t.Context()
 
-	// Add some data to Redis
-	err = storage.Set(ctx, "test_close_key", "test_value", time.Hour)
+	// Add some data to the storage
+	err := storage.Set(ctx, "key1", "value1", time.Hour)
+	require.NoError(t, err)
+	err = storage.Set(ctx, "key2", "value2", time.Hour)
 	require.NoError(t, err)
 
 	// Verify data exists
-	val, err := storage.Get(ctx, "test_close_key")
+	val, err := storage.Get(ctx, "key1")
 	require.NoError(t, err)
-	require.Equal(t, "test_value", val)
+	require.Equal(t, "value1", val)
 
-	// Close the Redis connection
+	// Close the storage
 	err = storage.Close()
 	require.NoError(t, err)
 
-	// After closing, operations should fail
-	_, err = storage.Get(ctx, "test_close_key")
-	require.Error(t, err, "Expected error after closing connection")
+	// Verify storage is effectively cleared (new operations should work but find no data)
+	val, err = storage.Get(ctx, "key1")
+	require.NoError(t, err)
+	require.Equal(t, "", val)
 }

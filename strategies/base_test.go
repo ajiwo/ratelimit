@@ -6,11 +6,22 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
+	_ "github.com/ajiwo/ratelimit/backends/memory"
+	"github.com/stretchr/testify/require"
 )
+
+func testCreateMemoryStorage(t *testing.T) backends.Backend {
+	backend, err := backends.Create("memory", nil)
+	require.NoError(t, err, "Failed to create memory storage")
+	return backend
+}
 
 func TestLockCleanup(t *testing.T) {
 	// Create a memory backend for testing
-	backend := backends.NewMemoryStorage()
+	backend, err := backends.Create("memory", nil)
+	if err != nil {
+		t.Fatalf("Failed to create memory backend: %v", err)
+	}
 
 	// Test fixed window strategy cleanup
 	fixedStrategy := NewFixedWindow(backend)
@@ -118,7 +129,10 @@ func TestLockCleanup(t *testing.T) {
 
 func TestLockCleanupWithMaxAge(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		backend := backends.NewMemoryStorage()
+		backend, err := backends.Create("memory", nil)
+		if err != nil {
+			t.Fatalf("Failed to create memory backend: %v", err)
+		}
 		strategy := NewFixedWindow(backend)
 
 		// Create locks

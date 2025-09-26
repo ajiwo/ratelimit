@@ -1,4 +1,4 @@
-package backends
+package postgres
 
 import (
 	"context"
@@ -70,8 +70,8 @@ func (p *PostgresStorage) Get(ctx context.Context, key string) (string, error) {
 	var expiresAt *time.Time
 
 	err := p.pool.QueryRow(ctx, `
-		SELECT value, expires_at 
-		FROM ratelimit_kv 
+		SELECT value, expires_at
+		FROM ratelimit_kv
 		WHERE key = $1
 	`, key).Scan(&value, &expiresAt)
 
@@ -96,9 +96,9 @@ func (p *PostgresStorage) Set(ctx context.Context, key string, value any, expira
 	valueStr := fmt.Sprintf("%v", value)
 
 	_, err := p.pool.Exec(ctx, `
-		INSERT INTO ratelimit_kv (key, value, expires_at) 
+		INSERT INTO ratelimit_kv (key, value, expires_at)
 		VALUES ($1, $2, $3)
-		ON CONFLICT (key) DO UPDATE SET 
+		ON CONFLICT (key) DO UPDATE SET
 			value = EXCLUDED.value,
 			expires_at = EXCLUDED.expires_at
 	`, key, valueStr, expiresAt)

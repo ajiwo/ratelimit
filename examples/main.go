@@ -8,7 +8,11 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit"
+
+	_ "github.com/ajiwo/ratelimit/backends/memory"
+
 	"github.com/ajiwo/ratelimit/backends"
+
 	"github.com/ajiwo/ratelimit/strategies"
 )
 
@@ -51,7 +55,7 @@ func main() {
 
 func tokenBucketExample() error {
 	// Create memory backend
-	backend := backends.NewMemoryStorage()
+	backend, _ := backends.Create("memory", nil)
 
 	// Create token bucket strategy
 	strategy := strategies.NewTokenBucket(backend)
@@ -90,7 +94,7 @@ func tokenBucketExample() error {
 
 func fixedWindowExample() error {
 	// Create memory backend
-	backend := backends.NewMemoryStorage()
+	backend, _ := backends.Create("memory", nil)
 
 	// Create fixed window strategy
 	strategy := strategies.NewFixedWindow(backend)
@@ -141,7 +145,7 @@ func tokenBucketRedisExample() error {
 		PoolSize: 10,
 	}
 
-	backend, err := backends.NewRedisStorage(redisConfig)
+	backend, err := backends.Create("redis", redisConfig)
 	if err != nil {
 		// If Redis is not available, skip this example
 		fmt.Println("Redis not available, skipping example")
@@ -207,7 +211,7 @@ func tokenBucketRedisExample() error {
 
 func statusExample() error {
 	// Create memory backend
-	backend := backends.NewMemoryStorage()
+	backend, _ := backends.Create("memory", nil)
 
 	// Create token bucket strategy
 	strategy := strategies.NewTokenBucket(backend)

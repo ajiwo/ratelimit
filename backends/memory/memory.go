@@ -1,4 +1,4 @@
-package backends
+package memory
 
 import (
 	"context"
