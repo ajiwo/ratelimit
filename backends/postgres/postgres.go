@@ -2,9 +2,11 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -76,7 +78,10 @@ func (p *PostgresStorage) Get(ctx context.Context, key string) (string, error) {
 	`, key).Scan(&value, &expiresAt)
 
 	if err != nil {
-		return "", nil
+		if errors.Is(err, pgx.ErrNoRows) {
+			return "", nil
+		}
+		return "", err
 	}
 
 	if expiresAt != nil && time.Now().After(*expiresAt) {
