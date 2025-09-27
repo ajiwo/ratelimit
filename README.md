@@ -7,9 +7,11 @@ This is a Go library that implements rate limiting functionality with multiple a
 - Multiple rate limiting algorithms:
   - Fixed Window
   - Token Bucket
+  - Leaky Bucket
 - Multiple storage backends:
   - In-Memory (single instance)
   - Redis (distributed)
+  - PostgreSQL (distributed)
 
 ## Installation
 
@@ -50,14 +52,18 @@ The multi-tier limiter enforces ALL tiers simultaneously - a request is only all
 **Supported strategies:**
 - `ratelimit.StrategyFixedWindow`
 - `ratelimit.StrategyTokenBucket`
+- `ratelimit.StrategyLeakyBucket`
 
 **Available functional options:**
 - `WithMemoryBackend()` - Use in-memory storage
-- `WithRedisBackend(config)` - Use Redis storage
+- `WithRedisBackend(addr, password, db, poolSize)` - Use Redis storage
+- `WithPostgresBackend(connString, maxConns, minConns)` - Use PostgreSQL storage
 - `WithFixedWindowStrategy(tiers...)` - Fixed window algorithm
 - `WithTokenBucketStrategy(burstSize, refillRate, tiers...)` - Token bucket algorithm
+- `WithLeakyBucketStrategy(capacity, leakRate, tiers...)` - Leaky bucket algorithm
 - `WithBaseKey(key)` - Set the base key for rate limiting
 - `WithTiers(tiers...)` - Override default tiers for any strategy
+- `WithCleanupInterval(interval)` - Set cleanup interval for stale data
 
 **Limits and Constraints:**
 - Maximum 12 tiers per configuration
@@ -69,33 +75,50 @@ The multi-tier limiter enforces ALL tiers simultaneously - a request is only all
 
 The library supports multiple storage backends:
 
-### 1. In-Memory Storage
+#### 1. In-Memory Storage
 
 ```go
-storage := backends.NewMemoryStorage()
+limiter, err := ratelimit.New(
+    ratelimit.WithMemoryBackend(),
+    // ... other options
+)
 ```
 
-### 2. Redis Storage
+#### 2. Redis Storage
 
 ```go
-config := backends.RedisConfig{
-    Addr:     "localhost:6379",
-    Password: "",
-    DB:       0,
-    PoolSize: 10,
-}
-storage, err := backends.NewRedisStorage(config)
+limiter, err := ratelimit.New(
+    ratelimit.WithRedisBackend("localhost:6379", "", 0, 10), // addr, password, db, poolSize
+    // ... other options
+)
 ```
 
+#### 3. PostgreSQL Storage
+
+```go
+limiter, err := ratelimit.New(
+    ratelimit.WithPostgresBackend("postgres://user:pass@localhost/db", 10, 2), // connString, maxConns, minConns
+    // ... other options
+)
+```
 
 
 ### Rate Limiting Strategies
 
-After creating a storage backend, you can use it with different rate limiting strategies:
+For direct strategy usage, you can create strategies individually:
 
 #### Fixed Window
 
 ```go
+import "github.com/ajiwo/ratelimit/backends"
+import "github.com/ajiwo/ratelimit/strategies"
+
+// Create a storage backend
+storage, err := backends.Create("memory", nil)
+if err != nil {
+    // Handle error
+}
+
 // Create a fixed window strategy
 strategy := strategies.NewFixedWindow(storage)
 
@@ -148,6 +171,34 @@ if allowed {
 }
 ```
 
+#### Leaky Bucket
+
+```go
+// Create a leaky bucket strategy
+strategy := strategies.NewLeakyBucket(storage)
+
+// Configure rate limiting
+config := strategies.LeakyBucketConfig{
+    RateLimitConfig: strategies.RateLimitConfig{
+        Key:   "user:123",
+        Limit: 100,
+    },
+    Capacity: 50,  // Maximum requests the bucket can hold
+    LeakRate: 2.0, // 2 requests per second leak rate
+}
+
+// Check if request is allowed
+allowed, err := strategy.Allow(ctx, config)
+if err != nil {
+    // Handle error
+}
+if allowed {
+    // Process request
+} else {
+    // Reject request
+}
+```
+
 ## Testing
 
 Run tests with:
@@ -156,7 +207,7 @@ Run tests with:
 ./test.sh
 ```
 
-Note: Some tests require running Redis instances for integration testing.
+Note: Some tests require running Redis and PostgreSQL instances for integration testing.
 
 ## License
 
