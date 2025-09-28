@@ -17,7 +17,8 @@ type memoryValue struct {
 	expiration time.Time
 }
 
-func NewMemoryStorage() *MemoryStorage {
+// New initializes a new in-memory storage instance.
+func New() *MemoryStorage {
 	return &MemoryStorage{
 		values: make(map[string]memoryValue),
 	}

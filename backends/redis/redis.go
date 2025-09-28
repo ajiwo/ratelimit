@@ -22,7 +22,8 @@ func (r *RedisStorage) GetClient() *redis.Client {
 	return r.client
 }
 
-func NewRedisStorage(config RedisConfig) (*RedisStorage, error) {
+// New initializes a new RedisStorage with the given configuration.
+func New(config RedisConfig) (*RedisStorage, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:     config.Addr,
 		Password: config.Password,

@@ -10,13 +10,13 @@ import (
 )
 
 func TestNewMemoryStorage(t *testing.T) {
-	storage := NewMemoryStorage()
+	storage := New()
 	require.NotNil(t, storage)
 	require.NotNil(t, storage.values)
 }
 
 func TestMemoryStorage_Get(t *testing.T) {
-	storage := NewMemoryStorage()
+	storage := New()
 	ctx := context.Background()
 
 	t.Run("Get non-existent key", func(t *testing.T) {
@@ -56,7 +56,7 @@ func TestMemoryStorage_Get(t *testing.T) {
 }
 
 func TestMemoryStorage_Set(t *testing.T) {
-	storage := NewMemoryStorage()
+	storage := New()
 	ctx := t.Context()
 
 	t.Run("Set string value", func(t *testing.T) {
@@ -89,7 +89,7 @@ func TestMemoryStorage_Set(t *testing.T) {
 }
 
 func TestMemoryStorage_Delete(t *testing.T) {
-	storage := NewMemoryStorage()
+	storage := New()
 	ctx := context.Background()
 
 	t.Run("Delete existing key", func(t *testing.T) {
@@ -111,7 +111,7 @@ func TestMemoryStorage_Delete(t *testing.T) {
 }
 
 func TestMemoryStorage_ConcurrentAccess(t *testing.T) {
-	storage := NewMemoryStorage()
+	storage := New()
 	ctx := context.Background()
 
 	const numGoroutines = 10
@@ -167,7 +167,7 @@ func TestMemoryStorage_ConcurrentAccess(t *testing.T) {
 }
 
 func TestMemoryStorage_cleanup(t *testing.T) {
-	storage := NewMemoryStorage()
+	storage := New()
 	ctx := context.Background()
 
 	t.Run("Cleanup removes expired entries", func(t *testing.T) {
@@ -196,7 +196,7 @@ func TestMemoryStorage_cleanup(t *testing.T) {
 }
 
 func TestMemoryStorage_Close(t *testing.T) {
-	storage := NewMemoryStorage()
+	storage := New()
 	ctx := t.Context()
 
 	// Add some data to the storage

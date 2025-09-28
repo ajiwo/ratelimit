@@ -26,11 +26,17 @@ go get github.com/ajiwo/ratelimit
 The library provides a high-level multi-tier rate limiting interface that allows you to configure multiple time-based rate limits simultaneously:
 
 ```go
-import "github.com/ajiwo/ratelimit"
+import (
+    "github.com/ajiwo/ratelimit"
+    "github.com/ajiwo/ratelimit/backends/memory"
+)
+
+// Create a backend instance
+mem := memory.New()
 
 // Create a rate limiter using functional options
 limiter, err := ratelimit.New(
-    ratelimit.WithMemoryBackend(),
+    ratelimit.WithBackend(mem),
     ratelimit.WithFixedWindowStrategy(
         ratelimit.TierConfig{Interval: time.Minute, Limit: 5},    // 5 requests per minute
         ratelimit.TierConfig{Interval: time.Hour, Limit: 100},   // 100 requests per hour
@@ -55,15 +61,13 @@ The multi-tier limiter enforces ALL tiers simultaneously - a request is only all
 - `ratelimit.StrategyLeakyBucket`
 
 **Available functional options:**
-- `WithMemoryBackend()` - Use in-memory storage
-- `WithRedisBackend(addr, password, db, poolSize)` - Use Redis storage
-- `WithPostgresBackend(connString, maxConns, minConns)` - Use PostgreSQL storage
+- `WithBackend(backend)` - Use a custom backend instance
 - `WithFixedWindowStrategy(tiers...)` - Fixed window algorithm
 - `WithTokenBucketStrategy(burstSize, refillRate, tiers...)` - Token bucket algorithm
 - `WithLeakyBucketStrategy(capacity, leakRate, tiers...)` - Leaky bucket algorithm
 - `WithBaseKey(key)` - Set the base key for rate limiting
 - `WithTiers(tiers...)` - Override default tiers for any strategy
-- `WithCleanupInterval(interval)` - Set cleanup interval for stale data
+- `WithCleanupInterval(interval)` - Set cleanup interval for internal stale data
 
 **Limits and Constraints:**
 - Maximum 12 tiers per configuration
@@ -78,8 +82,13 @@ The library supports multiple storage backends:
 #### 1. In-Memory Storage
 
 ```go
+import "github.com/ajiwo/ratelimit/backends/memory"
+
+// Create memory backend instance
+mem := memory.New()
+
 limiter, err := ratelimit.New(
-    ratelimit.WithMemoryBackend(),
+    ratelimit.WithBackend(mem),
     // ... other options
 )
 ```
@@ -87,8 +96,21 @@ limiter, err := ratelimit.New(
 #### 2. Redis Storage
 
 ```go
+import "github.com/ajiwo/ratelimit/backends/redis"
+
+// Create Redis backend instance
+redisBackend, err := redis.New(redis.RedisConfig{
+    Addr:     "localhost:6379",
+    Password: "", // no password
+    DB:       0,  // default DB
+    PoolSize: 10,
+})
+if err != nil {
+    // handle error
+}
+
 limiter, err := ratelimit.New(
-    ratelimit.WithRedisBackend("localhost:6379", "", 0, 10), // addr, password, db, poolSize
+    ratelimit.WithBackend(redisBackend),
     // ... other options
 )
 ```
@@ -96,8 +118,20 @@ limiter, err := ratelimit.New(
 #### 3. PostgreSQL Storage
 
 ```go
+import "github.com/ajiwo/ratelimit/backends/postgres"
+
+// Create PostgreSQL backend instance
+pgBackend, err := postgres.New(postgres.PostgresConfig{
+    ConnString: "postgres://user:pass@localhost/db",
+    MaxConns:   10,
+    MinConns:   2,
+})
+if err != nil {
+    // handle error
+}
+
 limiter, err := ratelimit.New(
-    ratelimit.WithPostgresBackend("postgres://user:pass@localhost/db", 10, 2), // connString, maxConns, minConns
+    ratelimit.WithBackend(pgBackend),
     // ... other options
 )
 ```
@@ -110,14 +144,13 @@ For direct strategy usage, you can create strategies individually:
 #### Fixed Window
 
 ```go
-import "github.com/ajiwo/ratelimit/backends"
-import "github.com/ajiwo/ratelimit/strategies"
+import (
+    "github.com/ajiwo/ratelimit/backends/memory"
+    "github.com/ajiwo/ratelimit/strategies"
+)
 
-// Create a storage backend
-storage, err := backends.Create("memory", nil)
-if err != nil {
-    // Handle error
-}
+// Create a memory backend instance
+storage := memory.New()
 
 // Create a fixed window strategy
 strategy := strategies.NewFixedWindow(storage)
@@ -146,6 +179,9 @@ if allowed {
 #### Token Bucket
 
 ```go
+// Create a memory backend instance
+storage := memory.New()
+
 // Create a token bucket strategy
 strategy := strategies.NewTokenBucket(storage)
 
@@ -174,6 +210,9 @@ if allowed {
 #### Leaky Bucket
 
 ```go
+// Create a memory backend instance
+storage := memory.New()
+
 // Create a leaky bucket strategy
 strategy := strategies.NewLeakyBucket(storage)
 

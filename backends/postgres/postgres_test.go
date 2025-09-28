@@ -19,7 +19,7 @@ func setupPostgresTest(t *testing.T) (*PostgresStorage, func()) {
 		postgresConn = "postgres://postgres:postgres@localhost:5432/ratelimit_test?sslmode=disable"
 	}
 
-	storage, err := NewPostgresStorage(PostgresConfig{
+	storage, err := New(PostgresConfig{
 		ConnString: postgresConn,
 		MaxConns:   5,
 		MinConns:   1,
@@ -224,7 +224,7 @@ func TestPostgresStorage_Close(t *testing.T) {
 		postgresConn = "postgres://postgres:postgres@localhost:5432/ratelimit_test?sslmode=disable"
 	}
 
-	storage, err := NewPostgresStorage(PostgresConfig{
+	storage, err := New(PostgresConfig{
 		ConnString: postgresConn,
 		MaxConns:   5,
 		MinConns:   1,

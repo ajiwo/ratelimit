@@ -6,14 +6,14 @@ import (
 
 func init() {
 	backends.Register("redis", func(config any) (backends.Backend, error) {
-		redisConfig, ok := config.(backends.RedisConfig)
+		redisConfig, ok := config.(RedisConfig)
 		if !ok {
 			return nil, backends.ErrInvalidConfig
 		}
 		if redisConfig.Addr == "" {
 			return nil, backends.ErrInvalidConfig
 		}
-		return NewRedisStorage(RedisConfig{
+		return New(RedisConfig{
 			Addr:     redisConfig.Addr,
 			Password: redisConfig.Password,
 			DB:       redisConfig.DB,

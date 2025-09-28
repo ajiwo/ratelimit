@@ -4,7 +4,7 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
-## [0.0.3] - 2025-09-27
+## [0.0.3] - 2025-09-28
 
 ### Added
 - PostgreSQL backend storage support for persistent rate limiting state.
@@ -13,11 +13,15 @@ All notable changes to this project will be documented in this file.
 - PostgreSQL service integration in CI pipeline.
 
 ### Changed
-- Replaced context parameters with functional options pattern for cleaner API.
-- Restructured backends into modular plugin architecture for better extensibility.
+- Replaced context parameters with functional options.
+- Restructured backends into modular plugin architecture.
 - Optimized key construction and validation with precomputed character arrays.
 - Updated examples to demonstrate functional options refactor and Redis pool size configuration.
 - Improved backend error handling across all storage implementations.
+- Standardized backend constructors to use `New()` function across all backends.
+- Decoupled configuration types from registry to individual backend packages.
+- Replaced backend-specific option functions `WithMemoryBackend`, `WithRedisBackend`, `WithPostgresBackend`
+  with generic `WithBackend()` option.
 
 ### Performance
 - Replaced JSON serialization with compact custom format for rate limiter state, improving serialization efficiency.

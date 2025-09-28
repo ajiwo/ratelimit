@@ -9,7 +9,9 @@ import (
 
 	"github.com/ajiwo/ratelimit"
 
-	_ "github.com/ajiwo/ratelimit/backends/memory"
+	"github.com/ajiwo/ratelimit/backends/memory"
+	"github.com/ajiwo/ratelimit/backends/redis"
+	"github.com/ajiwo/ratelimit/backends/postgres"
 
 	"github.com/ajiwo/ratelimit/backends"
 
@@ -45,7 +47,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Example 5: Custom cleanup interval
+	// Example 5: Token Bucket with PostgreSQL Backend
+	fmt.Println("\n=== Token Bucket with PostgreSQL Backend ===")
+	if err := tokenBucketPostgresExample(); err != nil {
+		log.Println(err)
+		os.Exit(1)
+	}
+
+	// Example 6: Custom cleanup interval
 	fmt.Println("\n=== Custom Cleanup Interval ===")
 	if err := customCleanupExample(); err != nil {
 		log.Println(err)
@@ -55,7 +64,8 @@ func main() {
 
 func tokenBucketExample() error {
 	// Create memory backend
-	backend, _ := backends.Create("memory", nil)
+	// backend, _ := backends.Create("memory", nil)
+	backend := memory.New()
 
 	// Create token bucket strategy
 	strategy := strategies.NewTokenBucket(backend)
@@ -138,7 +148,7 @@ func tokenBucketRedisExample() error {
 	}
 
 	// Create Redis backend
-	redisConfig := backends.RedisConfig{
+	redisConfig := redis.RedisConfig{
 		Addr:     redisAddr,
 		Password: "", // Assuming no password for local Redis
 		DB:       0,  // Default DB
@@ -209,6 +219,84 @@ func tokenBucketRedisExample() error {
 	return nil
 }
 
+func tokenBucketPostgresExample() error {
+	// Get PostgreSQL connection string from environment variable
+	pgConnString := os.Getenv("POSTGRES_CONN_STRING")
+	if pgConnString == "" {
+		pgConnString = "postgres://postgres:postgres@localhost:5432/ratelimit?sslmode=disable" // Default PostgreSQL connection
+	}
+
+	// Create PostgreSQL backend
+	pgConfig := postgres.PostgresConfig{
+		ConnString: pgConnString,
+		MaxConns:   10,
+		MinConns:   2,
+	}
+
+	backend, err := backends.Create("postgres", pgConfig)
+	if err != nil {
+		// If PostgreSQL is not available, skip this example
+		fmt.Println("PostgreSQL not available, skipping example")
+		return nil
+	}
+
+	defer func() {
+		if err := backend.Close(); err != nil {
+			fmt.Printf("Error closing PostgreSQL backend: %v\n", err)
+		}
+	}()
+
+	// Create token bucket strategy
+	strategy := strategies.NewTokenBucket(backend)
+
+	// Test rate limiting
+	userID := "user:token_bucket:postgres:101"
+	config := strategies.TokenBucketConfig{
+		RateLimitConfig: strategies.RateLimitConfig{
+			Key:   userID,
+			Limit: 12,
+		},
+		BurstSize:  12,
+		RefillRate: 2.5, // 2.5 tokens per second
+	}
+
+	for i := range 18 {
+		// Reset the bucket for each request to avoid conflicts with previous runs
+		if i == 0 {
+			err := strategy.Reset(context.Background(), config)
+			if err != nil {
+				fmt.Printf("Error in Reset: %v\n", err)
+				// Continue with the example even if there's an error
+				continue
+			}
+		}
+
+		allowed, err := strategy.Allow(context.Background(), config)
+		if err != nil {
+			fmt.Printf("Error in Allow: %v\n", err)
+			// Continue with the example even if there's an error
+			fmt.Printf("Request %d: ERROR\n", i+1)
+			continue
+		}
+
+		result, err := strategy.GetResult(context.Background(), config)
+		if err != nil {
+			fmt.Printf("Error in GetResult: %v\n", err)
+			// Continue with the example even if there's an error
+			fmt.Printf("Request %d: ERROR\n", i+1)
+			continue
+		}
+
+		if allowed {
+			fmt.Printf("Request %d: ALLOWED (remaining: %d)\n", i+1, result.Remaining)
+		} else {
+			fmt.Printf("Request %d: BLOCKED\n", i+1)
+		}
+		time.Sleep(300 * time.Millisecond)
+	}
+	return nil
+}
+
 func statusExample() error {
 	// Create memory backend
 	backend, _ := backends.Create("memory", nil)
@@ -264,7 +352,7 @@ func statusExample() error {
 func customCleanupExample() error {
 	// Create a rate limiter with a custom cleanup interval
 	limiter, err := ratelimit.New(
-		ratelimit.WithMemoryBackend(),
+		ratelimit.WithBackend(memory.New()),
 		ratelimit.WithFixedWindowStrategy(
 			ratelimit.TierConfig{
 				Interval: time.Second * 30, // 30 second window

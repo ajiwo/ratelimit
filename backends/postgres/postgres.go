@@ -20,7 +20,8 @@ type PostgresStorage struct {
 	pool *pgxpool.Pool
 }
 
-func NewPostgresStorage(config PostgresConfig) (*PostgresStorage, error) {
+// New initializes a new PostgresStorage with the given configuration.
+func New(config PostgresConfig) (*PostgresStorage, error) {
 	if config.MaxConns == 0 {
 		config.MaxConns = 10
 	}

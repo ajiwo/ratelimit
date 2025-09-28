@@ -17,7 +17,7 @@ func setupRedisTest(t *testing.T) (*RedisStorage, func()) {
 		redisAddr = "localhost:6379"
 	}
 
-	storage, err := NewRedisStorage(RedisConfig{
+	storage, err := New(RedisConfig{
 		Addr:     redisAddr,
 		Password: "",
 		DB:       0,
@@ -211,7 +211,7 @@ func TestRedisStorage_Close(t *testing.T) {
 		redisAddr = "localhost:6379"
 	}
 
-	storage, err := NewRedisStorage(RedisConfig{
+	storage, err := New(RedisConfig{
 		Addr:     redisAddr,
 		Password: "",
 		DB:       0,

@@ -72,6 +72,16 @@ func TestCreate(t *testing.T) {
 }
 
 func TestCreateBackends(t *testing.T) {
+	type customRedisConfig struct {
+		Addr     string
+		Password string
+		DB       int
+	}
+
+	type customPostgresConfig struct {
+		ConnString string
+	}
+
 	// Clear any existing backends for clean test
 	registeredBackends = make(map[string]BackendFactory)
 
@@ -88,28 +98,26 @@ func TestCreateBackends(t *testing.T) {
 	// Test Redis backend with valid config
 	redisBackend := &mockBackend{name: "redis"}
 	Register("redis", func(config any) (Backend, error) {
-		redisConfig, ok := config.(RedisConfig)
+		redisConfig, ok := config.(customRedisConfig)
 		if !ok || redisConfig.Addr == "" {
 			return nil, ErrInvalidConfig
 		}
 		return redisBackend, nil
 	})
 
-	redisConfig := RedisConfig{
+	redisConfig := customRedisConfig{
 		Addr:     "localhost:6379",
 		Password: "secret",
 		DB:       1,
-		PoolSize: 10,
 	}
 	backend, err = Create("redis", redisConfig)
 	assert.NoError(t, err)
 	assert.NotNil(t, backend)
 
 	// Test Redis backend with invalid config (missing addr)
-	invalidRedisConfig := RedisConfig{
+	invalidRedisConfig := customRedisConfig{
 		Password: "secret",
 		DB:       1,
-		PoolSize: 10,
 	}
 	backend, err = Create("redis", invalidRedisConfig)
 	assert.Error(t, err)
@@ -119,24 +127,22 @@ func TestCreateBackends(t *testing.T) {
 	// Test PostgreSQL backend with valid config
 	postgresBackend := &mockBackend{name: "postgres"}
 	Register("postgres", func(config any) (Backend, error) {
-		pgConfig, ok := config.(PostgresConfig)
+		pgConfig, ok := config.(customPostgresConfig)
 		if !ok || pgConfig.ConnString == "" {
 			return nil, ErrInvalidConfig
 		}
 		return postgresBackend, nil
 	})
 
-	postgresConfig := PostgresConfig{
+	postgresConfig := customPostgresConfig{
 		ConnString: "postgres://user:pass@localhost/db",
-		MaxConns:   10,
-		MinConns:   2,
 	}
 	backend, err = Create("postgres", postgresConfig)
 	assert.NoError(t, err)
 	assert.NotNil(t, backend)
 
 	// Test PostgreSQL backend with invalid config (missing DSN)
-	invalidPostgresConfig := PostgresConfig{}
+	invalidPostgresConfig := customPostgresConfig{}
 	backend, err = Create("postgres", invalidPostgresConfig)
 	assert.Error(t, err)
 	assert.Equal(t, ErrInvalidConfig, err)

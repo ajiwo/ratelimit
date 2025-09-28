@@ -11,53 +11,6 @@ import (
 // Option is a functional option for configuring the rate limiter
 type Option func(*MultiTierConfig) error
 
-// WithMemoryBackend configures the rate limiter to use memory storage
-func WithMemoryBackend() Option {
-	return func(config *MultiTierConfig) error {
-		storage, err := backends.Create("memory", nil)
-		if err != nil {
-			return fmt.Errorf("failed to create memory storage: %w", err)
-		}
-		config.Storage = storage
-		return nil
-	}
-}
-
-// WithRedisBackend configures the rate limiter to use Redis storage
-func WithRedisBackend(redisAddr, password string, db int, poolSize int) Option {
-	return func(config *MultiTierConfig) error {
-		redisConfig := backends.RedisConfig{
-			Addr:     redisAddr,
-			Password: password,
-			DB:       db,
-			PoolSize: poolSize,
-		}
-		storage, err := backends.Create("redis", redisConfig)
-		if err != nil {
-			return fmt.Errorf("failed to create Redis storage: %w", err)
-		}
-		config.Storage = storage
-		return nil
-	}
-}
-
-// WithPostgresBackend configures the rate limiter to use PostgreSQL storage
-func WithPostgresBackend(connString string, maxConns, minConns int32) Option {
-	return func(config *MultiTierConfig) error {
-		pgConfig := backends.PostgresConfig{
-			ConnString: connString,
-			MaxConns:   maxConns,
-			MinConns:   minConns,
-		}
-		storage, err := backends.Create("postgres", pgConfig)
-		if err != nil {
-			return fmt.Errorf("failed to create PostgreSQL storage: %w", err)
-		}
-		config.Storage = storage
-		return nil
-	}
-}
-
 // WithFixedWindowStrategy configures the rate limiter to use fixed window strategy
 func WithFixedWindowStrategy(tiers ...TierConfig) Option {
 	return func(config *MultiTierConfig) error {
@@ -180,6 +133,23 @@ func WithKey(key string) AccessOption {
 			return err
 		}
 		opts.key = key
+		return nil
+	}
+}
+
+// WithBackend configures the rate limiter to use a custom backend
+func WithBackend(backend backends.Backend) Option {
+	return func(config *MultiTierConfig) error {
+		if backend == nil {
+			return fmt.Errorf("backend cannot be nil")
+		}
+		if config.Storage != nil {
+			err := config.Storage.Close()
+			if err != nil {
+				return fmt.Errorf("failed to close existing backend: %w", err)
+			}
+		}
+		config.Storage = backend
 		return nil
 	}
 }
