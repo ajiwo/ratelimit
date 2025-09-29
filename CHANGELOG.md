@@ -4,6 +4,11 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Enhanced rate limiting methods with detailed result information through new `AllowWithResult` API.
+- Detailed statistics for all rate limiting strategies including remaining capacity and reset times.
+- Multi-tier rate limiting with per-tier result tracking.
+
 ## [0.0.3] - 2025-09-28
 
 ### Added

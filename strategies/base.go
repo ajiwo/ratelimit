@@ -46,3 +46,13 @@ func (b *BaseStrategy) CleanupLocks(maxAge time.Duration) {
 		return true
 	})
 }
+
+// calcExpiration calculates an appropriate expiration time for storage operations
+// based on capacity and rate, with a minimum of 1 second
+func calcExpiration(capacity int, rate float64) time.Duration {
+	expirationSeconds := float64(capacity) / rate * 2
+	if expirationSeconds < 1 {
+		expirationSeconds = 1
+	}
+	return time.Duration(expirationSeconds) * time.Second
+}

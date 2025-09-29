@@ -390,3 +390,44 @@ func New(opts ...Option) (*MultiTierLimiter, error) {
 	// Create the limiter with the final configuration
 	return newMultiTierLimiter(config)
 }
+
+// AllowWithResult checks if a request is allowed across all configured tiers and returns detailed results
+func (m *MultiTierLimiter) AllowWithResult(opts ...AccessOption) (bool, map[string]strategies.Result, error) {
+	// Parse access options
+	accessOpts, err := m.parseAccessOptions(opts)
+	if err != nil {
+		return false, nil, fmt.Errorf("failed to parse access options: %w", err)
+	}
+
+	// Check each tier
+	results := make(map[string]strategies.Result)
+	deniedTiers := []string{}
+
+	for _, tier := range m.config.Tiers {
+		tierName := getTierName(tier.Interval)
+
+		// Create strategy-specific config for this tier
+		config, err := m.createTierConfig(accessOpts.key, tierName, tier.Limit, tier.Interval)
+		if err != nil {
+			return false, nil, fmt.Errorf("failed to create config for tier %s: %w", tierName, err)
+		}
+
+		// Check if request is allowed for this tier using AllowWithResult
+		strategy := m.strategies[tierName]
+		tierResult, err := strategy.AllowWithResult(accessOpts.ctx, config)
+		if err != nil {
+			return false, nil, fmt.Errorf("tier %s check failed: %w", tierName, err)
+		}
+
+		results[tierName] = tierResult
+
+		if !tierResult.Allowed {
+			deniedTiers = append(deniedTiers, tierName)
+		}
+	}
+
+	// Request is only allowed if ALL tiers allow it
+	allowed := len(deniedTiers) == 0
+
+	return allowed, results, nil
+}

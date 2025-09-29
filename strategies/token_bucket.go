@@ -92,12 +92,7 @@ func (t *TokenBucketStrategy) Allow(ctx context.Context, config any) (bool, erro
 	bucketData := encodeTokenBucket(bucket)
 
 	// Use a reasonable expiration time (based on burst size and refill rate)
-	// Ensure minimum expiration of 1 second
-	expirationSeconds := float64(tokenConfig.BurstSize) / tokenConfig.RefillRate * 2
-	if expirationSeconds < 1 {
-		expirationSeconds = 1
-	}
-	expiration := time.Duration(expirationSeconds) * time.Second
+	expiration := calcExpiration(tokenConfig.BurstSize, tokenConfig.RefillRate)
 
 	// Save the updated bucket state
 	err = t.storage.Set(ctx, tokenConfig.Key, bucketData, expiration)
@@ -273,4 +268,125 @@ func decodeTokenBucket(s string) (TokenBucket, bool) {
 // Cleanup removes stale locks
 func (t *TokenBucketStrategy) Cleanup(maxAge time.Duration) {
 	t.CleanupLocks(maxAge)
+}
+
+// calculateTBResetTime calculates when the bucket will have at least one full token
+func calculateTBResetTime(now time.Time, bucket TokenBucket) time.Time {
+	if bucket.Tokens >= 1.0 {
+		// Already has tokens, no reset needed
+		return now
+	}
+
+	// Calculate time to refill to at least 1 token
+	tokensNeeded := 1.0 - bucket.Tokens
+	if tokensNeeded <= 0 {
+		return now
+	}
+
+	// time = tokensNeeded / refillRate (convert from float seconds to time.Duration)
+	timeToRefillSeconds := tokensNeeded / bucket.RefillRate
+	return now.Add(time.Duration(timeToRefillSeconds * float64(time.Second)))
+}
+
+// AllowWithResult checks if a request is allowed and returns detailed statistics
+func (t *TokenBucketStrategy) AllowWithResult(ctx context.Context, config any) (Result, error) {
+	// Type assert to TokenBucketConfig
+	tokenConfig, ok := config.(TokenBucketConfig)
+	if !ok {
+		return Result{}, fmt.Errorf("TokenBucket strategy requires TokenBucketConfig")
+	}
+
+	// Get per-key lock to prevent concurrent access to the same bucket
+	lock := t.getLock(tokenConfig.Key)
+	lock.Lock()
+	defer lock.Unlock()
+
+	capacity := float64(tokenConfig.BurstSize)
+	refillRate := tokenConfig.RefillRate
+
+	now := time.Now()
+
+	// Get current bucket state
+	data, err := t.storage.Get(ctx, tokenConfig.Key)
+	if err != nil {
+		return Result{}, fmt.Errorf("failed to get bucket state: %w", err)
+	}
+
+	var bucket TokenBucket
+	if data == "" {
+		// Initialize new bucket
+		bucket = TokenBucket{
+			Tokens:     capacity,
+			LastRefill: now,
+			Capacity:   capacity,
+			RefillRate: refillRate,
+		}
+	} else {
+		// Parse existing bucket state (compact format only)
+		if b, ok := decodeTokenBucket(data); ok {
+			bucket = b
+		} else {
+			return Result{}, fmt.Errorf("failed to parse bucket state: invalid encoding")
+		}
+
+		// Refill tokens based on elapsed time
+		elapsed := now.Sub(bucket.LastRefill)
+		tokensToAdd := float64(elapsed.Nanoseconds()) * bucket.RefillRate / 1e9
+		bucket.Tokens = math.Min(bucket.Tokens+tokensToAdd, bucket.Capacity)
+		bucket.LastRefill = now
+	}
+
+	// Determine if request is allowed based on available tokens
+	allowed := math.Floor(bucket.Tokens) >= 1.0
+
+	// Calculate remaining tokens
+	remaining := max(int(bucket.Tokens), 0)
+
+	if allowed {
+		// Consume one token
+		bucket.Tokens -= 1.0
+
+		// Calculate remaining tokens after consumption
+		remaining = max(int(bucket.Tokens), 0)
+
+		// Save updated bucket state in compact format
+		bucketData := encodeTokenBucket(bucket)
+
+		// Use a reasonable expiration time (based on burst size and refill rate)
+		expiration := calcExpiration(tokenConfig.BurstSize, tokenConfig.RefillRate)
+
+		// Save the updated bucket state
+		err = t.storage.Set(ctx, tokenConfig.Key, bucketData, expiration)
+		if err != nil {
+			return Result{}, fmt.Errorf("failed to save bucket state: %w", err)
+		}
+	} else {
+		// Request denied, save current state without modification
+		bucketData := encodeTokenBucket(bucket)
+
+		// Use a reasonable expiration time (based on burst size and refill rate)
+		expiration := calcExpiration(tokenConfig.BurstSize, tokenConfig.RefillRate)
+
+		// Save the current bucket state
+		err = t.storage.Set(ctx, tokenConfig.Key, bucketData, expiration)
+		if err != nil {
+			return Result{}, fmt.Errorf("failed to save bucket state: %w", err)
+		}
+	}
+
+	// Calculate reset time - when bucket will have at least one full token
+	var resetTime time.Time
+	if allowed {
+		// When allowed, no specific reset needed, use current time
+		resetTime = now
+	} else {
+		// When denied, calculate when bucket will have at least 1 token
+		resetTime = calculateTBResetTime(now, bucket)
+	}
+
+	return Result{
+		Allowed:   allowed,
+		Remaining: remaining,
+		Reset:     resetTime,
+	}, nil
 }
