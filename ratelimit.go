@@ -349,7 +349,14 @@ func (m *MultiTierLimiter) Close() error {
 	// Stop the cleanup ticker if it's running
 	if m.cleanupTicker != nil {
 		m.cleanupTicker.Stop()
-		close(m.cleanupStop)
+		if m.cleanupStop != nil {
+			select {
+			case <-m.cleanupStop:
+				// Channel already closed
+			default:
+				close(m.cleanupStop)
+			}
+		}
 	}
 
 	// Close the storage backend
