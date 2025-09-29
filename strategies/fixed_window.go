@@ -32,78 +32,11 @@ func NewFixedWindow(storage backends.Backend) *FixedWindowStrategy {
 }
 
 // Allow checks if a request is allowed based on fixed window algorithm
+//
+// Deprecated: Use AllowWithResult instead. Allow will be removed in a future release.
 func (f *FixedWindowStrategy) Allow(ctx context.Context, config any) (bool, error) {
-	// Type assert to FixedWindowConfig
-	fixedConfig, ok := config.(FixedWindowConfig)
-	if !ok {
-		return false, fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
-	}
-
-	// Get per-key lock to prevent concurrent access to the same window
-	lock := f.getLock(fixedConfig.Key)
-	lock.Lock()
-	defer lock.Unlock()
-
-	now := time.Now()
-
-	// Get current window state
-	data, err := f.storage.Get(ctx, fixedConfig.Key)
-	if err != nil {
-		return false, fmt.Errorf("failed to get window state: %w", err)
-	}
-
-	var window FixedWindow
-	if data == "" {
-		// Initialize new window
-		window = FixedWindow{
-			Count:    0,
-			Start:    now,
-			Duration: fixedConfig.Window,
-		}
-	} else {
-		// Parse existing window state (compact format only)
-		if w, ok := decodeFixedWindow(data); ok {
-			window = w
-		} else {
-			return false, fmt.Errorf("failed to parse window state: invalid encoding")
-		}
-
-		// Check if current window has expired
-		if now.Sub(window.Start) >= window.Duration {
-			// Start new window
-			window.Count = 0
-			window.Start = now
-			window.Duration = fixedConfig.Window
-		}
-	}
-
-	// Check if limit has been reached
-	if window.Count >= fixedConfig.Limit {
-		// Save window state even when denying request (persist compact state)
-		windowData := encodeFixedWindow(window)
-
-		// Save the updated window state with expiration set to window duration
-		err = f.storage.Set(ctx, fixedConfig.Key, windowData, window.Duration)
-		if err != nil {
-			return false, fmt.Errorf("failed to save window state: %w", err)
-		}
-
-		return false, nil
-	}
-
-	// Increment request count
-	window.Count += 1
-
-	// Save updated window state in compact format
-	windowData := encodeFixedWindow(window)
-
-	// Save the updated window state with expiration set to window duration
-	err = f.storage.Set(ctx, fixedConfig.Key, windowData, window.Duration)
-	if err != nil {
-		return false, fmt.Errorf("failed to save window state: %w", err)
-	}
-
-	return true, nil
+	result, err := f.AllowWithResult(ctx, config)
+	return result.Allowed, err
 }
 
 // GetResult returns detailed statistics for the current window state

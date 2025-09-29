@@ -27,15 +27,15 @@ func TestLeakyBucketAllow(t *testing.T) {
 
 	// Fill up the bucket
 	for i := range 5 {
-		allowed, err := strategy.Allow(ctx, config)
+		result, err := strategy.AllowWithResult(ctx, config)
 		assert.NoError(t, err)
-		assert.True(t, allowed, "Request %d should be allowed", i)
+		assert.True(t, result.Allowed, "Request %d should be allowed", i)
 	}
 
 	// Next request should be denied (bucket full)
-	allowed, err := strategy.Allow(ctx, config)
+	result, err := strategy.AllowWithResult(ctx, config)
 	assert.NoError(t, err)
-	assert.False(t, allowed, "Request should be denied when bucket is full")
+	assert.False(t, result.Allowed, "Request should be denied when bucket is full")
 }
 
 func TestLeakyBucketLeak(t *testing.T) {
@@ -56,24 +56,24 @@ func TestLeakyBucketLeak(t *testing.T) {
 
 		// Fill the bucket
 		for range 3 {
-			allowed, err := strategy.Allow(ctx, config)
+			result, err := strategy.AllowWithResult(ctx, config)
 			assert.NoError(t, err)
-			assert.True(t, allowed)
+			assert.True(t, result.Allowed)
 		}
 
 		// Next request should be denied (bucket full)
-		allowed, err := strategy.Allow(ctx, config)
+		result, err := strategy.AllowWithResult(ctx, config)
 		assert.NoError(t, err)
-		assert.False(t, allowed, "Request should be denied when bucket is full")
+		assert.False(t, result.Allowed, "Request should be denied when bucket is full")
 
 		// Wait for 2 seconds to allow leaking
 		time.Sleep(2 * time.Second)
 		synctest.Wait()
 
 		// Now requests should be allowed again as requests have leaked
-		allowed, err = strategy.Allow(ctx, config)
+		result, err = strategy.AllowWithResult(ctx, config)
 		assert.NoError(t, err)
-		assert.True(t, allowed, "Request should be allowed after leaking")
+		assert.True(t, result.Allowed, "Request should be allowed after leaking")
 	})
 }
 
@@ -178,8 +178,8 @@ func TestLeakyBucketInvalidConfig(t *testing.T) {
 	strategy := NewLeakyBucket(storage)
 
 	// Try with wrong config type
-	allowed, err := strategy.Allow(ctx, TokenBucketConfig{})
+	result, err := strategy.AllowWithResult(ctx, TokenBucketConfig{})
 	assert.Error(t, err)
-	assert.False(t, allowed)
+	assert.False(t, result.Allowed)
 	assert.Contains(t, err.Error(), "LeakyBucket strategy requires LeakyBucketConfig")
 }

@@ -34,9 +34,9 @@ func TestTokenBucket_GetResult(t *testing.T) {
 
 		// Make some requests
 		for i := range 5 {
-			allowed, err := strategy.Allow(ctx, config)
+			result, err := strategy.AllowWithResult(ctx, config)
 			require.NoError(t, err)
-			assert.True(t, allowed, "Request %d should be allowed", i)
+			assert.True(t, result.Allowed, "Request %d should be allowed", i)
 		}
 
 		// Test GetResult after requests
@@ -47,15 +47,15 @@ func TestTokenBucket_GetResult(t *testing.T) {
 
 		// Use all tokens
 		for i := range 5 {
-			allowed, err := strategy.Allow(ctx, config)
+			result, err := strategy.AllowWithResult(ctx, config)
 			require.NoError(t, err)
-			assert.True(t, allowed, "Request %d should be allowed", i+5)
+			assert.True(t, result.Allowed, "Request %d should be allowed", i+5)
 		}
 
 		// Next request should be denied
-		allowed, err := strategy.Allow(ctx, config)
+		result, err = strategy.AllowWithResult(ctx, config)
 		require.NoError(t, err)
-		assert.False(t, allowed, "Request should be denied when no tokens")
+		assert.False(t, result.Allowed, "Request should be denied when no tokens")
 
 		// Test invalid config type
 		_, err = strategy.GetResult(ctx, FixedWindowConfig{})
@@ -81,24 +81,24 @@ func TestTokenBucket_Reset(t *testing.T) {
 
 		// Use all tokens
 		for i := range 3 {
-			allowed, err := strategy.Allow(ctx, config)
+			result, err := strategy.AllowWithResult(ctx, config)
 			require.NoError(t, err)
-			assert.True(t, allowed, "Request %d should be allowed", i)
+			assert.True(t, result.Allowed, "Request %d should be allowed", i)
 		}
 
 		// Next request should be denied
-		allowed, err := strategy.Allow(ctx, config)
+		result, err := strategy.AllowWithResult(ctx, config)
 		require.NoError(t, err)
-		assert.False(t, allowed, "Request should be denied (no tokens)")
+		assert.False(t, result.Allowed, "Request should be denied (no tokens)")
 
 		// Reset the bucket
 		err = strategy.Reset(ctx, config)
 		require.NoError(t, err)
 
 		// After reset, requests should be allowed again
-		allowed, err = strategy.Allow(ctx, config)
+		result, err = strategy.AllowWithResult(ctx, config)
 		require.NoError(t, err)
-		assert.True(t, allowed, "Request after reset should be allowed")
+		assert.True(t, result.Allowed, "Request after reset should be allowed")
 
 		// Test invalid config type
 		err = strategy.Reset(ctx, FixedWindowConfig{})
@@ -312,12 +312,12 @@ func TestTokenBucket_ConcurrentAccess(t *testing.T) {
 		// Launch 10 goroutines that will all try to make a request
 		for range 10 {
 			waitGroup.Go(func() {
-				allowed, err := strategy.Allow(ctx, config)
+				result, err := strategy.AllowWithResult(ctx, config)
 				if err != nil {
 					t.Errorf("Unexpected error: %v", err)
 					return
 				}
-				results <- allowed
+				results <- result.Allowed
 			})
 		}
 
@@ -337,8 +337,8 @@ func TestTokenBucket_ConcurrentAccess(t *testing.T) {
 		assert.Equal(t, 5, allowedCount, "Exactly 5 requests should be allowed")
 
 		// Verify that we can't make any more requests
-		allowed, err := strategy.Allow(ctx, config)
+		result, err := strategy.AllowWithResult(ctx, config)
 		require.NoError(t, err)
-		assert.False(t, allowed, "11th request should be denied")
+		assert.False(t, result.Allowed, "11th request should be denied")
 	})
 }

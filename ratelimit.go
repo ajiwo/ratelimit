@@ -170,16 +170,16 @@ func (m *MultiTierLimiter) Allow(opts ...AccessOption) (bool, error) {
 
 		// Check if request is allowed for this tier
 		strategy := m.strategies[tierName]
-		allowed, err := strategy.Allow(accessOpts.ctx, config)
+		result, err := strategy.AllowWithResult(accessOpts.ctx, config)
 		if err != nil {
 			return false, fmt.Errorf("tier %s check failed: %w", tierName, err)
 		}
 
 		results[tierName] = Result{
-			Allowed: allowed,
+			Allowed: result.Allowed,
 		}
 
-		if !allowed {
+		if !result.Allowed {
 			deniedTiers = append(deniedTiers, tierName)
 		}
 	}
