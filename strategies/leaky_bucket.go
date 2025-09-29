@@ -352,9 +352,11 @@ func (l *LeakyBucketStrategy) AllowWithResult(ctx context.Context, config any) (
 		bucket.LastLeak = now
 	}
 
-	// Calculate result before adding request
+	// Calculate if request is allowed using the same logic as Allow method
+	allowed := bucket.Requests+1 <= float64(leakyConfig.Capacity)
+
+	// Calculate remaining capacity (before adding request if allowed)
 	remaining := max(leakyConfig.Capacity-int(bucket.Requests), 0)
-	allowed := remaining > 0
 
 	// Only add request to bucket if allowed
 	if allowed {
