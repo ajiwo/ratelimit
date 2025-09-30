@@ -715,6 +715,50 @@ func TestAccessOptions_GetStats(t *testing.T) {
 	require.NoError(t, err)
 }
 
+func TestAccessOptions_AllowWithResult(t *testing.T) {
+	mem := memory.New()
+	tiers := []TierConfig{
+		{Interval: time.Minute, Limit: 5},
+	}
+
+	limiter, err := New(
+		WithBaseKey("api"), // Prefix
+		WithFixedWindowStrategy(tiers...),
+		WithBackend(mem),
+	)
+	require.NoError(t, err)
+	require.NotNil(t, limiter)
+
+	ctx := t.Context()
+
+	var stats map[string]TierResult
+	// Make requests for user1
+	for i := range 3 {
+		allowed, s, err := limiter.AllowWithResult(WithContext(ctx), WithKey("user1"))
+		require.NoError(t, err)
+		assert.True(t, allowed, "User1 request %d should be allowed", i)
+		stats = s
+	}
+
+	minuteStats := stats["minute"]
+	assert.Equal(t, 5, minuteStats.Total)
+	assert.Equal(t, 2, minuteStats.Remaining)
+	assert.Equal(t, 3, minuteStats.Used)
+
+	// Make requests for user2
+	_, stats, err = limiter.AllowWithResult(WithContext(ctx), WithKey("user2"))
+	require.NoError(t, err)
+	assert.Len(t, stats, 1)
+
+	minuteStats = stats["minute"]
+	assert.Equal(t, 5, minuteStats.Total)
+	assert.Equal(t, 4, minuteStats.Remaining)
+	assert.Equal(t, 1, minuteStats.Used)
+
+	err = limiter.Close()
+	require.NoError(t, err)
+}
+
 func TestAccessOptions_Reset(t *testing.T) {
 	mem := memory.New()
 	tiers := []TierConfig{

@@ -355,7 +355,7 @@ func New(opts ...Option) (*MultiTierLimiter, error) {
 }
 
 // AllowWithResult checks if a request is allowed across all configured tiers and returns detailed results
-func (m *MultiTierLimiter) AllowWithResult(opts ...AccessOption) (bool, map[string]strategies.Result, error) {
+func (m *MultiTierLimiter) AllowWithResult(opts ...AccessOption) (bool, map[string]TierResult, error) {
 	// Parse access options
 	accessOpts, err := m.parseAccessOptions(opts)
 	if err != nil {
@@ -363,7 +363,7 @@ func (m *MultiTierLimiter) AllowWithResult(opts ...AccessOption) (bool, map[stri
 	}
 
 	// Check each tier
-	results := make(map[string]strategies.Result)
+	results := make(map[string]TierResult)
 	deniedTiers := []string{}
 
 	for _, tier := range m.config.Tiers {
@@ -382,7 +382,13 @@ func (m *MultiTierLimiter) AllowWithResult(opts ...AccessOption) (bool, map[stri
 			return false, nil, fmt.Errorf("tier %s check failed: %w", tierName, err)
 		}
 
-		results[tierName] = tierResult
+		results[tierName] = TierResult{
+			Allowed:   tierResult.Allowed,
+			Remaining: tierResult.Remaining,
+			Reset:     tierResult.Reset,
+			Total:     tier.Limit,
+			Used:      tier.Limit - tierResult.Remaining,
+		}
 
 		if !tierResult.Allowed {
 			deniedTiers = append(deniedTiers, tierName)
