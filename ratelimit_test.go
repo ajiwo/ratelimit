@@ -72,13 +72,13 @@ func TestMultiTierLimiter_Allow_FixedWindow(t *testing.T) {
 
 		// First 3 requests should be allowed (within both limits)
 		for i := range 3 {
-			allowed, err := limiter.Allow(WithContext(ctx))
+			allowed, _, err := limiter.AllowWithResult(WithContext(ctx))
 			require.NoError(t, err)
 			assert.True(t, allowed, "Request %d should be allowed", i)
 		}
 
 		// 4th request should be denied (exceeds second tier limit)
-		allowed, err := limiter.Allow(WithContext(ctx))
+		allowed, _, err := limiter.AllowWithResult(WithContext(ctx))
 		require.NoError(t, err)
 		assert.False(t, allowed, "4th request should be denied (exceeds per-second limit)")
 
@@ -87,7 +87,7 @@ func TestMultiTierLimiter_Allow_FixedWindow(t *testing.T) {
 		synctest.Wait()
 
 		// Now we should be able to make more requests (but still limited by minute tier)
-		allowed, err = limiter.Allow(WithContext(ctx))
+		allowed, _, err = limiter.AllowWithResult(WithContext(ctx))
 		require.NoError(t, err)
 		assert.True(t, allowed, "Request after second reset should be allowed")
 
@@ -115,20 +115,20 @@ func TestMultiTierLimiter_Allow_TokenBucket(t *testing.T) {
 
 	// First 5 requests should be allowed (within minute limit)
 	for i := range 5 {
-		allowed, err := limiter.Allow(WithContext(ctx))
+		allowed, _, err := limiter.AllowWithResult(WithContext(ctx))
 		require.NoError(t, err)
 		assert.True(t, allowed, "Request %d should be allowed", i)
 	}
 
 	// Should still be able to make more requests due to burst capacity
 	for i := range 5 {
-		allowed, err := limiter.Allow(WithContext(ctx))
+		allowed, _, err := limiter.AllowWithResult(WithContext(ctx))
 		require.NoError(t, err)
 		assert.True(t, allowed, "Burst request %d should be allowed", i)
 	}
 
 	// Now we should be denied (exhausted burst and minute limit)
-	allowed, err := limiter.Allow(WithContext(ctx))
+	allowed, _, err := limiter.AllowWithResult(WithContext(ctx))
 	require.NoError(t, err)
 	assert.False(t, allowed, "Request should be denied after burst exhausted")
 
@@ -189,7 +189,7 @@ func TestMultiTierLimiter_GetStats(t *testing.T) {
 
 	// Make some requests
 	for i := range 3 {
-		allowed, err := limiter.Allow(WithContext(ctx))
+		allowed, _, err := limiter.AllowWithResult(WithContext(ctx))
 		require.NoError(t, err)
 		assert.True(t, allowed, "Request %d should be allowed", i)
 	}
@@ -280,7 +280,7 @@ func TestMultiTierLimiter_ConcurrentAccess(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			allowed, err := limiter.Allow(WithContext(ctx))
+			allowed, _, err := limiter.AllowWithResult(WithContext(ctx))
 			if err != nil {
 				errors <- err
 				return
@@ -353,7 +353,7 @@ func TestMultiTierLimiter_MultipleKeys(t *testing.T) {
 
 	// User2 should still be able to make requests
 	for range 2 {
-		allowed, err := limiter2.Allow(WithContext(ctx))
+		allowed, _, err := limiter2.AllowWithResult(WithContext(ctx))
 		require.NoError(t, err)
 		assert.True(t, allowed, "User2 request should be allowed")
 	}
@@ -383,13 +383,13 @@ func TestMultiTierLimiter_TimeBehavior(t *testing.T) {
 
 		// Use up the limit
 		for i := range 3 {
-			allowed, err := limiter.Allow(WithContext(ctx))
+			allowed, _, err := limiter.AllowWithResult(WithContext(ctx))
 			require.NoError(t, err)
 			assert.True(t, allowed, "Request %d should be allowed", i)
 		}
 
 		// Next request should be denied
-		allowed, err := limiter.Allow(WithContext(ctx))
+		allowed, _, err := limiter.AllowWithResult(WithContext(ctx))
 		require.NoError(t, err)
 		assert.False(t, allowed, "Request should be denied")
 
@@ -407,7 +407,7 @@ func TestMultiTierLimiter_TimeBehavior(t *testing.T) {
 		synctest.Wait()
 
 		// Now should be allowed
-		allowed, err = limiter.Allow(WithContext(ctx))
+		allowed, _, err = limiter.AllowWithResult(WithContext(ctx))
 		require.NoError(t, err)
 		assert.True(t, allowed, "Request should be allowed after window reset")
 
@@ -527,7 +527,7 @@ func TestMultiTierLimiter_BackendOperations(t *testing.T) {
 
 	// Test that backend is working
 	ctx := t.Context()
-	allowed, err := limiter.Allow(WithContext(ctx))
+	allowed, _, err := limiter.AllowWithResult(WithContext(ctx))
 	require.NoError(t, err)
 	assert.True(t, allowed)
 
@@ -637,7 +637,7 @@ func TestAccessOptions_SingleLimiterMultipleKeys(t *testing.T) {
 
 	// Use up limit for user1
 	for i := range 2 {
-		allowed, err := limiter.Allow(WithContext(ctx), WithKey("123"))
+		allowed, _, err := limiter.AllowWithResult(WithContext(ctx), WithKey("123"))
 		require.NoError(t, err)
 		assert.True(t, allowed, "User1 request %d should be allowed", i)
 	}
@@ -649,7 +649,7 @@ func TestAccessOptions_SingleLimiterMultipleKeys(t *testing.T) {
 
 	// User2 should still be able to make requests (different key)
 	for i := range 2 {
-		allowed, err := limiter.Allow(WithContext(ctx), WithKey("456"))
+		allowed, _, err := limiter.AllowWithResult(WithContext(ctx), WithKey("456"))
 		require.NoError(t, err)
 		assert.True(t, allowed, "User2 request %d should be allowed", i)
 	}

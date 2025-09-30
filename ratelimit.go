@@ -56,13 +56,6 @@ type MultiTierConfig struct {
 	CleanupInterval time.Duration // Interval for cleaning up stale locks (0 to disable)
 }
 
-// Result represents the result of a rate limiting strategy check
-type Result struct {
-	Allowed     bool              // Whether the request is allowed
-	Results     map[string]Result // Individual tier results
-	DeniedTiers []string          // Names of tiers that denied the request
-}
-
 // TierResult represents the result for a single tier
 type TierResult struct {
 	Allowed   bool      // Whether this tier allowed the request
@@ -149,45 +142,8 @@ func (m *MultiTierLimiter) parseAccessOptions(opts []AccessOption) (*accessOptio
 
 // Allow checks if a request is allowed across all configured tiers
 func (m *MultiTierLimiter) Allow(opts ...AccessOption) (bool, error) {
-	// Parse access options
-	accessOpts, err := m.parseAccessOptions(opts)
-	if err != nil {
-		return false, fmt.Errorf("failed to parse access options: %w", err)
-	}
-
-	// Check each tier
-	results := make(map[string]Result)
-	deniedTiers := []string{}
-
-	for _, tier := range m.config.Tiers {
-		tierName := getTierName(tier.Interval)
-
-		// Create strategy-specific config for this tier
-		config, err := m.createTierConfig(accessOpts.key, tierName, tier.Limit, tier.Interval)
-		if err != nil {
-			return false, fmt.Errorf("failed to create config for tier %s: %w", tierName, err)
-		}
-
-		// Check if request is allowed for this tier
-		strategy := m.strategies[tierName]
-		result, err := strategy.AllowWithResult(accessOpts.ctx, config)
-		if err != nil {
-			return false, fmt.Errorf("tier %s check failed: %w", tierName, err)
-		}
-
-		results[tierName] = Result{
-			Allowed: result.Allowed,
-		}
-
-		if !result.Allowed {
-			deniedTiers = append(deniedTiers, tierName)
-		}
-	}
-
-	// Request is only allowed if ALL tiers allow it
-	allowed := len(deniedTiers) == 0
-
-	return allowed, nil
+	allowed, _, err := m.AllowWithResult(opts...)
+	return allowed, err
 }
 
 // createTierConfig creates strategy-specific configuration for a tier
