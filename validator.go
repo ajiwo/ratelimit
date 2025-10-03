@@ -102,20 +102,63 @@ func validateTiers(tiers []TierConfig) error {
 
 // validateStrategyConfig validates strategy-specific configuration
 func validateStrategyConfig(config MultiTierConfig) error {
-	switch config.Strategy {
-	case StrategyTokenBucket:
-		if config.BurstSize <= 0 {
-			return fmt.Errorf("burst size must be positive for token bucket")
+	// Validate primary strategy
+	primaryCfg := StrategyConfig{
+		Strategy:   config.Strategy,
+		BurstSize:  config.BurstSize,
+		RefillRate: config.RefillRate,
+		Capacity:   config.Capacity,
+		LeakRate:   config.LeakRate,
+		Prefix:     "",
+	}
+	if err := validateSingleStrategy(primaryCfg); err != nil {
+		return err
+	}
+
+	// Validate secondary strategy if configured
+	if config.SecondaryStrategy != nil {
+		if *config.SecondaryStrategy == StrategyFixedWindow {
+			return fmt.Errorf("fixed window cannot be used as secondary strategy")
 		}
-		if config.RefillRate <= 0 {
-			return fmt.Errorf("refill rate must be positive for token bucket")
+		secondaryCfg := StrategyConfig{
+			Strategy:   *config.SecondaryStrategy,
+			BurstSize:  config.SecondaryBurstSize,
+			RefillRate: config.SecondaryRefillRate,
+			Capacity:   config.SecondaryCapacity,
+			LeakRate:   config.SecondaryLeakRate,
+			Prefix:     "secondary ",
+		}
+		return validateSingleStrategy(secondaryCfg)
+	}
+
+	return nil
+}
+
+// validateSingleStrategy validates a single strategy configuration
+type StrategyConfig struct {
+	Strategy   StrategyType
+	BurstSize  int
+	RefillRate float64
+	Capacity   int
+	LeakRate   float64
+	Prefix     string
+}
+
+func validateSingleStrategy(cfg StrategyConfig) error {
+	switch cfg.Strategy {
+	case StrategyTokenBucket:
+		if cfg.BurstSize <= 0 {
+			return fmt.Errorf("%sburst size must be positive for token bucket", cfg.Prefix)
+		}
+		if cfg.RefillRate <= 0 {
+			return fmt.Errorf("%srefill rate must be positive for token bucket", cfg.Prefix)
 		}
 	case StrategyLeakyBucket:
-		if config.Capacity <= 0 {
-			return fmt.Errorf("capacity must be positive for leaky bucket")
+		if cfg.Capacity <= 0 {
+			return fmt.Errorf("%scapacity must be positive for leaky bucket", cfg.Prefix)
 		}
-		if config.LeakRate <= 0 {
-			return fmt.Errorf("leak rate must be positive for leaky bucket")
+		if cfg.LeakRate <= 0 {
+			return fmt.Errorf("%sleak rate must be positive for leaky bucket", cfg.Prefix)
 		}
 	}
 	return nil

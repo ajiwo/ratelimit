@@ -5,9 +5,23 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
-- Enhanced rate limiting methods with detailed result information through new `AllowWithResult` API.
 - Detailed statistics for all rate limiting strategies including remaining capacity and reset times.
 - Multi-tier rate limiting with per-tier result tracking.
+- Secondary rate limiting strategy support for more flexible configurations
+- `AllowWithResult` method to return detailed rate limit statistics with Total and Used fields
+- TierResult with additional fields (Total, Used) for comprehensive rate limit information
+
+### Changed
+- Refactor: Remove tiers from bucket strategy options and update logic
+- Refactor: Simplify MultiTierLimiter.Allow to delegate to AllowWithResult
+- Refactor: Modularize backend configuration and constructors, standardizing to New() function
+
+### Fixed
+- Prevent panic when closing MultiTierLimiter with nil or closed channel
+- Update LeakyBucket strategy's AllowWithResult method logic
+
+### Deprecated
+- Allow methods in favor of AllowWithResult for better performance and detailed results
 
 ## [0.0.3] - 2025-09-28
 

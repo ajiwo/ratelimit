@@ -55,25 +55,81 @@ allowed, err := limiter.Allow(ratelimit.WithContext(ctx))
 
 The multi-tier limiter enforces ALL tiers simultaneously - a request is only allowed if it passes ALL configured rate limit tiers.
 
-**Supported strategies:**
+### Dual Strategy Rate Limiting
+
+The library supports combining a primary tier-based strategy (like Fixed Window) with an optional secondary bucket strategy (Token Bucket or Leaky Bucket) for request smoothing:
+
+```go
+import (
+    "github.com/ajiwo/ratelimit"
+    "github.com/ajiwo/ratelimit/backends/memory"
+)
+
+// Create a backend instance
+mem := memory.New()
+
+// Create a dual-strategy rate limiter
+limiter, err := ratelimit.New(
+    ratelimit.WithBackend(mem),
+    ratelimit.WithFixedWindowStrategy(                    // Primary: strict rate limiting
+        ratelimit.TierConfig{Interval: time.Minute, Limit: 10},   // 10 requests per minute
+        ratelimit.TierConfig{Interval: time.Hour, Limit: 100},    // 100 requests per hour
+    ),
+    ratelimit.WithTokenBucketStrategy(5, 0.1),             // Secondary: burst smoother (5 burst, 0.1 req/sec refill)
+    ratelimit.WithBaseKey("user"),
+)
+if err != nil {
+    panic(err)
+}
+defer limiter.Close()
+
+// Check if request is allowed
+allowed, results, err := limiter.AllowWithResult(ratelimit.WithContext(ctx))
+if err != nil {
+    // handle error
+}
+
+// Results include both tier-based and smoother strategy results
+for strategy, result := range results {
+    fmt.Printf("Strategy %s: allowed=%v, remaining=%d\n", strategy, result.Allowed, result.Remaining)
+}
+```
+
+**Dual Strategy Logic:**
+1. **Primary Strategy** (Fixed Window, etc.) provides hard rate limits
+2. **Secondary Strategy** (Token/Leaky Bucket) acts as a smoother/shaper
+3. **Request Flow:** Check primary first → If allowed, check secondary smoother
+4. **Final Decision:** Both strategies must allow the request
+
+**Supported primary strategies:**
 - `ratelimit.StrategyFixedWindow`
+
+**Supported secondary strategies (smoothers):**
 - `ratelimit.StrategyTokenBucket`
 - `ratelimit.StrategyLeakyBucket`
 
 **Available functional options:**
 - `WithBackend(backend)` - Use a custom backend instance
-- `WithFixedWindowStrategy(tiers...)` - Fixed window algorithm
-- `WithTokenBucketStrategy(burstSize, refillRate)` - Token bucket algorithm
-- `WithLeakyBucketStrategy(capacity, leakRate)` - Leaky bucket algorithm
+- `WithFixedWindowStrategy(tiers...)` - Fixed window algorithm (can be primary or standalone)
+- `WithTokenBucketStrategy(burstSize, refillRate)` - Token bucket algorithm (can be primary, secondary smoother, or standalone)
+- `WithLeakyBucketStrategy(capacity, leakRate)` - Leaky bucket algorithm (can be primary, secondary smoother, or standalone)
+- `WithPrimaryStrategy(strategy, tiers...)` - Explicitly set primary strategy
 - `WithBaseKey(key)` - Set the base key for rate limiting
 - `WithTiers(tiers...)` - Override default tiers for fixed window strategy
 - `WithCleanupInterval(interval)` - Set cleanup interval for internal stale data
+
+**Strategy Behavior:**
+- **Single Strategy:** Use any strategy alone (Fixed Window, Token Bucket, or Leaky Bucket)
+- **Dual Strategy:** Combine Fixed Window (primary) + Token/Leaky Bucket (secondary smoother)
+- **Strategy Priority:** First strategy option becomes primary, subsequent bucket options become secondary
 
 **Limits and Constraints:**
 - Fixed Window: Maximum 12 tiers per configuration, minimum interval: 5 seconds
 - Each tier must have a positive limit
 - Arbitrary time intervals are supported (30 seconds, 5 minutes, 2 hours, etc.)
 - Bucket strategies (Token Bucket, Leaky Bucket) don't use tiers
+- Fixed Window cannot be used as secondary strategy
+- Only one secondary strategy allowed per limiter
 
 ### Storage Backends
 
