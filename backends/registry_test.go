@@ -175,3 +175,7 @@ func (m *mockBackend) Delete(ctx context.Context, key string) error {
 func (m *mockBackend) Close() error {
 	return nil
 }
+
+func (m *mockBackend) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, expiration time.Duration) (bool, error) {
+	return false, nil
+}

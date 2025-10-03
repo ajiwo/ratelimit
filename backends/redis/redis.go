@@ -2,6 +2,7 @@ package redis
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -56,4 +57,61 @@ func (r *RedisStorage) Delete(ctx context.Context, key string) error {
 
 func (r *RedisStorage) Close() error {
 	return r.client.Close()
+}
+
+// CheckAndSet atomically sets key to newValue only if current value matches oldValue
+// Returns true if the set was successful, false if value didn't match or key expired
+// oldValue=nil means "only set if key doesn't exist"
+func (r *RedisStorage) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, expiration time.Duration) (bool, error) {
+	// Use Lua script for atomicity
+	luaScript := `
+	local current = redis.call('GET', KEYS[1])
+
+	-- If oldValue is nil, only set if key doesn't exist
+	if ARGV[1] == '' then
+		if current == false then
+			if ARGV[3] == '0' then
+				redis.call('SET', KEYS[1], ARGV[2])
+			else
+				redis.call('SET', KEYS[1], ARGV[2], 'PX', ARGV[3])
+			end
+			return 1
+		end
+		return 0
+	end
+
+	-- Check if current value matches oldValue
+	if current == ARGV[1] then
+		if ARGV[3] == '0' then
+			redis.call('SET', KEYS[1], ARGV[2])
+		else
+			redis.call('SET', KEYS[1], ARGV[2], 'PX', ARGV[3])
+		end
+		return 1
+	end
+
+	return 0
+	`
+
+	var oldStr string
+	if oldValue == nil {
+		oldStr = ""
+	} else {
+		oldStr = fmt.Sprintf("%v", oldValue)
+	}
+
+	newStr := fmt.Sprintf("%v", newValue)
+	var expMs string
+	if expiration == 0 {
+		expMs = "0"
+	} else {
+		expMs = fmt.Sprintf("%d", expiration.Milliseconds())
+	}
+
+	result, err := r.client.Eval(ctx, luaScript, []string{key}, oldStr, newStr, expMs).Result()
+	if err != nil {
+		return false, err
+	}
+
+	return result.(int64) == 1, nil
 }

@@ -84,3 +84,55 @@ func (m *MemoryStorage) Close() error {
 	m.values = make(map[string]memoryValue)
 	return nil
 }
+
+// CheckAndSet atomically sets key to newValue only if current value matches oldValue
+// Returns true if the set was successful, false if value didn't match or key expired
+// oldValue=nil means "only set if key doesn't exist"
+func (m *MemoryStorage) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, expiration time.Duration) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	// Check if key exists and is not expired
+	val, exists := m.values[key]
+	if exists && time.Now().After(val.expiration) {
+		// Key has expired, treat as non-existent
+		exists = false
+	}
+
+	if oldValue == nil {
+		// Only set if key doesn't exist
+		if exists {
+			return false, nil
+		}
+
+		// Set new value
+		expirationTime := time.Now().Add(expiration)
+		m.values[key] = memoryValue{
+			value:      newValue,
+			expiration: expirationTime,
+		}
+		return true, nil
+	}
+
+	// Check if current value matches oldValue
+	if !exists {
+		return false, nil
+	}
+
+	// Convert both values to strings for comparison
+	currentStr := fmt.Sprintf("%v", val.value)
+	oldStr := fmt.Sprintf("%v", oldValue)
+
+	if currentStr != oldStr {
+		return false, nil
+	}
+
+	// Value matches, update it
+	expirationTime := time.Now().Add(expiration)
+	m.values[key] = memoryValue{
+		value:      newValue,
+		expiration: expirationTime,
+	}
+
+	return true, nil
+}

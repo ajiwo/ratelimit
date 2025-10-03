@@ -123,3 +123,66 @@ func (p *PostgresStorage) Close() error {
 	}
 	return nil
 }
+
+// CheckAndSet atomically sets key to newValue only if current value matches oldValue
+// Returns true if the set was successful, false if value didn't match or key expired
+// oldValue=nil means "only set if key doesn't exist"
+func (p *PostgresStorage) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, expiration time.Duration) (bool, error) {
+	var expiresAt *time.Time
+	if expiration > 0 {
+		t := time.Now().Add(expiration)
+		expiresAt = &t
+	}
+
+	newStr := fmt.Sprintf("%v", newValue)
+
+	if oldValue == nil {
+		// First, delete any expired entries for this key
+		_, err := p.pool.Exec(ctx, `
+			DELETE FROM ratelimit_kv
+			WHERE key = $1 AND expires_at IS NOT NULL AND expires_at <= NOW()
+		`, key)
+		if err != nil {
+			return false, err
+		}
+
+		// Only set if key doesn't exist
+		var count int
+		err = p.pool.QueryRow(ctx, `
+			SELECT COUNT(*)
+			FROM ratelimit_kv
+			WHERE key = $1 AND (expires_at IS NULL OR expires_at > NOW())
+		`, key).Scan(&count)
+		if err != nil {
+			return false, err
+		}
+
+		if count > 0 {
+			return false, nil // Key exists
+		}
+
+		// Insert new key
+		_, err = p.pool.Exec(ctx, `
+			INSERT INTO ratelimit_kv (key, value, expires_at)
+			VALUES ($1, $2, $3)
+		`, key, newStr, expiresAt)
+		return err == nil, err
+	}
+
+	oldStr := fmt.Sprintf("%v", oldValue)
+
+	// Update only if current value matches oldValue
+	result, err := p.pool.Exec(ctx, `
+		UPDATE ratelimit_kv
+		SET value = $1, expires_at = $2
+		WHERE key = $3
+			AND value = $4
+			AND (expires_at IS NULL OR expires_at > NOW())
+	`, newStr, expiresAt, key, oldStr)
+
+	if err != nil {
+		return false, err
+	}
+
+	return result.RowsAffected() == 1, nil
+}

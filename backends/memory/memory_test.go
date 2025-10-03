@@ -219,3 +219,83 @@ func TestMemoryStorage_Close(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "", val)
 }
+
+func TestMemoryStorage_CheckAndSet(t *testing.T) {
+	storage := New()
+	ctx := context.Background()
+
+	t.Run("CheckAndSet with nil oldValue - key doesn't exist", func(t *testing.T) {
+		success, err := storage.CheckAndSet(ctx, "newkey", nil, "newvalue", time.Hour)
+		require.NoError(t, err)
+		require.True(t, success)
+
+		val, err := storage.Get(ctx, "newkey")
+		require.NoError(t, err)
+		require.Equal(t, "newvalue", val)
+	})
+
+	t.Run("CheckAndSet with nil oldValue - key exists", func(t *testing.T) {
+		err := storage.Set(ctx, "existingkey", "oldvalue", time.Hour)
+		require.NoError(t, err)
+
+		success, err := storage.CheckAndSet(ctx, "existingkey", nil, "newvalue", time.Hour)
+		require.NoError(t, err)
+		require.False(t, success)
+
+		val, err := storage.Get(ctx, "existingkey")
+		require.NoError(t, err)
+		require.Equal(t, "oldvalue", val)
+	})
+
+	t.Run("CheckAndSet with matching oldValue", func(t *testing.T) {
+		err := storage.Set(ctx, "matchkey", "expected", time.Hour)
+		require.NoError(t, err)
+
+		success, err := storage.CheckAndSet(ctx, "matchkey", "expected", "newvalue", time.Hour)
+		require.NoError(t, err)
+		require.True(t, success)
+
+		val, err := storage.Get(ctx, "matchkey")
+		require.NoError(t, err)
+		require.Equal(t, "newvalue", val)
+	})
+
+	t.Run("CheckAndSet with non-matching oldValue", func(t *testing.T) {
+		err := storage.Set(ctx, "nomatchkey", "actual", time.Hour)
+		require.NoError(t, err)
+
+		success, err := storage.CheckAndSet(ctx, "nomatchkey", "wrong", "newvalue", time.Hour)
+		require.NoError(t, err)
+		require.False(t, success)
+
+		val, err := storage.Get(ctx, "nomatchkey")
+		require.NoError(t, err)
+		require.Equal(t, "actual", val)
+	})
+
+	t.Run("CheckAndSet with expired key", func(t *testing.T) {
+		err := storage.Set(ctx, "expiredkey", "oldvalue", time.Millisecond*10)
+		require.NoError(t, err)
+
+		time.Sleep(time.Millisecond * 20)
+
+		// Treat expired key as non-existent for nil oldValue
+		success, err := storage.CheckAndSet(ctx, "expiredkey", nil, "newvalue", time.Hour)
+		require.NoError(t, err)
+		require.True(t, success)
+
+		val, err := storage.Get(ctx, "expiredkey")
+		require.NoError(t, err)
+		require.Equal(t, "newvalue", val)
+	})
+
+	t.Run("CheckAndSet with non-existent key and non-nil oldValue", func(t *testing.T) {
+		success, err := storage.CheckAndSet(ctx, "nonexistent", "oldvalue", "newvalue", time.Hour)
+		require.NoError(t, err)
+		require.False(t, success)
+
+		val, err := storage.Get(ctx, "nonexistent")
+		require.NoError(t, err)
+		require.Equal(t, "", val)
+	})
+}
