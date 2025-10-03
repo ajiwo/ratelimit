@@ -83,8 +83,18 @@ if err != nil {
 }
 defer limiter.Close()
 
-// Check if request is allowed
-allowed, results, err := limiter.AllowWithResult(ratelimit.WithContext(ctx))
+// Check if request is allowed (simple version)
+allowed, err := limiter.Allow(ratelimit.WithContext(ctx))
+if err != nil {
+    // handle error
+}
+
+// Or get detailed results
+var results map[string]TierResult
+allowed, err = limiter.Allow(
+    ratelimit.WithContext(ctx),
+    ratelimit.WithResult(&results),
+)
 if err != nil {
     // handle error
 }
@@ -97,7 +107,7 @@ for strategy, result := range results {
 
 **Dual Strategy Logic:**
 1. **Primary Strategy** (Fixed Window, etc.) provides hard rate limits
-2. **Secondary Strategy** (Token/Leaky Bucket) acts as a smoother/shaper
+2. **Secondary Strategy** (Token/Leaky Bucket) acts as a smoother/request shaper
 3. **Request Flow:** Check primary first → If allowed, check secondary smoother
 4. **Final Decision:** Both strategies must allow the request
 
@@ -117,6 +127,11 @@ for strategy, result := range results {
 - `WithBaseKey(key)` - Set the base key for rate limiting
 - `WithTiers(tiers...)` - Override default tiers for fixed window strategy
 - `WithCleanupInterval(interval)` - Set cleanup interval for internal stale data
+
+**Access Options (for Allow method):**
+- `WithContext(ctx)` - Provide context for the operation
+- `WithKey(key)` - Use a dynamic key for this specific request
+- `WithResult(&results)` - Get detailed results in a map[string]TierResult
 
 **Strategy Behavior:**
 - **Single Strategy:** Use any strategy alone (Fixed Window, Token Bucket, or Leaky Bucket)

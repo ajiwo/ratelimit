@@ -170,7 +170,25 @@ func (m *MultiTierLimiter) parseAccessOptions(opts []AccessOption) (*accessOptio
 
 // Allow checks if a request is allowed across all configured tiers
 func (m *MultiTierLimiter) Allow(opts ...AccessOption) (bool, error) {
-	allowed, _, err := m.AllowWithResult(opts...)
+	// Parse access options to check if results are requested
+	accessOpts, err := m.parseAccessOptions(opts)
+	if err != nil {
+		return false, fmt.Errorf("failed to parse access options: %w", err)
+	}
+
+	// Check if results are requested
+	if accessOpts.result != nil {
+		// Use allowWithResult and populate the results map
+		allowed, results, err := m.allowWithResult(opts...)
+		if err != nil {
+			return false, err
+		}
+		*accessOpts.result = results
+		return allowed, nil
+	}
+
+	// No results requested, use simple version
+	allowed, _, err := m.allowWithResult(opts...)
 	return allowed, err
 }
 
@@ -453,8 +471,8 @@ func New(opts ...Option) (*MultiTierLimiter, error) {
 	return newMultiTierLimiter(config)
 }
 
-// AllowWithResult checks if a request is allowed across all configured tiers and returns detailed results
-func (m *MultiTierLimiter) AllowWithResult(opts ...AccessOption) (bool, map[string]TierResult, error) {
+// allowWithResult checks if a request is allowed across all configured tiers and returns detailed results
+func (m *MultiTierLimiter) allowWithResult(opts ...AccessOption) (bool, map[string]TierResult, error) {
 	// Parse access options
 	accessOpts, err := m.parseAccessOptions(opts)
 	if err != nil {

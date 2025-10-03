@@ -135,8 +135,9 @@ type AccessOption func(*accessOptions) error
 
 // accessOptions holds the configuration for a rate limiter access operation
 type accessOptions struct {
-	ctx context.Context
-	key string
+	ctx    context.Context
+	key    string
+	result *map[string]TierResult // Optional results pointer
 }
 
 // WithContext provides a context for the rate limiter operation
@@ -157,6 +158,17 @@ func WithKey(key string) AccessOption {
 			return err
 		}
 		opts.key = key
+		return nil
+	}
+}
+
+// WithResult provides a pointer to a map that will be populated with detailed results
+func WithResult(results *map[string]TierResult) AccessOption {
+	return func(opts *accessOptions) error {
+		if results == nil {
+			return fmt.Errorf("results pointer cannot be nil")
+		}
+		opts.result = results
 		return nil
 	}
 }
