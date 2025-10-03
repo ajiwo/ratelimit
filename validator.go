@@ -53,11 +53,14 @@ func validateMultiTierConfig(config MultiTierConfig) error {
 	if err := validateBasicConfig(config); err != nil {
 		return err
 	}
-	if err := validateTiers(config.Tiers); err != nil {
-		return err
-	}
 	if err := validateStrategyConfig(config); err != nil {
 		return err
+	}
+	// Only validate tiers if the strategy uses them
+	if len(config.Tiers) > 0 {
+		if err := validateTiers(config.Tiers); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -70,9 +73,14 @@ func validateBasicConfig(config MultiTierConfig) error {
 	if config.Storage == nil {
 		return fmt.Errorf("storage backend cannot be nil")
 	}
-	if len(config.Tiers) == 0 {
-		return fmt.Errorf("at least one tier must be configured")
+
+	// Bucket strategies don't require tiers
+	if config.Strategy != StrategyTokenBucket && config.Strategy != StrategyLeakyBucket {
+		if len(config.Tiers) == 0 {
+			return fmt.Errorf("at least one tier must be configured")
+		}
 	}
+
 	if len(config.Tiers) > MaxTiers {
 		return fmt.Errorf("maximum %d tiers allowed, got %d", MaxTiers, len(config.Tiers))
 	}

@@ -63,17 +63,17 @@ The multi-tier limiter enforces ALL tiers simultaneously - a request is only all
 **Available functional options:**
 - `WithBackend(backend)` - Use a custom backend instance
 - `WithFixedWindowStrategy(tiers...)` - Fixed window algorithm
-- `WithTokenBucketStrategy(burstSize, refillRate, tiers...)` - Token bucket algorithm
-- `WithLeakyBucketStrategy(capacity, leakRate, tiers...)` - Leaky bucket algorithm
+- `WithTokenBucketStrategy(burstSize, refillRate)` - Token bucket algorithm
+- `WithLeakyBucketStrategy(capacity, leakRate)` - Leaky bucket algorithm
 - `WithBaseKey(key)` - Set the base key for rate limiting
-- `WithTiers(tiers...)` - Override default tiers for any strategy
+- `WithTiers(tiers...)` - Override default tiers for fixed window strategy
 - `WithCleanupInterval(interval)` - Set cleanup interval for internal stale data
 
 **Limits and Constraints:**
-- Maximum 12 tiers per configuration
-- Minimum interval: 5 seconds
+- Fixed Window: Maximum 12 tiers per configuration, minimum interval: 5 seconds
 - Each tier must have a positive limit
 - Arbitrary time intervals are supported (30 seconds, 5 minutes, 2 hours, etc.)
+- Bucket strategies (Token Bucket, Leaky Bucket) don't use tiers
 
 ### Storage Backends
 

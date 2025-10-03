@@ -98,14 +98,9 @@ func TestMultiTierLimiter_Allow_FixedWindow(t *testing.T) {
 
 func TestMultiTierLimiter_Allow_TokenBucket(t *testing.T) {
 	mem := memory.New()
-	tiers := []TierConfig{
-		{Interval: 5 * time.Second, Limit: 5},
-		{Interval: time.Minute, Limit: 20},
-	}
-
 	limiter, err := New(
 		WithBaseKey("token-bucket-test"),
-		WithTokenBucketStrategy(10, 5.0, tiers...), // burst 10, refill 5/sec
+		WithTokenBucketStrategy(10, 5.0), // burst 10, refill 5/sec
 		WithBackend(mem),
 	)
 	require.NoError(t, err)
@@ -138,13 +133,10 @@ func TestMultiTierLimiter_Allow_TokenBucket(t *testing.T) {
 
 func TestMultiTierLimiter_Allow_LeakyBucket(t *testing.T) {
 	mem := memory.New()
-	tiers := []TierConfig{
-		{Interval: 5 * time.Second, Limit: 3},
-	}
 
 	_, err := New(
 		WithBaseKey("leaky-bucket-test"),
-		WithLeakyBucketStrategy(5, 2.0, tiers...), // capacity 5, leak 2/sec
+		WithLeakyBucketStrategy(5, 2.0), // capacity 5, leak 2/sec
 		WithBackend(mem),
 	)
 
@@ -577,12 +569,12 @@ func TestMultiTierLimiter_MixedStrategyTypes(t *testing.T) {
 		},
 		{
 			name:       "Token Bucket",
-			option:     WithTokenBucketStrategy(5, 2.0, TierConfig{Interval: time.Minute, Limit: 10}),
+			option:     WithTokenBucketStrategy(5, 2.0),
 			shouldFail: false,
 		},
 		{
 			name:       "Leaky Bucket",
-			option:     WithLeakyBucketStrategy(5, 2.0, TierConfig{Interval: time.Minute, Limit: 10}),
+			option:     WithLeakyBucketStrategy(5, 2.0),
 			shouldFail: false,
 		},
 	}

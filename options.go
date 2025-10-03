@@ -33,46 +33,24 @@ func WithFixedWindowStrategy(tiers ...TierConfig) Option {
 }
 
 // WithTokenBucketStrategy configures the rate limiter to use token bucket strategy
-func WithTokenBucketStrategy(burstSize int, refillRate float64, tiers ...TierConfig) Option {
+func WithTokenBucketStrategy(burstSize int, refillRate float64) Option {
 	return func(config *MultiTierConfig) error {
 		config.Strategy = StrategyTokenBucket
 		config.BurstSize = burstSize
 		config.RefillRate = refillRate
-
-		// Default tier if none provided
-		if len(tiers) == 0 {
-			config.Tiers = []TierConfig{
-				{
-					Interval: time.Minute,
-					Limit:    100,
-				},
-			}
-		} else {
-			config.Tiers = tiers
-		}
+		config.Tiers = nil // Token bucket doesn't use tiers
 
 		return nil
 	}
 }
 
 // WithLeakyBucketStrategy configures the rate limiter to use leaky bucket strategy
-func WithLeakyBucketStrategy(capacity int, leakRate float64, tiers ...TierConfig) Option {
+func WithLeakyBucketStrategy(capacity int, leakRate float64) Option {
 	return func(config *MultiTierConfig) error {
 		config.Strategy = StrategyLeakyBucket
 		config.Capacity = capacity
 		config.LeakRate = leakRate
-
-		// Default tier if none provided
-		if len(tiers) == 0 {
-			config.Tiers = []TierConfig{
-				{
-					Interval: time.Minute,
-					Limit:    100,
-				},
-			}
-		} else {
-			config.Tiers = tiers
-		}
+		config.Tiers = nil // Leaky bucket doesn't use tiers
 
 		return nil
 	}

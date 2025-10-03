@@ -10,8 +10,8 @@ import (
 	"github.com/ajiwo/ratelimit"
 
 	"github.com/ajiwo/ratelimit/backends/memory"
-	"github.com/ajiwo/ratelimit/backends/redis"
 	"github.com/ajiwo/ratelimit/backends/postgres"
+	"github.com/ajiwo/ratelimit/backends/redis"
 
 	"github.com/ajiwo/ratelimit/backends"
 

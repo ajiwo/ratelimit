@@ -88,16 +88,26 @@ func newMultiTierLimiter(config MultiTierConfig) (*MultiTierLimiter, error) {
 		strategies: make(map[string]strategies.Strategy),
 	}
 
-	// Create a strategy for each tier
-	for _, tier := range config.Tiers {
-		tierName := getTierName(tier.Interval)
-
+	// Create strategies based on the rate limiting approach
+	if config.Strategy == StrategyTokenBucket || config.Strategy == StrategyLeakyBucket {
+		// For bucket strategies, create a single strategy instance
 		strategy, err := createStrategy(config.Strategy, config.Storage)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create strategy for tier %s: %w", tierName, err)
+			return nil, fmt.Errorf("failed to create %s strategy: %w", config.Strategy, err)
 		}
+		limiter.strategies["default"] = strategy
+	} else {
+		// For tier-based strategies (like Fixed Window), create a strategy for each tier
+		for _, tier := range config.Tiers {
+			tierName := getTierName(tier.Interval)
 
-		limiter.strategies[tierName] = strategy
+			strategy, err := createStrategy(config.Strategy, config.Storage)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create strategy for tier %s: %w", tierName, err)
+			}
+
+			limiter.strategies[tierName] = strategy
+		}
 	}
 
 	// Start cleanup ticker if cleanup is enabled
@@ -189,6 +199,41 @@ func (m *MultiTierLimiter) createTierConfig(dynamicKey string, tierName string, 
 
 	default:
 		return nil, fmt.Errorf("unknown strategy: %s", m.config.Strategy)
+	}
+}
+
+// createBucketConfig creates strategy-specific configuration for bucket strategies
+func (m *MultiTierLimiter) createBucketConfig(dynamicKey string) (any, error) {
+	var keyBuilder strings.Builder
+	keyBuilder.Grow(len(m.config.BaseKey) + len(dynamicKey) + 1) // +1 for the colon
+	keyBuilder.WriteString(m.config.BaseKey)
+	keyBuilder.WriteByte(':')
+	keyBuilder.WriteString(dynamicKey)
+	key := keyBuilder.String()
+
+	switch m.config.Strategy {
+	case StrategyTokenBucket:
+		return strategies.TokenBucketConfig{
+			RateLimitConfig: strategies.RateLimitConfig{
+				Key:   key,
+				Limit: int(m.config.RefillRate * 3600), // Convert to hourly limit for display purposes
+			},
+			BurstSize:  m.config.BurstSize,
+			RefillRate: m.config.RefillRate,
+		}, nil
+
+	case StrategyLeakyBucket:
+		return strategies.LeakyBucketConfig{
+			RateLimitConfig: strategies.RateLimitConfig{
+				Key:   key,
+				Limit: int(m.config.LeakRate * 3600), // Convert to hourly limit for display purposes
+			},
+			Capacity: m.config.Capacity,
+			LeakRate: m.config.LeakRate,
+		}, nil
+
+	default:
+		return nil, fmt.Errorf("unknown bucket strategy: %s", m.config.Strategy)
 	}
 }
 
@@ -362,7 +407,46 @@ func (m *MultiTierLimiter) AllowWithResult(opts ...AccessOption) (bool, map[stri
 		return false, nil, fmt.Errorf("failed to parse access options: %w", err)
 	}
 
-	// Check each tier
+	// Handle bucket strategies differently
+	if m.config.Strategy == StrategyTokenBucket || m.config.Strategy == StrategyLeakyBucket {
+		results := make(map[string]TierResult)
+
+		// Create strategy-specific config for bucket strategy
+		config, err := m.createBucketConfig(accessOpts.key)
+		if err != nil {
+			return false, nil, fmt.Errorf("failed to create config for bucket strategy: %w", err)
+		}
+
+		// Check if request is allowed using the bucket strategy
+		strategy := m.strategies["default"]
+		tierResult, err := strategy.AllowWithResult(accessOpts.ctx, config)
+		if err != nil {
+			return false, nil, fmt.Errorf("bucket strategy check failed: %w", err)
+		}
+
+		// Calculate Total and Used based on the strategy type
+		var total, used int
+		switch m.config.Strategy {
+		case StrategyTokenBucket:
+			total = m.config.BurstSize
+			used = total - tierResult.Remaining
+		case StrategyLeakyBucket:
+			total = m.config.Capacity
+			used = total - tierResult.Remaining
+		}
+
+		results["default"] = TierResult{
+			Allowed:   tierResult.Allowed,
+			Remaining: tierResult.Remaining,
+			Reset:     tierResult.Reset,
+			Total:     total,
+			Used:      used,
+		}
+
+		return tierResult.Allowed, results, nil
+	}
+
+	// Handle tier-based strategies (Fixed Window, etc.)
 	results := make(map[string]TierResult)
 	deniedTiers := []string{}
 
