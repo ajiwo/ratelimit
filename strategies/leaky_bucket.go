@@ -206,26 +206,9 @@ func (l *LeakyBucketStrategy) Cleanup(maxAge time.Duration) {
 	l.CleanupLocks(maxAge)
 }
 
-// calculateLBResetTime calculates when the bucket will have capacity for another request
-func calculateLBResetTime(now time.Time, bucket LeakyBucket, capacity int) time.Time {
-	if bucket.Requests < float64(capacity) {
-		// Already has capacity, no reset needed
-		return now
-	}
-
-	// Calculate time to leak (bucket.Requests - capacity + 1) requests
-	requestsToLeak := bucket.Requests - float64(capacity) + 1
-	if requestsToLeak <= 0 {
-		return now
-	}
-
-	// time = requests / leakRate (convert from float seconds to time.Duration)
-	timeToLeakSeconds := requestsToLeak / bucket.LeakRate
-	return now.Add(time.Duration(timeToLeakSeconds * float64(time.Second)))
-}
-
-// AllowWithResult checks if a request is allowed and returns detailed statistics
-func (l *LeakyBucketStrategy) AllowWithResult(ctx context.Context, config any) (Result, error) {
+// allowGMS checks if a request is allowed using the Get-Modify-Set pattern with locks.
+// This is the fallback method when CheckAndSet atomic operations fail after multiple retries.
+func (l *LeakyBucketStrategy) allowGMS(ctx context.Context, config any) (Result, error) {
 	// Type assert to LeakyBucketConfig
 	leakyConfig, ok := config.(LeakyBucketConfig)
 	if !ok {
@@ -272,7 +255,7 @@ func (l *LeakyBucketStrategy) AllowWithResult(ctx context.Context, config any) (
 		bucket.LastLeak = now
 	}
 
-	// Calculate if request is allowed using the same logic as Allow method
+	// Calculate if request is allowed
 	allowed := bucket.Requests+1 <= float64(leakyConfig.Capacity)
 
 	// Calculate remaining capacity (before adding request if allowed)
@@ -283,32 +266,18 @@ func (l *LeakyBucketStrategy) AllowWithResult(ctx context.Context, config any) (
 		// Add request to bucket
 		bucket.Requests += 1
 
-		// Save updated bucket state in compact format
-		bucketData := encodeLeakyBucket(bucket)
-
-		// Use a reasonable expiration time (based on capacity and leak rate)
-		expiration := calcExpiration(leakyConfig.Capacity, leakyConfig.LeakRate)
-
-		// Save the updated bucket state
-		err = l.storage.Set(ctx, leakyConfig.Key, bucketData, expiration)
-		if err != nil {
-			return Result{}, fmt.Errorf("failed to save bucket state: %w", err)
-		}
-
 		// Update remaining after adding the request
 		remaining = max(leakyConfig.Capacity-int(bucket.Requests), 0)
-	} else {
-		// Save updated bucket state even when denying request (persist leaked state)
-		bucketData := encodeLeakyBucket(bucket)
+	}
 
-		// Use a reasonable expiration time (based on capacity and leak rate)
-		expiration := calcExpiration(leakyConfig.Capacity, leakyConfig.LeakRate)
+	// Save updated bucket state in compact format
+	bucketData := encodeLeakyBucket(bucket)
+	expiration := calcExpiration(leakyConfig.Capacity, leakyConfig.LeakRate)
 
-		// Save the updated bucket state
-		err = l.storage.Set(ctx, leakyConfig.Key, bucketData, expiration)
-		if err != nil {
-			return Result{}, fmt.Errorf("failed to save bucket state: %w", err)
-		}
+	// Save the bucket state
+	err = l.storage.Set(ctx, leakyConfig.Key, bucketData, expiration)
+	if err != nil {
+		return Result{}, fmt.Errorf("failed to save bucket state: %w", err)
 	}
 
 	// Calculate reset time - when bucket will have capacity for at least one more request
@@ -326,4 +295,134 @@ func (l *LeakyBucketStrategy) AllowWithResult(ctx context.Context, config any) (
 		Remaining: remaining,
 		Reset:     resetTime,
 	}, nil
+}
+
+// calculateLBResetTime calculates when the bucket will have capacity for another request
+func calculateLBResetTime(now time.Time, bucket LeakyBucket, capacity int) time.Time {
+	if bucket.Requests < float64(capacity) {
+		// Already has capacity, no reset needed
+		return now
+	}
+
+	// Calculate time to leak (bucket.Requests - capacity + 1) requests
+	requestsToLeak := bucket.Requests - float64(capacity) + 1
+	if requestsToLeak <= 0 {
+		return now
+	}
+
+	// time = requests / leakRate (convert from float seconds to time.Duration)
+	timeToLeakSeconds := requestsToLeak / bucket.LeakRate
+	return now.Add(time.Duration(timeToLeakSeconds * float64(time.Second)))
+}
+
+// AllowWithResult checks if a request is allowed and returns detailed statistics
+func (l *LeakyBucketStrategy) AllowWithResult(ctx context.Context, config any) (Result, error) {
+	// Type assert to LeakyBucketConfig
+	leakyConfig, ok := config.(LeakyBucketConfig)
+	if !ok {
+		return Result{}, fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
+	}
+
+	capacity := float64(leakyConfig.Capacity)
+	leakRate := leakyConfig.LeakRate
+
+	now := time.Now()
+
+	// Try atomic CheckAndSet operations first
+	for attempt := range checkAndSetRetries {
+		// Get current bucket state
+		data, err := l.storage.Get(ctx, leakyConfig.Key)
+		if err != nil {
+			return Result{}, fmt.Errorf("failed to get bucket state: %w", err)
+		}
+
+		var bucket LeakyBucket
+		var oldValue any
+		if data == "" {
+			// Initialize new bucket
+			bucket = LeakyBucket{
+				Requests: 0,
+				LastLeak: now,
+				Capacity: capacity,
+				LeakRate: leakRate,
+			}
+			oldValue = nil // Key doesn't exist
+		} else {
+			// Parse existing bucket state (compact format only)
+			if b, ok := decodeLeakyBucket(data); ok {
+				bucket = b
+			} else {
+				return Result{}, fmt.Errorf("failed to parse bucket state: invalid encoding")
+			}
+			oldValue = data // Current value for CheckAndSet
+
+			// Leak requests based on elapsed time
+			elapsed := now.Sub(bucket.LastLeak)
+			requestsToLeak := float64(elapsed.Nanoseconds()) * bucket.LeakRate / 1e9
+			bucket.Requests = max(bucket.Requests-requestsToLeak, 0)
+			bucket.LastLeak = now
+		}
+
+		// Calculate if request is allowed
+		allowed := bucket.Requests+1 <= float64(leakyConfig.Capacity)
+
+		if allowed {
+			// Add request to bucket
+			bucket.Requests += 1
+
+			// Calculate remaining capacity after adding request
+			remaining := max(leakyConfig.Capacity-int(bucket.Requests), 0)
+
+			// Save updated bucket state in compact format
+			newValue := encodeLeakyBucket(bucket)
+
+			// Use a reasonable expiration time (based on capacity and leak rate)
+			expiration := calcExpiration(leakyConfig.Capacity, leakyConfig.LeakRate)
+
+			// Use CheckAndSet for atomic update
+			success, err := l.storage.CheckAndSet(ctx, leakyConfig.Key, oldValue, newValue, expiration)
+			if err != nil {
+				return Result{}, fmt.Errorf("failed to save bucket state: %w", err)
+			}
+
+			if success {
+				// Atomic update succeeded
+				return Result{
+					Allowed:   true,
+					Remaining: remaining,
+					Reset:     now, // When allowed, no specific reset needed
+				}, nil
+			}
+			// If CheckAndSet failed, retry if we haven't exhausted attempts
+			if attempt < checkAndSetRetries-1 {
+				continue
+			}
+			// Exhausted attempts, fall back to lock-based approach
+			break
+		} else {
+			// Request denied, return current remaining capacity
+			remaining := max(leakyConfig.Capacity-int(bucket.Requests), 0)
+
+			// Save the current bucket state (even when denying, to handle leaks)
+			bucketData := encodeLeakyBucket(bucket)
+			expiration := calcExpiration(leakyConfig.Capacity, leakyConfig.LeakRate)
+
+			// If this was a new bucket (rare case), set it
+			if oldValue == nil {
+				_, err := l.storage.CheckAndSet(ctx, leakyConfig.Key, oldValue, bucketData, expiration)
+				if err != nil {
+					return Result{}, fmt.Errorf("failed to initialize bucket state: %w", err)
+				}
+			}
+
+			return Result{
+				Allowed:   false,
+				Remaining: remaining,
+				Reset:     calculateLBResetTime(now, bucket, leakyConfig.Capacity),
+			}, nil
+		}
+	}
+
+	// CheckAndSet failed after checkAndSetRetries attempts, fall back to lock-based approach
+	return l.allowGMS(ctx, config)
 }

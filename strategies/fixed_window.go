@@ -194,8 +194,9 @@ func (f *FixedWindowStrategy) Cleanup(maxAge time.Duration) {
 	f.CleanupLocks(maxAge)
 }
 
-// AllowWithResult checks if a request is allowed and returns detailed statistics
-func (f *FixedWindowStrategy) AllowWithResult(ctx context.Context, config any) (Result, error) {
+// allowGMS checks if a request is allowed using the Get-Modify-Set pattern with locks.
+// This is the fallback method when CheckAndSet atomic operations fail after multiple retries.
+func (f *FixedWindowStrategy) allowGMS(ctx context.Context, config any) (Result, error) {
 	// Type assert to FixedWindowConfig
 	fixedConfig, ok := config.(FixedWindowConfig)
 	if !ok {
@@ -284,4 +285,117 @@ func (f *FixedWindowStrategy) AllowWithResult(ctx context.Context, config any) (
 			Reset:     resetTime,
 		}, nil
 	}
+}
+
+// AllowWithResult checks if a request is allowed and returns detailed statistics
+func (f *FixedWindowStrategy) AllowWithResult(ctx context.Context, config any) (Result, error) {
+	// Type assert to FixedWindowConfig
+	fixedConfig, ok := config.(FixedWindowConfig)
+	if !ok {
+		return Result{}, fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
+	}
+
+	now := time.Now()
+
+	// Try atomic CheckAndSet operations first
+	for attempt := range checkAndSetRetries {
+		// Get current window state
+		data, err := f.storage.Get(ctx, fixedConfig.Key)
+		if err != nil {
+			return Result{}, fmt.Errorf("failed to get window state: %w", err)
+		}
+
+		var window FixedWindow
+		var oldValue any
+		if data == "" {
+			// Initialize new window
+			window = FixedWindow{
+				Count:    0,
+				Start:    now,
+				Duration: fixedConfig.Window,
+			}
+			oldValue = nil // Key doesn't exist
+		} else {
+			// Parse existing window state (compact format only)
+			if w, ok := decodeFixedWindow(data); ok {
+				window = w
+			} else {
+				return Result{}, fmt.Errorf("failed to parse window state: invalid encoding")
+			}
+
+			// Check if current window has expired
+			if now.Sub(window.Start) >= window.Duration {
+				// Start new window - reset count but keep same start time structure
+				window.Count = 0
+				window.Start = now
+				window.Duration = fixedConfig.Window
+			}
+			oldValue = data
+		}
+
+		// Determine if request is allowed based on current count
+		allowed := window.Count < fixedConfig.Limit
+
+		// Calculate reset time
+		resetTime := window.Start.Add(window.Duration)
+
+		if allowed {
+			// Increment request count
+			window.Count += 1
+
+			// Calculate remaining after increment (subtract 1 for the request we just processed)
+			remaining := max(fixedConfig.Limit-window.Count, 0)
+
+			// Save updated window state in compact format
+			newValue := encodeFixedWindow(window)
+
+			// Use CheckAndSet for atomic update
+			success, err := f.storage.CheckAndSet(ctx, fixedConfig.Key, oldValue, newValue, window.Duration)
+			if err != nil {
+				return Result{}, fmt.Errorf("failed to save window state: %w", err)
+			}
+
+			if success {
+				// Atomic update succeeded
+				return Result{
+					Allowed:   true,
+					Remaining: remaining,
+					Reset:     resetTime,
+				}, nil
+			}
+			// If CheckAndSet failed, retry if we haven't exhausted attempts
+			if attempt < checkAndSetRetries-1 {
+				continue
+			}
+			// Exhausted attempts, fall back to lock-based approach
+			break
+		} else {
+			// Request was denied, return original remaining count
+			remaining := max(fixedConfig.Limit-window.Count, 0)
+
+			// For denied requests, we don't need to update the count
+			// Only update if window expired to ensure proper reset handling
+			if now.Sub(window.Start) >= window.Duration {
+				// Window expired, reset it
+				window.Count = 0
+				window.Start = now
+				window.Duration = fixedConfig.Window
+
+				newValue := encodeFixedWindow(window)
+				_, err := f.storage.CheckAndSet(ctx, fixedConfig.Key, oldValue, newValue, window.Duration)
+				if err != nil {
+					return Result{}, fmt.Errorf("failed to reset expired window: %w", err)
+				}
+			}
+
+			return Result{
+				Allowed:   false,
+				Remaining: remaining,
+				Reset:     resetTime,
+			}, nil
+		}
+	}
+
+	// CheckAndSet failed after checkAndSetRetries attempts, fall back to lock-based approach
+	return f.allowGMS(ctx, config)
 }

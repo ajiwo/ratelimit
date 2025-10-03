@@ -7,6 +7,11 @@ import (
 	"github.com/ajiwo/ratelimit/backends"
 )
 
+const (
+	// checkAndSetRetries is the maximum number of retry attempts for CheckAndSet operations
+	checkAndSetRetries = 3
+)
+
 // checkV1Header validates that the string starts with "v1|"
 func checkV1Header(s string) bool {
 	return len(s) >= 3 && s[0] == 'v' && s[1] == '1' && s[2] == '|'
