@@ -399,3 +399,53 @@ func (f *FixedWindowStrategy) AllowWithResult(ctx context.Context, config any) (
 	// CheckAndSet failed after checkAndSetRetries attempts, fall back to lock-based approach
 	return f.allowGMS(ctx, config)
 }
+
+// CheckOnly checks if a request would be allowed without consuming quota
+// This method is specific to dual strategy scenarios where FixedWindow is the primary strategy
+func (f *FixedWindowStrategy) CheckOnly(ctx context.Context, config FixedWindowConfig) (Result, error) {
+	now := time.Now()
+
+	// Get current window state without locking (read-only)
+	data, err := f.storage.Get(ctx, config.Key)
+	if err != nil {
+		return Result{}, fmt.Errorf("failed to get window state: %w", err)
+	}
+
+	var window FixedWindow
+	if data == "" {
+		// No existing window, request would be allowed
+		return Result{
+			Allowed:   true,
+			Remaining: config.Limit,
+			Reset:     now.Add(config.Window),
+		}, nil
+	}
+
+	// Parse existing window state (compact format only)
+	if w, ok := decodeFixedWindow(data); ok {
+		window = w
+	} else {
+		return Result{}, fmt.Errorf("failed to parse window state: invalid encoding")
+	}
+
+	// Check if current window has expired
+	if now.Sub(window.Start) >= window.Duration {
+		// Window has expired, request would be allowed with fresh quota
+		return Result{
+			Allowed:   true,
+			Remaining: config.Limit,
+			Reset:     now.Add(config.Window),
+		}, nil
+	}
+
+	// Determine if request would be allowed based on current count
+	allowed := window.Count < config.Limit
+	remaining := max(config.Limit-window.Count, 0)
+	resetTime := window.Start.Add(window.Duration)
+
+	return Result{
+		Allowed:   allowed,
+		Remaining: remaining,
+		Reset:     resetTime,
+	}, nil
+}

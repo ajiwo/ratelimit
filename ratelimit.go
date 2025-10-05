@@ -534,21 +534,30 @@ func (m *MultiTierLimiter) handleSingleBucketStrategy(accessOpts *accessOptions,
 
 // handleDualStrategy handles the case where we have a primary tier-based strategy + secondary bucket strategy
 func (m *MultiTierLimiter) handleDualStrategy(accessOpts *accessOptions, results map[string]TierResult) (bool, map[string]TierResult, error) {
-	// First check primary strategy (Fixed Window or other tier-based)
+	// First check primary strategy using CheckOnly (no quota consumption)
 	primaryAllowed := true
 
 	for _, tier := range m.config.Tiers {
 		tierName := getTierName(tier.Interval)
 
-		// Create strategy-specific config for this tier
+		// Create FixedWindowConfig for this tier
 		config, err := m.createTierConfig(accessOpts.key, tierName, tier.Limit, tier.Interval)
 		if err != nil {
 			return false, nil, fmt.Errorf("failed to create config for tier %s: %w", tierName, err)
 		}
 
-		// Check if request is allowed for this tier
-		strategy := m.strategies[tierName]
-		tierResult, err := strategy.AllowWithResult(accessOpts.ctx, config)
+		fixedWindowConfig, ok := config.(strategies.FixedWindowConfig)
+		if !ok {
+			return false, nil, fmt.Errorf("dual strategy only supports FixedWindow as primary strategy")
+		}
+
+		// Type assert to FixedWindowStrategy and use CheckOnly
+		fixedWindowStrategy, ok := m.strategies[tierName].(*strategies.FixedWindowStrategy)
+		if !ok {
+			return false, nil, fmt.Errorf("expected FixedWindowStrategy for tier %s", tierName)
+		}
+
+		tierResult, err := fixedWindowStrategy.CheckOnly(accessOpts.ctx, fixedWindowConfig)
 		if err != nil {
 			return false, nil, fmt.Errorf("tier %s check failed: %w", tierName, err)
 		}
@@ -571,13 +580,13 @@ func (m *MultiTierLimiter) handleDualStrategy(accessOpts *accessOptions, results
 		return false, results, nil
 	}
 
-	// Primary allowed, now check secondary strategy (smoother)
+	// Primary allowed, now check secondary strategy (smoother) using GetResult
 	secondaryConfig, err := m.createSecondaryBucketConfig(accessOpts.key)
 	if err != nil {
 		return false, nil, fmt.Errorf("failed to create config for secondary strategy: %w", err)
 	}
 
-	secondaryResult, err := m.secondaryStrategy.AllowWithResult(accessOpts.ctx, secondaryConfig)
+	secondaryResult, err := m.secondaryStrategy.GetResult(accessOpts.ctx, secondaryConfig)
 	if err != nil {
 		return false, nil, fmt.Errorf("secondary strategy check failed: %w", err)
 	}
@@ -601,7 +610,39 @@ func (m *MultiTierLimiter) handleDualStrategy(accessOpts *accessOptions, results
 		Used:      used,
 	}
 
-	return secondaryResult.Allowed, results, nil
+	// If secondary strategy doesn't allow, don't consume from either strategy
+	if !secondaryResult.Allowed {
+		return false, results, nil
+	}
+
+	// Both strategies allow, now consume quota from both
+	return m.consumeFromBothStrategies(accessOpts, secondaryConfig, results)
+}
+
+// consumeFromBothStrategies consumes quota from both primary and secondary strategies
+func (m *MultiTierLimiter) consumeFromBothStrategies(accessOpts *accessOptions, secondaryConfig any, results map[string]TierResult) (bool, map[string]TierResult, error) {
+	// Consume from primary strategy
+	for _, tier := range m.config.Tiers {
+		tierName := getTierName(tier.Interval)
+		config, err := m.createTierConfig(accessOpts.key, tierName, tier.Limit, tier.Interval)
+		if err != nil {
+			return false, nil, fmt.Errorf("failed to create config for tier %s: %w", tierName, err)
+		}
+
+		strategy := m.strategies[tierName]
+		_, err = strategy.AllowWithResult(accessOpts.ctx, config)
+		if err != nil {
+			return false, nil, fmt.Errorf("tier %s quota consumption failed: %w", tierName, err)
+		}
+	}
+
+	// Consume from secondary strategy
+	_, err := m.secondaryStrategy.AllowWithResult(accessOpts.ctx, secondaryConfig)
+	if err != nil {
+		return false, nil, fmt.Errorf("secondary strategy quota consumption failed: %w", err)
+	}
+
+	return true, results, nil
 }
 
 // handleSingleTierStrategy handles the case where only a single tier-based strategy is used

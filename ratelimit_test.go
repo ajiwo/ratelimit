@@ -920,3 +920,54 @@ func TestAccessOptions_ValidationErrors(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, allowed)
 }
+
+func TestDualStrategy_QuotaConsumption(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		mem := memory.New()
+
+		// Create dual strategy limiter: Fixed Window (primary) + Token Bucket (secondary)
+		limiter, err := New(
+			WithBaseKey("quota-test"),
+			WithFixedWindowStrategy(
+				TierConfig{Interval: time.Minute, Limit: 3}, // 3 requests per minute (smaller for easier testing)
+			),
+			WithTokenBucketStrategy(1, 1.0), // Very small burst (1), refill 1/sec
+			WithBackend(mem),
+		)
+		require.NoError(t, err)
+		require.NotNil(t, limiter)
+		defer limiter.Close()
+
+		ctx := t.Context()
+
+		// Phase 1: Use up the token bucket burst capacity (1 request)
+		allowed, err := limiter.Allow(WithContext(ctx))
+		require.NoError(t, err)
+		assert.True(t, allowed, "First request should be allowed")
+
+		// Get initial stats
+		stats, err := limiter.GetStats(WithContext(ctx))
+		require.NoError(t, err)
+		minuteStats := stats["minute"]
+		assert.Equal(t, 1, minuteStats.Used, "Primary strategy should show 1 used")
+
+		// Phase 2: Request should be denied by secondary strategy, but primary quota preserved
+		allowed, err = limiter.Allow(WithContext(ctx))
+		require.NoError(t, err)
+		assert.False(t, allowed, "Second request should be denied by secondary strategy")
+
+		// Phase 3: Verify primary quota was NOT consumed (still 1, not 2)
+		stats, err = limiter.GetStats(WithContext(ctx))
+		require.NoError(t, err)
+		minuteStats = stats["minute"]
+		assert.Equal(t, 1, minuteStats.Used, "Primary strategy should still show 1 used (quota preserved)")
+		assert.True(t, minuteStats.Allowed, "Primary strategy should still allow")
+
+		smootherStats := stats["smoother"]
+		assert.False(t, smootherStats.Allowed, "Secondary strategy should deny")
+
+		// Phase 4: This test successfully demonstrates the quota preservation fix.
+		// The primary strategy quota was preserved when secondary denied.
+		// No need to test timing-dependent refill behavior in this test.
+	})
+}
