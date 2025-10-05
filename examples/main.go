@@ -54,7 +54,14 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Example 6: Custom cleanup interval
+	// Example 6: Dual Strategy (Fixed Window + Token Bucket)
+	fmt.Println("\n=== Dual Strategy (Fixed Window + Token Bucket) ===")
+	if err := dualStrategyExample(); err != nil {
+		log.Println(err)
+		os.Exit(1)
+	}
+
+	// Example 7: Custom cleanup interval
 	fmt.Println("\n=== Custom Cleanup Interval ===")
 	if err := customCleanupExample(); err != nil {
 		log.Println(err)
@@ -82,17 +89,12 @@ func tokenBucketExample() error {
 	}
 
 	for i := range 25 {
-		allowed, err := strategy.Allow(context.Background(), config)
+		result, err := strategy.AllowWithResult(context.Background(), config)
 		if err != nil {
 			return err
 		}
 
-		result, err := strategy.GetResult(context.Background(), config)
-		if err != nil {
-			return err
-		}
-
-		if allowed {
+		if result.Allowed {
 			fmt.Printf("Request %d: ALLOWED (remaining: %d)\n", i+1, result.Remaining)
 		} else {
 			fmt.Printf("Request %d: BLOCKED\n", i+1)
@@ -120,17 +122,12 @@ func fixedWindowExample() error {
 	}
 
 	for i := range 15 {
-		allowed, err := strategy.Allow(context.Background(), config)
+		result, err := strategy.AllowWithResult(context.Background(), config)
 		if err != nil {
 			return err
 		}
 
-		result, err := strategy.GetResult(context.Background(), config)
-		if err != nil {
-			return err
-		}
-
-		if allowed {
+		if result.Allowed {
 			fmt.Printf("Request %d: ALLOWED (remaining: %d)\n", i+1, result.Remaining)
 		} else {
 			fmt.Printf("Request %d: BLOCKED\n", i+1)
@@ -193,23 +190,15 @@ func tokenBucketRedisExample() error {
 			}
 		}
 
-		allowed, err := strategy.Allow(context.Background(), config)
+		result, err := strategy.AllowWithResult(context.Background(), config)
 		if err != nil {
-			fmt.Printf("Error in Allow: %v\n", err)
+			fmt.Printf("Error in AllowWithResult: %v\n", err)
 			// Continue with the example even if there's an error
 			fmt.Printf("Request %d: ERROR\n", i+1)
 			continue
 		}
 
-		result, err := strategy.GetResult(context.Background(), config)
-		if err != nil {
-			fmt.Printf("Error in GetResult: %v\n", err)
-			// Continue with the example even if there's an error
-			fmt.Printf("Request %d: ERROR\n", i+1)
-			continue
-		}
-
-		if allowed {
+		if result.Allowed {
 			fmt.Printf("Request %d: ALLOWED (remaining: %d)\n", i+1, result.Remaining)
 		} else {
 			fmt.Printf("Request %d: BLOCKED\n", i+1)
@@ -271,23 +260,15 @@ func tokenBucketPostgresExample() error {
 			}
 		}
 
-		allowed, err := strategy.Allow(context.Background(), config)
+		result, err := strategy.AllowWithResult(context.Background(), config)
 		if err != nil {
-			fmt.Printf("Error in Allow: %v\n", err)
+			fmt.Printf("Error in AllowWithResult: %v\n", err)
 			// Continue with the example even if there's an error
 			fmt.Printf("Request %d: ERROR\n", i+1)
 			continue
 		}
 
-		result, err := strategy.GetResult(context.Background(), config)
-		if err != nil {
-			fmt.Printf("Error in GetResult: %v\n", err)
-			// Continue with the example even if there's an error
-			fmt.Printf("Request %d: ERROR\n", i+1)
-			continue
-		}
-
-		if allowed {
+		if result.Allowed {
 			fmt.Printf("Request %d: ALLOWED (remaining: %d)\n", i+1, result.Remaining)
 		} else {
 			fmt.Printf("Request %d: BLOCKED\n", i+1)
@@ -322,17 +303,12 @@ func statusExample() error {
 
 	// Make some requests to consume tokens
 	for i := range 5 {
-		allowed, err := strategy.Allow(context.Background(), config)
+		result, err := strategy.AllowWithResult(context.Background(), config)
 		if err != nil {
 			return err
 		}
 
-		result, err := strategy.GetResult(context.Background(), config)
-		if err != nil {
-			return err
-		}
-
-		fmt.Printf("Made request %d: allowed=%v, remaining=%d\n", i+1, allowed, result.Remaining)
+		fmt.Printf("Made request %d: allowed=%v, remaining=%d\n", i+1, result.Allowed, result.Remaining)
 		time.Sleep(200 * time.Millisecond)
 	}
 
@@ -346,6 +322,129 @@ func statusExample() error {
 	fmt.Printf("  Allowed: %v\n", result.Allowed)
 	fmt.Printf("  Remaining: %d\n", result.Remaining)
 	fmt.Printf("  Reset Time: %v\n", result.Reset)
+	return nil
+}
+
+func dualStrategyExample() error {
+	// Create a dual strategy rate limiter:
+	// - Primary: Fixed Window (hard limits: 10 per minute, 50 per hour)
+	// - Secondary: Token Bucket (smoother: 5 burst, 0.5 req/sec refill)
+	limiter, err := ratelimit.New(
+		ratelimit.WithBackend(memory.New()),
+		ratelimit.WithFixedWindowStrategy(                           // Primary: Hard limits
+			ratelimit.TierConfig{Interval: time.Minute, Limit: 10},  // 10 requests per minute
+			ratelimit.TierConfig{Interval: time.Hour, Limit: 50},   // 50 requests per hour
+		),
+		ratelimit.WithTokenBucketStrategy(5, 0.5),                   // Secondary: 5 burst, 0.5 req/sec refill
+		ratelimit.WithBaseKey("api:user:dual"),
+	)
+	if err != nil {
+		return err
+	}
+	defer limiter.Close()
+
+	fmt.Println("Dual Strategy Rate Limiter:")
+	fmt.Println("  Primary (Fixed Window): 10 req/min, 50 req/hour (hard limits)")
+	fmt.Println("  Secondary (Token Bucket): 5 burst capacity, 0.5 req/sec refill (smoother)")
+	fmt.Println("\nTesting burst behavior...")
+
+	// Test 1: Burst handling - should allow up to 5 requests quickly (smoother limit)
+	fmt.Println("\n=== Burst Test (5 quick requests) ===")
+	for i := range 5 {
+		var results map[string]ratelimit.TierResult
+		allowed, err := limiter.Allow(
+			ratelimit.WithResult(&results),
+			ratelimit.WithContext(context.Background()),
+		)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Request %d: %v\n", i+1, map[bool]string{true: "ALLOWED", false: "BLOCKED"}[allowed])
+
+		// Show detailed results
+		for strategyName, result := range results {
+			if strategyName == "smoother" {
+				fmt.Printf("  %s: %d/%d remaining (burst control)\n", strategyName, result.Remaining, result.Total)
+			} else {
+				fmt.Printf("  %s: %d/%d remaining (hard limit)\n", strategyName, result.Remaining, result.Total)
+			}
+		}
+	}
+
+	// Test 2: Try to exceed burst capacity - should be blocked by smoother
+	fmt.Println("\n=== Burst Capacity Test (6th quick request) ===")
+	var results map[string]ratelimit.TierResult
+	allowed, err := limiter.Allow(
+		ratelimit.WithResult(&results),
+		ratelimit.WithContext(context.Background()),
+	)
+	if err != nil {
+		return err
+	}
+
+	fmt.Printf("Request 6: %v\n", map[bool]string{true: "ALLOWED", false: "BLOCKED"}[allowed])
+	for strategyName, result := range results {
+		if strategyName == "smoother" {
+			fmt.Printf("  %s: %d/%d remaining (burst control - BLOCKED)\n", strategyName, result.Remaining, result.Total)
+		} else {
+			fmt.Printf("  %s: %d/%d remaining (hard limit)\n", strategyName, result.Remaining, result.Total)
+		}
+	}
+
+	// Test 3: Wait for token refill and test gradual recovery
+	fmt.Println("\n=== Recovery Test (waiting for token refill) ===")
+	for i := range 4 {
+		time.Sleep(2 * time.Second) // Wait for token bucket to refill
+
+		var results map[string]ratelimit.TierResult
+		allowed, err := limiter.Allow(
+			ratelimit.WithResult(&results),
+			ratelimit.WithContext(context.Background()),
+		)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Request %d (after 2s wait): %v\n", i+7, map[bool]string{true: "ALLOWED", false: "BLOCKED"}[allowed])
+		for strategyName, result := range results {
+			if strategyName == "smoother" {
+				fmt.Printf("  %s: %d/%d remaining (burst control)\n", strategyName, result.Remaining, result.Total)
+			}
+		}
+	}
+
+	// Test 4: Try to exceed minute limit - should be blocked by primary fixed window
+	fmt.Println("\n=== Minute Limit Test (exceeding 10 req/min) ===")
+
+	// Make 5 more requests quickly (we've already made 9 allowed requests total)
+	for i := range 5 {
+		var results map[string]ratelimit.TierResult
+		allowed, err := limiter.Allow(
+			ratelimit.WithResult(&results),
+			ratelimit.WithContext(context.Background()),
+		)
+		if err != nil {
+			return err
+		}
+
+		fmt.Printf("Request %d: %v\n", i+11, map[bool]string{true: "ALLOWED", false: "BLOCKED"}[allowed])
+
+		// Show primary tier status when blocked
+		if !allowed {
+			for strategyName, result := range results {
+				if strategyName != "smoother" {
+					fmt.Printf("  %s: %d/%d remaining (hard limit - BLOCKED)\n", strategyName, result.Remaining, result.Total)
+				}
+			}
+		}
+	}
+
+	fmt.Println("\nDual Strategy Summary:")
+	fmt.Println("- Primary Fixed Window enforces hard caps (never exceeded)")
+	fmt.Println("- Secondary Token Bucket smooths bursts and controls request patterns")
+	fmt.Println("- Both strategies must allow for a request to be accepted")
+
 	return nil
 }
 
@@ -374,12 +473,11 @@ func customCleanupExample() error {
 
 	// Make a few requests
 	for i := range 10 {
-		allowed, err := limiter.Allow(ratelimit.WithContext(context.Background()))
-		if err != nil {
-			return err
-		}
-
-		stats, err := limiter.GetStats(ratelimit.WithContext(context.Background()))
+		var stats map[string]ratelimit.TierResult
+		allowed, err := limiter.Allow(
+			ratelimit.WithResult(&stats),
+			ratelimit.WithContext(context.Background()),
+		)
 		if err != nil {
 			return err
 		}
