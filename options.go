@@ -39,8 +39,8 @@ func WithTokenBucketStrategy(burstSize int, refillRate float64) Option {
 		// If no primary strategy is set yet, set this as primary
 		if config.Strategy == "" {
 			config.Strategy = StrategyTokenBucket
-			config.BurstSize = burstSize
-			config.RefillRate = refillRate
+			config.PrimaryBurstSize = burstSize
+			config.PrimaryRefillRate = refillRate
 			config.Tiers = nil // Token bucket doesn't use tiers
 		} else {
 			// Set as secondary strategy
@@ -61,8 +61,8 @@ func WithLeakyBucketStrategy(capacity int, leakRate float64) Option {
 		// If no primary strategy is set yet, set this as primary
 		if config.Strategy == "" {
 			config.Strategy = StrategyLeakyBucket
-			config.Capacity = capacity
-			config.LeakRate = leakRate
+			config.PrimaryCapacity = capacity
+			config.PrimaryLeakRate = leakRate
 			config.Tiers = nil // Leaky bucket doesn't use tiers
 		} else {
 			// Set as secondary strategy

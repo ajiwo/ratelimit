@@ -54,10 +54,10 @@ type MultiTierConfig struct {
 	SecondaryLeakRate   float64       // For secondary leaky bucket
 
 	// Primary strategy-specific configuration
-	BurstSize  int     // For token bucket
-	RefillRate float64 // For token bucket
-	Capacity   int     // For leaky bucket
-	LeakRate   float64 // For leaky bucket
+	PrimaryBurstSize  int     // For token bucket
+	PrimaryRefillRate float64 // For token bucket
+	PrimaryCapacity   int     // For leaky bucket
+	PrimaryLeakRate   float64 // For leaky bucket
 
 	// Cleanup configuration
 	CleanupInterval time.Duration // Interval for cleaning up stale locks (0 to disable)
@@ -219,8 +219,8 @@ func (m *MultiTierLimiter) createTierConfig(dynamicKey string, tierName string, 
 				Key:   key,
 				Limit: limit,
 			},
-			BurstSize:  m.config.BurstSize,
-			RefillRate: m.config.RefillRate,
+			BurstSize:  m.config.PrimaryBurstSize,
+			RefillRate: m.config.PrimaryRefillRate,
 		}, nil
 
 	case StrategyLeakyBucket:
@@ -229,8 +229,8 @@ func (m *MultiTierLimiter) createTierConfig(dynamicKey string, tierName string, 
 				Key:   key,
 				Limit: limit,
 			},
-			Capacity: m.config.Capacity,
-			LeakRate: m.config.LeakRate,
+			Capacity: m.config.PrimaryCapacity,
+			LeakRate: m.config.PrimaryLeakRate,
 		}, nil
 
 	default:
@@ -252,20 +252,20 @@ func (m *MultiTierLimiter) createBucketConfig(dynamicKey string) (any, error) {
 		return strategies.TokenBucketConfig{
 			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   key,
-				Limit: int(m.config.RefillRate * 3600), // Convert to hourly limit for display purposes
+				Limit: int(m.config.PrimaryRefillRate * 3600), // Convert to hourly limit for display purposes
 			},
-			BurstSize:  m.config.BurstSize,
-			RefillRate: m.config.RefillRate,
+			BurstSize:  m.config.PrimaryBurstSize,
+			RefillRate: m.config.PrimaryRefillRate,
 		}, nil
 
 	case StrategyLeakyBucket:
 		return strategies.LeakyBucketConfig{
 			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   key,
-				Limit: int(m.config.LeakRate * 3600), // Convert to hourly limit for display purposes
+				Limit: int(m.config.PrimaryLeakRate * 3600), // Convert to hourly limit for display purposes
 			},
-			Capacity: m.config.Capacity,
-			LeakRate: m.config.LeakRate,
+			Capacity: m.config.PrimaryCapacity,
+			LeakRate: m.config.PrimaryLeakRate,
 		}, nil
 
 	default:
@@ -452,10 +452,10 @@ func New(opts ...Option) (*MultiTierLimiter, error) {
 			},
 		},
 		// Default strategy-specific values
-		BurstSize:  10,
-		RefillRate: 1.0,
-		Capacity:   10,
-		LeakRate:   1.0,
+		PrimaryBurstSize:  10,
+		PrimaryRefillRate: 1.0,
+		PrimaryCapacity:   10,
+		PrimaryLeakRate:   1.0,
 		// Default cleanup interval
 		CleanupInterval: DefaultCleanupInterval,
 	}
@@ -514,10 +514,10 @@ func (m *MultiTierLimiter) handleSingleBucketStrategy(accessOpts *accessOptions,
 	var total, used int
 	switch m.config.Strategy {
 	case StrategyTokenBucket:
-		total = m.config.BurstSize
+		total = m.config.PrimaryBurstSize
 		used = total - tierResult.Remaining
 	case StrategyLeakyBucket:
-		total = m.config.Capacity
+		total = m.config.PrimaryCapacity
 		used = total - tierResult.Remaining
 	}
 

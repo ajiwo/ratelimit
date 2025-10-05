@@ -105,10 +105,10 @@ func validateStrategyConfig(config MultiTierConfig) error {
 	// Validate primary strategy
 	primaryCfg := StrategyConfig{
 		Strategy:   config.Strategy,
-		BurstSize:  config.BurstSize,
-		RefillRate: config.RefillRate,
-		Capacity:   config.Capacity,
-		LeakRate:   config.LeakRate,
+		BurstSize:  config.PrimaryBurstSize,
+		RefillRate: config.PrimaryRefillRate,
+		Capacity:   config.PrimaryCapacity,
+		LeakRate:   config.PrimaryLeakRate,
 		Prefix:     "",
 	}
 	if err := validateSingleStrategy(primaryCfg); err != nil {
