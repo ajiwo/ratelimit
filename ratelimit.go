@@ -53,7 +53,7 @@ type MultiTierConfig struct {
 	SecondaryCapacity   int           // For secondary leaky bucket
 	SecondaryLeakRate   float64       // For secondary leaky bucket
 
-	// Legacy strategy-specific configurations (for backward compatibility)
+	// Primary strategy-specific configuration
 	BurstSize  int     // For token bucket
 	RefillRate float64 // For token bucket
 	Capacity   int     // For leaky bucket
