@@ -38,31 +38,6 @@ const (
 	StrategyLeakyBucket StrategyType = "leaky_bucket"
 )
 
-// MultiTierConfig defines the configuration for multi-tier rate limiting
-type MultiTierConfig struct {
-	// Base configuration
-	BaseKey  string           // Base key for rate limiting (e.g., "user:123")
-	Storage  backends.Backend // Storage backend to use
-	Strategy StrategyType     // Primary rate limiting strategy (usually Fixed Window)
-	Tiers    []TierConfig     // Multiple tiers for primary strategy (minute, hour, day, etc.)
-
-	// Secondary strategy configuration (optional smoother/shaper)
-	SecondaryStrategy   *StrategyType // Secondary strategy (Token Bucket or Leaky Bucket)
-	SecondaryBurstSize  int           // For secondary token bucket
-	SecondaryRefillRate float64       // For secondary token bucket
-	SecondaryCapacity   int           // For secondary leaky bucket
-	SecondaryLeakRate   float64       // For secondary leaky bucket
-
-	// Primary strategy-specific configuration
-	PrimaryBurstSize  int     // For token bucket
-	PrimaryRefillRate float64 // For token bucket
-	PrimaryCapacity   int     // For leaky bucket
-	PrimaryLeakRate   float64 // For leaky bucket
-
-	// Cleanup configuration
-	CleanupInterval time.Duration // Interval for cleaning up stale locks (0 to disable)
-}
-
 // TierResult represents the result for a single tier
 type TierResult struct {
 	Allowed   bool      // Whether this tier allowed the request
@@ -88,7 +63,7 @@ type MultiTierLimiter struct {
 // newMultiTierLimiter creates a new multi-tier rate limiter
 func newMultiTierLimiter(config MultiTierConfig) (*MultiTierLimiter, error) {
 	// Validate configuration
-	if err := validateMultiTierConfig(config); err != nil {
+	if err := config.Validate(); err != nil {
 		return nil, err
 	}
 
@@ -97,31 +72,45 @@ func newMultiTierLimiter(config MultiTierConfig) (*MultiTierLimiter, error) {
 		strategies: make(map[string]strategies.Strategy),
 	}
 
-	// Create primary strategy(ies) based on the rate limiting approach
-	if config.Strategy == StrategyTokenBucket || config.Strategy == StrategyLeakyBucket {
+	// Create primary strategy(ies) based on the primary configuration
+	primaryConfig := config.PrimaryConfig
+	primaryStrategyType := primaryConfig.Type()
+
+	switch primaryStrategyType {
+	case StrategyTokenBucket, StrategyLeakyBucket:
 		// For bucket strategies as primary, create a single strategy instance
-		strategy, err := createStrategy(config.Strategy, config.Storage)
+		strategy, err := createStrategy(primaryStrategyType, config.Storage)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create %s strategy: %w", config.Strategy, err)
+			return nil, fmt.Errorf("failed to create %s strategy: %w", primaryStrategyType, err)
 		}
 		limiter.strategies["default"] = strategy
-	} else {
-		// For tier-based strategies (like Fixed Window), create a strategy for each tier
-		for _, tier := range config.Tiers {
+
+	case StrategyFixedWindow:
+		// For tier-based strategies, create a strategy for each tier
+		fixedWindowConfig, ok := primaryConfig.(FixedWindowConfig)
+		if !ok {
+			return nil, fmt.Errorf("invalid configuration type for fixed window strategy")
+		}
+
+		for _, tier := range fixedWindowConfig.Tiers {
 			tierName := getTierName(tier.Interval)
 
-			strategy, err := createStrategy(config.Strategy, config.Storage)
+			strategy, err := createStrategy(primaryStrategyType, config.Storage)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create strategy for tier %s: %w", tierName, err)
 			}
 
 			limiter.strategies[tierName] = strategy
 		}
+
+	default:
+		return nil, fmt.Errorf("unsupported primary strategy type: %s", primaryStrategyType)
 	}
 
 	// Create secondary strategy if configured
-	if config.SecondaryStrategy != nil {
-		secondaryStrategy, err := createStrategy(*config.SecondaryStrategy, config.Storage)
+	if config.SecondaryConfig != nil {
+		secondaryStrategyType := config.SecondaryConfig.Type()
+		secondaryStrategy, err := createStrategy(secondaryStrategyType, config.Storage)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create secondary strategy: %w", err)
 		}
@@ -141,6 +130,10 @@ func newMultiTierLimiter(config MultiTierConfig) (*MultiTierLimiter, error) {
 					// Perform cleanup for all strategies
 					for _, strategy := range limiter.strategies {
 						strategy.Cleanup(config.CleanupInterval * 2) // Cleanup locks older than 2x the interval
+					}
+					// Also cleanup secondary strategy if present
+					if limiter.secondaryStrategy != nil {
+						limiter.secondaryStrategy.Cleanup(config.CleanupInterval * 2)
 					}
 				case <-limiter.cleanupStop:
 					return
@@ -203,7 +196,8 @@ func (m *MultiTierLimiter) createTierConfig(dynamicKey string, tierName string, 
 	keyBuilder.WriteString(tierName)
 	key := keyBuilder.String()
 
-	switch m.config.Strategy {
+	primaryConfig := m.config.PrimaryConfig
+	switch primaryConfig.Type() {
 	case StrategyFixedWindow:
 		return strategies.FixedWindowConfig{
 			RateLimitConfig: strategies.RateLimitConfig{
@@ -214,27 +208,35 @@ func (m *MultiTierLimiter) createTierConfig(dynamicKey string, tierName string, 
 		}, nil
 
 	case StrategyTokenBucket:
+		tokenConfig, ok := primaryConfig.(TokenBucketConfig)
+		if !ok {
+			return nil, fmt.Errorf("invalid token bucket configuration")
+		}
 		return strategies.TokenBucketConfig{
 			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   key,
 				Limit: limit,
 			},
-			BurstSize:  m.config.PrimaryBurstSize,
-			RefillRate: m.config.PrimaryRefillRate,
+			BurstSize:  tokenConfig.BurstSize,
+			RefillRate: tokenConfig.RefillRate,
 		}, nil
 
 	case StrategyLeakyBucket:
+		leakyConfig, ok := primaryConfig.(LeakyBucketConfig)
+		if !ok {
+			return nil, fmt.Errorf("invalid leaky bucket configuration")
+		}
 		return strategies.LeakyBucketConfig{
 			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   key,
 				Limit: limit,
 			},
-			Capacity: m.config.PrimaryCapacity,
-			LeakRate: m.config.PrimaryLeakRate,
+			Capacity: leakyConfig.Capacity,
+			LeakRate: leakyConfig.LeakRate,
 		}, nil
 
 	default:
-		return nil, fmt.Errorf("unknown strategy: %s", m.config.Strategy)
+		return nil, fmt.Errorf("unknown strategy: %s", primaryConfig.Type())
 	}
 }
 
@@ -247,34 +249,47 @@ func (m *MultiTierLimiter) createBucketConfig(dynamicKey string) (any, error) {
 	keyBuilder.WriteString(dynamicKey)
 	key := keyBuilder.String()
 
-	switch m.config.Strategy {
+	primaryConfig := m.config.PrimaryConfig
+	switch primaryConfig.Type() {
 	case StrategyTokenBucket:
+		tokenConfig, ok := primaryConfig.(TokenBucketConfig)
+		if !ok {
+			return nil, fmt.Errorf("invalid token bucket configuration")
+		}
 		return strategies.TokenBucketConfig{
 			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   key,
-				Limit: int(m.config.PrimaryRefillRate * 3600), // Convert to hourly limit for display purposes
+				Limit: int(tokenConfig.RefillRate * 3600), // Convert to hourly limit for display purposes
 			},
-			BurstSize:  m.config.PrimaryBurstSize,
-			RefillRate: m.config.PrimaryRefillRate,
+			BurstSize:  tokenConfig.BurstSize,
+			RefillRate: tokenConfig.RefillRate,
 		}, nil
 
 	case StrategyLeakyBucket:
+		leakyConfig, ok := primaryConfig.(LeakyBucketConfig)
+		if !ok {
+			return nil, fmt.Errorf("invalid leaky bucket configuration")
+		}
 		return strategies.LeakyBucketConfig{
 			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   key,
-				Limit: int(m.config.PrimaryLeakRate * 3600), // Convert to hourly limit for display purposes
+				Limit: int(leakyConfig.LeakRate * 3600), // Convert to hourly limit for display purposes
 			},
-			Capacity: m.config.PrimaryCapacity,
-			LeakRate: m.config.PrimaryLeakRate,
+			Capacity: leakyConfig.Capacity,
+			LeakRate: leakyConfig.LeakRate,
 		}, nil
 
 	default:
-		return nil, fmt.Errorf("unknown bucket strategy: %s", m.config.Strategy)
+		return nil, fmt.Errorf("unknown bucket strategy: %s", primaryConfig.Type())
 	}
 }
 
 // createSecondaryBucketConfig creates strategy-specific configuration for secondary bucket strategies
 func (m *MultiTierLimiter) createSecondaryBucketConfig(dynamicKey string) (any, error) {
+	if m.config.SecondaryConfig == nil {
+		return nil, fmt.Errorf("secondary strategy not configured")
+	}
+
 	var keyBuilder strings.Builder
 	keyBuilder.Grow(len(m.config.BaseKey) + len(dynamicKey) + 10) // +10 for ":smoother" suffix
 	keyBuilder.WriteString(m.config.BaseKey)
@@ -283,29 +298,38 @@ func (m *MultiTierLimiter) createSecondaryBucketConfig(dynamicKey string) (any, 
 	keyBuilder.WriteString(":smoother")
 	key := keyBuilder.String()
 
-	switch *m.config.SecondaryStrategy {
+	secondaryConfig := m.config.SecondaryConfig
+	switch secondaryConfig.Type() {
 	case StrategyTokenBucket:
+		tokenConfig, ok := secondaryConfig.(TokenBucketConfig)
+		if !ok {
+			return nil, fmt.Errorf("invalid secondary token bucket configuration")
+		}
 		return strategies.TokenBucketConfig{
 			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   key,
-				Limit: int(m.config.SecondaryRefillRate * 3600), // Convert to hourly limit for display purposes
+				Limit: int(tokenConfig.RefillRate * 3600), // Convert to hourly limit for display purposes
 			},
-			BurstSize:  m.config.SecondaryBurstSize,
-			RefillRate: m.config.SecondaryRefillRate,
+			BurstSize:  tokenConfig.BurstSize,
+			RefillRate: tokenConfig.RefillRate,
 		}, nil
 
 	case StrategyLeakyBucket:
+		leakyConfig, ok := secondaryConfig.(LeakyBucketConfig)
+		if !ok {
+			return nil, fmt.Errorf("invalid secondary leaky bucket configuration")
+		}
 		return strategies.LeakyBucketConfig{
 			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   key,
-				Limit: int(m.config.SecondaryLeakRate * 3600), // Convert to hourly limit for display purposes
+				Limit: int(leakyConfig.LeakRate * 3600), // Convert to hourly limit for display purposes
 			},
-			Capacity: m.config.SecondaryCapacity,
-			LeakRate: m.config.SecondaryLeakRate,
+			Capacity: leakyConfig.Capacity,
+			LeakRate: leakyConfig.LeakRate,
 		}, nil
 
 	default:
-		return nil, fmt.Errorf("unknown secondary strategy: %s", *m.config.SecondaryStrategy)
+		return nil, fmt.Errorf("unknown secondary strategy: %s", secondaryConfig.Type())
 	}
 }
 
@@ -362,28 +386,66 @@ func (m *MultiTierLimiter) GetStats(opts ...AccessOption) (map[string]TierResult
 
 	stats := make(map[string]TierResult)
 
-	for _, tier := range m.config.Tiers {
-		tierName := getTierName(tier.Interval)
-
-		// Create strategy-specific config for this tier
-		config, err := m.createTierConfig(accessOpts.key, tierName, tier.Limit, tier.Interval)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create config for tier %s: %w", tierName, err)
+	// Only fixed window strategy has tiers
+	if m.config.PrimaryConfig.Type() == StrategyFixedWindow {
+		fixedWindowConfig, ok := m.config.PrimaryConfig.(FixedWindowConfig)
+		if !ok {
+			return nil, fmt.Errorf("invalid fixed window configuration")
 		}
 
-		// Get stats from this tier's strategy
-		strategy := m.strategies[tierName]
+		for _, tier := range fixedWindowConfig.Tiers {
+			tierName := getTierName(tier.Interval)
+
+			// Create strategy-specific config for this tier
+			config, err := m.createTierConfig(accessOpts.key, tierName, tier.Limit, tier.Interval)
+			if err != nil {
+				return nil, fmt.Errorf("failed to create config for tier %s: %w", tierName, err)
+			}
+
+			// Get stats from this tier's strategy
+			strategy := m.strategies[tierName]
+			result, err := strategy.GetResult(accessOpts.ctx, config)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get stats for tier %s: %w", tierName, err)
+			}
+
+			stats[tierName] = TierResult{
+				Allowed:   result.Allowed,
+				Remaining: result.Remaining,
+				Reset:     result.Reset,
+				Total:     tier.Limit,
+				Used:      tier.Limit - result.Remaining,
+			}
+		}
+	} else {
+		// For bucket strategies, create a single "default" stat
+		config, err := m.createBucketConfig(accessOpts.key)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create bucket config: %w", err)
+		}
+
+		strategy := m.strategies["default"]
 		result, err := strategy.GetResult(accessOpts.ctx, config)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get stats for tier %s: %w", tierName, err)
+			return nil, fmt.Errorf("failed to get stats: %w", err)
 		}
 
-		stats[tierName] = TierResult{
+		var total int
+		switch m.config.PrimaryConfig.Type() {
+		case StrategyTokenBucket:
+			tokenConfig := m.config.PrimaryConfig.(TokenBucketConfig)
+			total = tokenConfig.BurstSize
+		case StrategyLeakyBucket:
+			leakyConfig := m.config.PrimaryConfig.(LeakyBucketConfig)
+			total = leakyConfig.Capacity
+		}
+
+		stats["default"] = TierResult{
 			Allowed:   result.Allowed,
 			Remaining: result.Remaining,
 			Reset:     result.Reset,
-			Total:     tier.Limit,
-			Used:      tier.Limit - result.Remaining,
+			Total:     total,
+			Used:      total - result.Remaining,
 		}
 	}
 
@@ -398,19 +460,38 @@ func (m *MultiTierLimiter) Reset(opts ...AccessOption) error {
 		return fmt.Errorf("failed to parse access options: %w", err)
 	}
 
-	for _, tier := range m.config.Tiers {
-		tierName := getTierName(tier.Interval)
-
-		// Create strategy-specific config for this tier
-		config, err := m.createTierConfig(accessOpts.key, tierName, tier.Limit, tier.Interval)
-		if err != nil {
-			return fmt.Errorf("failed to create config for tier %s: %w", tierName, err)
+	// Only fixed window strategy has tiers
+	if m.config.PrimaryConfig.Type() == StrategyFixedWindow {
+		fixedWindowConfig, ok := m.config.PrimaryConfig.(FixedWindowConfig)
+		if !ok {
+			return fmt.Errorf("invalid fixed window configuration")
 		}
 
-		// Reset this tier's strategy
-		strategy := m.strategies[tierName]
+		for _, tier := range fixedWindowConfig.Tiers {
+			tierName := getTierName(tier.Interval)
+
+			// Create strategy-specific config for this tier
+			config, err := m.createTierConfig(accessOpts.key, tierName, tier.Limit, tier.Interval)
+			if err != nil {
+				return fmt.Errorf("failed to create config for tier %s: %w", tierName, err)
+			}
+
+			// Reset this tier's strategy
+			strategy := m.strategies[tierName]
+			if err := strategy.Reset(accessOpts.ctx, config); err != nil {
+				return fmt.Errorf("failed to reset tier %s: %w", tierName, err)
+			}
+		}
+	} else {
+		// For bucket strategies, reset the single strategy
+		config, err := m.createBucketConfig(accessOpts.key)
+		if err != nil {
+			return fmt.Errorf("failed to create bucket config: %w", err)
+		}
+
+		strategy := m.strategies["default"]
 		if err := strategy.Reset(accessOpts.ctx, config); err != nil {
-			return fmt.Errorf("failed to reset tier %s: %w", tierName, err)
+			return fmt.Errorf("failed to reset bucket strategy: %w", err)
 		}
 	}
 
@@ -443,20 +524,15 @@ func (m *MultiTierLimiter) Close() error {
 func New(opts ...Option) (*MultiTierLimiter, error) {
 	// Create default configuration
 	config := MultiTierConfig{
-		BaseKey:  "default",
-		Strategy: StrategyFixedWindow,
-		Tiers: []TierConfig{
-			{
-				Interval: time.Minute,
-				Limit:    100,
+		BaseKey: "default",
+		PrimaryConfig: FixedWindowConfig{
+			Tiers: []TierConfig{
+				{
+					Interval: time.Minute,
+					Limit:    100,
+				},
 			},
 		},
-		// Default strategy-specific values
-		PrimaryBurstSize:  10,
-		PrimaryRefillRate: 1.0,
-		PrimaryCapacity:   10,
-		PrimaryLeakRate:   1.0,
-		// Default cleanup interval
 		CleanupInterval: DefaultCleanupInterval,
 	}
 
@@ -482,12 +558,13 @@ func (m *MultiTierLimiter) allowWithResult(opts ...AccessOption) (bool, map[stri
 	results := make(map[string]TierResult)
 
 	// Handle single bucket strategy (primary only, no secondary)
-	if (m.config.Strategy == StrategyTokenBucket || m.config.Strategy == StrategyLeakyBucket) && m.config.SecondaryStrategy == nil {
+	primaryType := m.config.PrimaryConfig.Type()
+	if (primaryType == StrategyTokenBucket || primaryType == StrategyLeakyBucket) && m.config.SecondaryConfig == nil {
 		return m.handleSingleBucketStrategy(accessOpts, results)
 	}
 
 	// Handle dual strategy: primary (tier-based) + secondary (bucket)
-	if m.config.SecondaryStrategy != nil {
+	if m.config.SecondaryConfig != nil {
 		return m.handleDualStrategy(accessOpts, results)
 	}
 
@@ -512,12 +589,15 @@ func (m *MultiTierLimiter) handleSingleBucketStrategy(accessOpts *accessOptions,
 
 	// Calculate Total and Used based on the strategy type
 	var total, used int
-	switch m.config.Strategy {
+	primaryConfig := m.config.PrimaryConfig
+	switch primaryConfig.Type() {
 	case StrategyTokenBucket:
-		total = m.config.PrimaryBurstSize
+		tokenConfig := primaryConfig.(TokenBucketConfig)
+		total = tokenConfig.BurstSize
 		used = total - tierResult.Remaining
 	case StrategyLeakyBucket:
-		total = m.config.PrimaryCapacity
+		leakyConfig := primaryConfig.(LeakyBucketConfig)
+		total = leakyConfig.Capacity
 		used = total - tierResult.Remaining
 	}
 
@@ -537,7 +617,12 @@ func (m *MultiTierLimiter) handleDualStrategy(accessOpts *accessOptions, results
 	// First check primary strategy using CheckOnly (no quota consumption)
 	primaryAllowed := true
 
-	for _, tier := range m.config.Tiers {
+	fixedWindowConfig, ok := m.config.PrimaryConfig.(FixedWindowConfig)
+	if !ok {
+		return false, nil, fmt.Errorf("dual strategy only supports FixedWindow as primary strategy")
+	}
+
+	for _, tier := range fixedWindowConfig.Tiers {
 		tierName := getTierName(tier.Interval)
 
 		// Create FixedWindowConfig for this tier
@@ -593,12 +678,14 @@ func (m *MultiTierLimiter) handleDualStrategy(accessOpts *accessOptions, results
 
 	// Calculate Total and Used for secondary strategy
 	var total, used int
-	switch *m.config.SecondaryStrategy {
+	switch m.config.SecondaryConfig.Type() {
 	case StrategyTokenBucket:
-		total = m.config.SecondaryBurstSize
+		tokenConfig := m.config.SecondaryConfig.(TokenBucketConfig)
+		total = tokenConfig.BurstSize
 		used = total - secondaryResult.Remaining
 	case StrategyLeakyBucket:
-		total = m.config.SecondaryCapacity
+		leakyConfig := m.config.SecondaryConfig.(LeakyBucketConfig)
+		total = leakyConfig.Capacity
 		used = total - secondaryResult.Remaining
 	}
 
@@ -622,7 +709,8 @@ func (m *MultiTierLimiter) handleDualStrategy(accessOpts *accessOptions, results
 // consumeFromBothStrategies consumes quota from both primary and secondary strategies
 func (m *MultiTierLimiter) consumeFromBothStrategies(accessOpts *accessOptions, secondaryConfig any, results map[string]TierResult) (bool, map[string]TierResult, error) {
 	// Consume from primary strategy
-	for _, tier := range m.config.Tiers {
+	fixedWindowConfig := m.config.PrimaryConfig.(FixedWindowConfig)
+	for _, tier := range fixedWindowConfig.Tiers {
 		tierName := getTierName(tier.Interval)
 		config, err := m.createTierConfig(accessOpts.key, tierName, tier.Limit, tier.Interval)
 		if err != nil {
@@ -648,7 +736,8 @@ func (m *MultiTierLimiter) consumeFromBothStrategies(accessOpts *accessOptions, 
 // handleSingleTierStrategy handles the case where only a single tier-based strategy is used
 func (m *MultiTierLimiter) handleSingleTierStrategy(accessOpts *accessOptions, results map[string]TierResult) (bool, map[string]TierResult, error) {
 	deniedTiers := []string{}
-	for _, tier := range m.config.Tiers {
+	fixedWindowConfig := m.config.PrimaryConfig.(FixedWindowConfig)
+	for _, tier := range fixedWindowConfig.Tiers {
 		tierName := getTierName(tier.Interval)
 
 		// Create strategy-specific config for this tier

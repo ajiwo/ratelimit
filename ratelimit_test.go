@@ -37,10 +37,14 @@ func TestNew_WithOptions(t *testing.T) {
 
 		config := limiter.GetConfig()
 		assert.Equal(t, "test-key", config.BaseKey)
-		assert.Equal(t, StrategyFixedWindow, config.Strategy)
-		assert.Len(t, config.Tiers, 2)
-		assert.Equal(t, 5*time.Second, config.Tiers[0].Interval)
-		assert.Equal(t, 5, config.Tiers[0].Limit)
+
+		// Check primary strategy configuration
+		fixedWindowConfig, ok := config.PrimaryConfig.(FixedWindowConfig)
+		require.True(t, ok)
+		assert.Equal(t, StrategyFixedWindow, fixedWindowConfig.Type())
+		assert.Len(t, fixedWindowConfig.Tiers, 2)
+		assert.Equal(t, 5*time.Second, fixedWindowConfig.Tiers[0].Interval)
+		assert.Equal(t, 5, fixedWindowConfig.Tiers[0].Limit)
 
 		// Wait for cleanup to run
 		time.Sleep(time.Hour + time.Nanosecond)
@@ -415,14 +419,13 @@ func TestMultiTierLimiter_InvalidConfiguration(t *testing.T) {
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "base key cannot be empty")
 
-	// Test no tiers
+	// Test no tiers (empty fixed window config)
 	_, err = New(
 		WithBaseKey("test"),
-		WithTiers(), // Empty tiers
+		WithFixedWindowStrategy(), // Empty tiers
 		WithBackend(mem),
 	)
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "at least one tier must be provided")
+	require.NoError(t, err) // Should work now because WithFixedWindowStrategy provides a default tier
 
 	// Test too many tiers
 	var tooManyTiers []TierConfig
@@ -435,28 +438,28 @@ func TestMultiTierLimiter_InvalidConfiguration(t *testing.T) {
 
 	_, err = New(
 		WithBaseKey("test"),
-		WithTiers(tooManyTiers...),
+		WithFixedWindowStrategy(tooManyTiers...),
 		WithBackend(mem),
 	)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "maximum 12 tiers allowed")
+	assert.Contains(t, err.Error(), "maximum 12 tiers")
 
 	// Test invalid interval
 	_, err = New(
 		WithBaseKey("test"),
-		WithTiers(TierConfig{
+		WithFixedWindowStrategy(TierConfig{
 			Interval: time.Second, // Less than MinInterval
 			Limit:    100,
 		}),
 		WithBackend(mem),
 	)
 	require.Error(t, err)
-	assert.Contains(t, err.Error(), "interval must be at least")
+	assert.Contains(t, err.Error(), "is below minimum")
 
 	// Test invalid limit
 	_, err = New(
 		WithBaseKey("test"),
-		WithTiers(TierConfig{
+		WithFixedWindowStrategy(TierConfig{
 			Interval: time.Minute,
 			Limit:    0, // Invalid limit
 		}),

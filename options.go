@@ -14,18 +14,20 @@ type Option func(*MultiTierConfig) error
 // WithFixedWindowStrategy configures the rate limiter to use fixed window strategy
 func WithFixedWindowStrategy(tiers ...TierConfig) Option {
 	return func(config *MultiTierConfig) error {
-		config.Strategy = StrategyFixedWindow
-
 		// Default tier if none provided
 		if len(tiers) == 0 {
-			config.Tiers = []TierConfig{
-				{
-					Interval: time.Minute,
-					Limit:    100,
+			config.PrimaryConfig = FixedWindowConfig{
+				Tiers: []TierConfig{
+					{
+						Interval: time.Minute,
+						Limit:    100,
+					},
 				},
 			}
 		} else {
-			config.Tiers = tiers
+			config.PrimaryConfig = FixedWindowConfig{
+				Tiers: tiers,
+			}
 		}
 
 		return nil
@@ -36,18 +38,17 @@ func WithFixedWindowStrategy(tiers ...TierConfig) Option {
 // If used with another strategy (like Fixed Window), it becomes the secondary smoother strategy
 func WithTokenBucketStrategy(burstSize int, refillRate float64) Option {
 	return func(config *MultiTierConfig) error {
+		tokenConfig := TokenBucketConfig{
+			BurstSize:  burstSize,
+			RefillRate: refillRate,
+		}
+
 		// If no primary strategy is set yet, set this as primary
-		if config.Strategy == "" {
-			config.Strategy = StrategyTokenBucket
-			config.PrimaryBurstSize = burstSize
-			config.PrimaryRefillRate = refillRate
-			config.Tiers = nil // Token bucket doesn't use tiers
+		if config.PrimaryConfig == nil {
+			config.PrimaryConfig = tokenConfig
 		} else {
 			// Set as secondary strategy
-			strategy := StrategyTokenBucket
-			config.SecondaryStrategy = &strategy
-			config.SecondaryBurstSize = burstSize
-			config.SecondaryRefillRate = refillRate
+			config.SecondaryConfig = tokenConfig
 		}
 
 		return nil
@@ -58,46 +59,47 @@ func WithTokenBucketStrategy(burstSize int, refillRate float64) Option {
 // If used with another strategy (like Fixed Window), it becomes the secondary smoother strategy
 func WithLeakyBucketStrategy(capacity int, leakRate float64) Option {
 	return func(config *MultiTierConfig) error {
+		leakyConfig := LeakyBucketConfig{
+			Capacity: capacity,
+			LeakRate: leakRate,
+		}
+
 		// If no primary strategy is set yet, set this as primary
-		if config.Strategy == "" {
-			config.Strategy = StrategyLeakyBucket
-			config.PrimaryCapacity = capacity
-			config.PrimaryLeakRate = leakRate
-			config.Tiers = nil // Leaky bucket doesn't use tiers
+		if config.PrimaryConfig == nil {
+			config.PrimaryConfig = leakyConfig
 		} else {
 			// Set as secondary strategy
-			strategy := StrategyLeakyBucket
-			config.SecondaryStrategy = &strategy
-			config.SecondaryCapacity = capacity
-			config.SecondaryLeakRate = leakRate
+			config.SecondaryConfig = leakyConfig
 		}
 
 		return nil
 	}
 }
 
-// WithPrimaryStrategy configures the primary rate limiting strategy (explicitly)
-func WithPrimaryStrategy(strategy StrategyType, tiers ...TierConfig) Option {
+// WithPrimaryStrategy configures the primary rate limiting strategy with custom configuration
+func WithPrimaryStrategy(strategyConfig StrategyConfig) Option {
 	return func(config *MultiTierConfig) error {
-		config.Strategy = strategy
+		if strategyConfig == nil {
+			return fmt.Errorf("primary strategy config cannot be nil")
+		}
+		config.PrimaryConfig = strategyConfig
+		return nil
+	}
+}
 
-		if strategy == StrategyFixedWindow {
-			// Default tier if none provided for fixed window
-			if len(tiers) == 0 {
-				config.Tiers = []TierConfig{
-					{
-						Interval: time.Minute,
-						Limit:    100,
-					},
-				}
-			} else {
-				config.Tiers = tiers
-			}
-		} else {
-			// For bucket strategies used as primary, no tiers needed
-			config.Tiers = nil
+// WithSecondaryStrategy configures the secondary smoother strategy
+func WithSecondaryStrategy(strategyConfig StrategyConfig) Option {
+	return func(config *MultiTierConfig) error {
+		if strategyConfig == nil {
+			return fmt.Errorf("secondary strategy config cannot be nil")
 		}
 
+		// Secondary strategy must be a bucket-based strategy
+		if strategyConfig.Type() != StrategyTokenBucket && strategyConfig.Type() != StrategyLeakyBucket {
+			return fmt.Errorf("secondary strategy must be token bucket or leaky bucket, got %s", strategyConfig.Type())
+		}
+
+		config.SecondaryConfig = strategyConfig
 		return nil
 	}
 }
@@ -106,17 +108,6 @@ func WithPrimaryStrategy(strategy StrategyType, tiers ...TierConfig) Option {
 func WithBaseKey(key string) Option {
 	return func(config *MultiTierConfig) error {
 		config.BaseKey = key
-		return nil
-	}
-}
-
-// WithTiers overrides the default tiers for any strategy
-func WithTiers(tiers ...TierConfig) Option {
-	return func(config *MultiTierConfig) error {
-		if len(tiers) == 0 {
-			return fmt.Errorf("at least one tier must be provided")
-		}
-		config.Tiers = tiers
 		return nil
 	}
 }
