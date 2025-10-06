@@ -72,77 +72,111 @@ func newMultiTierLimiter(config MultiTierConfig) (*MultiTierLimiter, error) {
 		strategies: make(map[string]strategies.Strategy),
 	}
 
-	// Create primary strategy(ies) based on the primary configuration
+	// Setup primary strategies
+	if err := limiter.setupPrimaryStrategies(config); err != nil {
+		return nil, err
+	}
+
+	// Setup secondary strategy if configured
+	if err := limiter.setupSecondaryStrategy(config); err != nil {
+		return nil, err
+	}
+
+	// Setup cleanup ticker if enabled
+	limiter.setupCleanupTicker(config)
+
+	return limiter, nil
+}
+
+// setupPrimaryStrategies creates the primary strategy(ies) based on the primary configuration
+func (m *MultiTierLimiter) setupPrimaryStrategies(config MultiTierConfig) error {
 	primaryConfig := config.PrimaryConfig
 	primaryStrategyType := primaryConfig.Type()
 
 	switch primaryStrategyType {
 	case StrategyTokenBucket, StrategyLeakyBucket:
-		// For bucket strategies as primary, create a single strategy instance
 		strategy, err := createStrategy(primaryStrategyType, config.Storage)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create %s strategy: %w", primaryStrategyType, err)
+			return fmt.Errorf("failed to create %s strategy: %w", primaryStrategyType, err)
 		}
-		limiter.strategies["default"] = strategy
+		m.strategies["default"] = strategy
 
 	case StrategyFixedWindow:
-		// For tier-based strategies, create a strategy for each tier
-		fixedWindowConfig, ok := primaryConfig.(FixedWindowConfig)
-		if !ok {
-			return nil, fmt.Errorf("invalid configuration type for fixed window strategy")
-		}
-
-		for _, tier := range fixedWindowConfig.Tiers {
-			tierName := getTierName(tier.Interval)
-
-			strategy, err := createStrategy(primaryStrategyType, config.Storage)
-			if err != nil {
-				return nil, fmt.Errorf("failed to create strategy for tier %s: %w", tierName, err)
-			}
-
-			limiter.strategies[tierName] = strategy
-		}
+		return m.setupFixedWindowStrategies(config, primaryStrategyType)
 
 	default:
-		return nil, fmt.Errorf("unsupported primary strategy type: %s", primaryStrategyType)
+		return fmt.Errorf("unsupported primary strategy type: %s", primaryStrategyType)
 	}
 
-	// Create secondary strategy if configured
-	if config.SecondaryConfig != nil {
-		secondaryStrategyType := config.SecondaryConfig.Type()
-		secondaryStrategy, err := createStrategy(secondaryStrategyType, config.Storage)
+	return nil
+}
+
+// setupFixedWindowStrategies creates strategies for each tier in fixed window configuration
+func (m *MultiTierLimiter) setupFixedWindowStrategies(config MultiTierConfig, primaryStrategyType StrategyType) error {
+	fixedWindowConfig, ok := config.PrimaryConfig.(FixedWindowConfig)
+	if !ok {
+		return fmt.Errorf("invalid configuration type for fixed window strategy")
+	}
+
+	for _, tier := range fixedWindowConfig.Tiers {
+		tierName := getTierName(tier.Interval)
+
+		strategy, err := createStrategy(primaryStrategyType, config.Storage)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create secondary strategy: %w", err)
+			return fmt.Errorf("failed to create strategy for tier %s: %w", tierName, err)
 		}
-		limiter.secondaryStrategy = secondaryStrategy
+
+		m.strategies[tierName] = strategy
 	}
 
-	// Start cleanup ticker if cleanup is enabled
-	if config.CleanupInterval > 0 {
-		limiter.cleanupStop = make(chan bool)
-		limiter.cleanupTicker = time.NewTicker(config.CleanupInterval)
+	return nil
+}
 
-		// Start cleanup goroutine
-		go func() {
-			for {
-				select {
-				case <-limiter.cleanupTicker.C:
-					// Perform cleanup for all strategies
-					for _, strategy := range limiter.strategies {
-						strategy.Cleanup(config.CleanupInterval * 2) // Cleanup locks older than 2x the interval
-					}
-					// Also cleanup secondary strategy if present
-					if limiter.secondaryStrategy != nil {
-						limiter.secondaryStrategy.Cleanup(config.CleanupInterval * 2)
-					}
-				case <-limiter.cleanupStop:
-					return
-				}
+// setupSecondaryStrategy creates the secondary strategy if configured
+func (m *MultiTierLimiter) setupSecondaryStrategy(config MultiTierConfig) error {
+	if config.SecondaryConfig == nil {
+		return nil
+	}
+
+	secondaryStrategyType := config.SecondaryConfig.Type()
+	secondaryStrategy, err := createStrategy(secondaryStrategyType, config.Storage)
+	if err != nil {
+		return fmt.Errorf("failed to create secondary strategy: %w", err)
+	}
+	m.secondaryStrategy = secondaryStrategy
+
+	return nil
+}
+
+// setupCleanupTicker starts the cleanup ticker if cleanup is enabled
+func (m *MultiTierLimiter) setupCleanupTicker(config MultiTierConfig) {
+	if config.CleanupInterval <= 0 {
+		return
+	}
+
+	m.cleanupStop = make(chan bool)
+	m.cleanupTicker = time.NewTicker(config.CleanupInterval)
+
+	go m.runCleanupRoutine(config.CleanupInterval)
+}
+
+// runCleanupRoutine runs the cleanup goroutine
+func (m *MultiTierLimiter) runCleanupRoutine(cleanupInterval time.Duration) {
+	for {
+		select {
+		case <-m.cleanupTicker.C:
+			// Perform cleanup for all strategies
+			for _, strategy := range m.strategies {
+				strategy.Cleanup(cleanupInterval * 2) // Cleanup locks older than 2x the interval
 			}
-		}()
+			// Also cleanup secondary strategy if present
+			if m.secondaryStrategy != nil {
+				m.secondaryStrategy.Cleanup(cleanupInterval * 2)
+			}
+		case <-m.cleanupStop:
+			return
+		}
 	}
-
-	return limiter, nil
 }
 
 // parseAccessOptions parses the provided access options and returns the configuration
