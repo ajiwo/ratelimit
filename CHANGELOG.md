@@ -2,26 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.0.4] - 2025-10-06
 
 ### Added
-- Detailed statistics for all rate limiting strategies including remaining capacity and reset times.
-- Multi-tier rate limiting with per-tier result tracking.
-- Secondary rate limiting strategy support for more flexible configurations
-- `AllowWithResult` method to return detailed rate limit statistics with Total and Used fields
-- TierResult with additional fields (Total, Used) for comprehensive rate limit information
+- Dual-strategy rate limiting with primary fixed-window (multi-tier) and secondary bucket-based strategies for combined rate limiting and traffic shaping
+- `strategies.AllowWithResult` method to return detailed rate limit statistics including Total and Used fields
+- `backends.CheckAndSet` atomic operation to backend interface for atomic operations
+- Strategy-specific configuration system with `ratelimit.StrategyConfig` interface and implementations 
 
 ### Changed
-- Refactor: Remove tiers from bucket strategy options and update logic
-- Refactor: Simplify MultiTierLimiter.Allow to delegate to AllowWithResult
-- Refactor: Modularize backend configuration and constructors, standardizing to New() function
+- Fixed Window strategy is now the only multi-tier capable strategy, as multi-tier bucket-based strategies were redundant
+- Removed multi-tier support from bucket-based strategies (leaky/token bucket) for cleaner architecture
+- Redesigned MultiTierConfig to use `ratelimit.PrimaryConfig` and `ratelimit.SecondaryConfig` fields instead of field-based strategy configuration
+- Moved validation logic from centralized validator to individual configuration structs for better modularity
+- Updated all examples to use AllowWithResult for better statistics
+- Refactored backend configuration with modular constructors standardized to New() function
+- Simplified MultiTierLimiter.Allow to delegate to AllowWithResult
 
 ### Fixed
 - Prevent panic when closing MultiTierLimiter with nil or closed channel
-- Update LeakyBucket strategy's AllowWithResult method logic
 
 ### Deprecated
-- Allow methods in favor of AllowWithResult for better performance and detailed results
+- `strategies.Allow` methods in favor of `strategies.AllowWithResult` for better performance and detailed results
 
 ## [0.0.3] - 2025-09-28
 

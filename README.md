@@ -17,8 +17,6 @@ This is a Go library that implements rate limiting functionality with multiple a
   - Dual strategy support (primary + secondary smoother)
   - Detailed statistics and result tracking
   - Dynamic key support for multi-tenant scenarios
-  - Automatic cleanup of stale data
-  - Comprehensive testing and race condition protection
 
 ## Installation
 
@@ -64,7 +62,7 @@ if err != nil {
 
 // Or get detailed results
 var results map[string]ratelimit.TierResult
-allowed, err = limiter.Allow(
+allowed, err := limiter.Allow(
     ratelimit.WithContext(ctx),
     ratelimit.WithResult(&results),
 )
@@ -132,9 +130,9 @@ for strategy, result := range results {
 ```
 
 **Dual Strategy Logic:**
-1. **Primary Strategy** (Fixed Window, etc.) provides hard rate limits
+1. **Primary Strategy** (Fixed Window) provides hard rate limits
 2. **Secondary Strategy** (Token/Leaky Bucket) acts as a smoother/request shaper
-3. **Request Flow:** Check primary first → If allowed, check secondary smoother
+3. **Request Flow:** Check primary first -> If allowed, check secondary smoother
 4. **Final Decision:** Both strategies must allow the request
 
 **Supported primary strategies:**
@@ -175,6 +173,7 @@ for strategy, result := range results {
 - Arbitrary time intervals are supported (30 seconds, 5 minutes, 2 hours, etc.)
 - Bucket strategies (Token Bucket, Leaky Bucket) don't use tiers
 - Fixed Window cannot be used as secondary strategy
+- Primary bucket-based strategy (Token/Leaky Bucket) cannot be combined with secondary strategy (only Fixed Window primary can have secondary)
 - Only one secondary strategy allowed per limiter
 
 **TierResult Structure:**
