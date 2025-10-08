@@ -24,6 +24,9 @@ func TestFixedWindow_ConcurrentAccessMemory(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
+	defer func() {
+		_ = limiter.Close()
+	}()
 
 	ctx := t.Context()
 
@@ -84,6 +87,9 @@ func TestFixedWindow_ConcurrentAccessPostgres(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
+	defer func() {
+		_ = limiter.Close()
+	}()
 
 	ctx := t.Context()
 
@@ -144,6 +150,9 @@ func TestFixedWindow_ConcurrentAccessRedis(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
+	defer func() {
+		_ = limiter.Close()
+	}()
 
 	ctx := t.Context()
 
@@ -201,6 +210,9 @@ func TestLeakyBucket_ConcurrentAccessMemory(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
+	defer func() {
+		_ = limiter.Close()
+	}()
 
 	ctx := t.Context()
 
@@ -258,6 +270,9 @@ func TestLeakyBucket_ConcurrentAccessPostgres(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
+	defer func() {
+		_ = limiter.Close()
+	}()
 
 	ctx := t.Context()
 
@@ -315,6 +330,9 @@ func TestLeakyBucket_ConcurrentAccessRedis(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
+	defer func() {
+		_ = limiter.Close()
+	}()
 
 	ctx := t.Context()
 
@@ -372,6 +390,9 @@ func TestTokenBucket_ConcurrentAccessMemory(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
+	defer func() {
+		_ = limiter.Close()
+	}()
 
 	ctx := t.Context()
 
@@ -429,6 +450,9 @@ func TestTokenBucket_ConcurrentAccessPostgres(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
+	defer func() {
+		_ = limiter.Close()
+	}()
 
 	ctx := t.Context()
 
@@ -486,6 +510,9 @@ func TestTokenBucket_ConcurrentAccessRedis(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
+	defer func() {
+		_ = limiter.Close()
+	}()
 
 	ctx := t.Context()
 
@@ -546,6 +573,9 @@ func TestFixedWindow_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
+	defer func() {
+		_ = limiter.Close()
+	}()
 
 	ctx := t.Context()
 
@@ -610,6 +640,9 @@ func TestFixedWindow_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
+	defer func() {
+		_ = limiter.Close()
+	}()
 
 	ctx := t.Context()
 
@@ -674,6 +707,9 @@ func TestFixedWindow_ConcurrentAccessRedisWithResult(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
+	defer func() {
+		_ = limiter.Close()
+	}()
 
 	ctx := t.Context()
 
@@ -735,6 +771,9 @@ func TestLeakyBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
+	defer func() {
+		_ = limiter.Close()
+	}()
 
 	ctx := t.Context()
 
@@ -796,6 +835,9 @@ func TestLeakyBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
+	defer func() {
+		_ = limiter.Close()
+	}()
 
 	ctx := t.Context()
 
@@ -857,6 +899,9 @@ func TestLeakyBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
+	defer func() {
+		_ = limiter.Close()
+	}()
 
 	ctx := t.Context()
 
@@ -918,6 +963,9 @@ func TestTokenBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
+	defer func() {
+		_ = limiter.Close()
+	}()
 
 	ctx := t.Context()
 
@@ -979,6 +1027,9 @@ func TestTokenBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
+	defer func() {
+		_ = limiter.Close()
+	}()
 
 	ctx := t.Context()
 
@@ -1040,6 +1091,9 @@ func TestTokenBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
+	defer func() {
+		_ = limiter.Close()
+	}()
 
 	ctx := t.Context()
 
