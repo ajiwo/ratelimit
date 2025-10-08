@@ -192,11 +192,6 @@ func decodeTokenBucket(s string) (TokenBucket, bool) {
 	}, true
 }
 
-// Cleanup removes stale locks
-func (t *TokenBucketStrategy) Cleanup(maxAge time.Duration) {
-	// No-op since we removed per-key locking
-}
-
 // calculateTBResetTime calculates when the bucket will have at least one full token
 func calculateTBResetTime(now time.Time, bucket TokenBucket) time.Time {
 	if bucket.Tokens >= 1.0 {

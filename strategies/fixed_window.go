@@ -179,11 +179,6 @@ func decodeFixedWindow(s string) (FixedWindow, bool) {
 	}, true
 }
 
-// Cleanup removes stale locks
-func (f *FixedWindowStrategy) Cleanup(maxAge time.Duration) {
-	// No-op since we removed per-key locking
-}
-
 // AllowWithResult checks if a request is allowed and returns detailed statistics
 func (f *FixedWindowStrategy) AllowWithResult(ctx context.Context, config any) (Result, error) {
 	// Type assert to FixedWindowConfig

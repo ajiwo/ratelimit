@@ -54,7 +54,4 @@ type Strategy interface {
 
 	// Reset resets the rate limit counter (mainly for testing)
 	Reset(ctx context.Context, config any) error
-
-	// Cleanup removes stale locks and data
-	Cleanup(maxAge time.Duration)
 }

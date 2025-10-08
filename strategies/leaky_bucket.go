@@ -191,11 +191,6 @@ func decodeLeakyBucket(s string) (LeakyBucket, bool) {
 	}, true
 }
 
-// Cleanup removes stale locks
-func (l *LeakyBucketStrategy) Cleanup(maxAge time.Duration) {
-	// No-op since we removed per-key locking
-}
-
 // calculateLBResetTime calculates when the bucket will have capacity for another request
 func calculateLBResetTime(now time.Time, bucket LeakyBucket, capacity int) time.Time {
 	if bucket.Requests < float64(capacity) {

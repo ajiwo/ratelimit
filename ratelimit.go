@@ -16,9 +16,6 @@ const (
 
 	// MinInterval is the minimum allowed interval for any tier
 	MinInterval = 5 * time.Second
-
-	// DefaultCleanupInterval is the default interval for cleaning up stale locks
-	DefaultCleanupInterval = 10 * time.Minute
 )
 
 // TierConfig defines a single tier in multi-tier rate limiting
@@ -54,10 +51,6 @@ type MultiTierLimiter struct {
 	strategies map[string]strategies.Strategy
 	// Secondary strategy for smoothing/shaping (optional)
 	secondaryStrategy strategies.Strategy
-
-	// Cleanup ticker for managing stale locks
-	cleanupTicker *time.Ticker
-	cleanupStop   chan bool
 }
 
 // newMultiTierLimiter creates a new multi-tier rate limiter
@@ -81,9 +74,6 @@ func newMultiTierLimiter(config MultiTierConfig) (*MultiTierLimiter, error) {
 	if err := limiter.setupSecondaryStrategy(config); err != nil {
 		return nil, err
 	}
-
-	// Setup cleanup ticker if enabled
-	limiter.setupCleanupTicker(config)
 
 	return limiter, nil
 }
@@ -146,37 +136,6 @@ func (m *MultiTierLimiter) setupSecondaryStrategy(config MultiTierConfig) error 
 	m.secondaryStrategy = secondaryStrategy
 
 	return nil
-}
-
-// setupCleanupTicker starts the cleanup ticker if cleanup is enabled
-func (m *MultiTierLimiter) setupCleanupTicker(config MultiTierConfig) {
-	if config.CleanupInterval <= 0 {
-		return
-	}
-
-	m.cleanupStop = make(chan bool)
-	m.cleanupTicker = time.NewTicker(config.CleanupInterval)
-
-	go m.runCleanupRoutine(config.CleanupInterval)
-}
-
-// runCleanupRoutine runs the cleanup goroutine
-func (m *MultiTierLimiter) runCleanupRoutine(cleanupInterval time.Duration) {
-	for {
-		select {
-		case <-m.cleanupTicker.C:
-			// Perform cleanup for all strategies
-			for _, strategy := range m.strategies {
-				strategy.Cleanup(cleanupInterval * 2) // Cleanup locks older than 2x the interval
-			}
-			// Also cleanup secondary strategy if present
-			if m.secondaryStrategy != nil {
-				m.secondaryStrategy.Cleanup(cleanupInterval * 2)
-			}
-		case <-m.cleanupStop:
-			return
-		}
-	}
 }
 
 // parseAccessOptions parses the provided access options and returns the configuration
@@ -534,19 +493,6 @@ func (m *MultiTierLimiter) Reset(opts ...AccessOption) error {
 
 // Close cleans up resources used by the rate limiter
 func (m *MultiTierLimiter) Close() error {
-	// Stop the cleanup ticker if it's running
-	if m.cleanupTicker != nil {
-		m.cleanupTicker.Stop()
-		if m.cleanupStop != nil {
-			select {
-			case <-m.cleanupStop:
-				// Channel already closed
-			default:
-				close(m.cleanupStop)
-			}
-		}
-	}
-
 	// Close the storage backend
 	if m.config.Storage != nil {
 		return m.config.Storage.Close()
@@ -558,8 +504,7 @@ func (m *MultiTierLimiter) Close() error {
 func New(opts ...Option) (*MultiTierLimiter, error) {
 	// Create default configuration
 	config := MultiTierConfig{
-		BaseKey:         "default",
-		CleanupInterval: DefaultCleanupInterval,
+		BaseKey: "default",
 	}
 
 	// Apply provided options

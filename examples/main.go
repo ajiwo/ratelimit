@@ -60,13 +60,6 @@ func main() {
 		log.Println(err)
 		os.Exit(1)
 	}
-
-	// Example 7: Custom cleanup interval
-	fmt.Println("\n=== Custom Cleanup Interval ===")
-	if err := customCleanupExample(); err != nil {
-		log.Println(err)
-		os.Exit(1)
-	}
 }
 
 func tokenBucketExample() error {
@@ -331,11 +324,11 @@ func dualStrategyExample() error {
 	// - Secondary: Token Bucket (smoother: 5 burst, 0.5 req/sec refill)
 	limiter, err := ratelimit.New(
 		ratelimit.WithBackend(memory.New()),
-		ratelimit.WithFixedWindowStrategy(                           // Primary: Hard limits
-			ratelimit.TierConfig{Interval: time.Minute, Limit: 10},  // 10 requests per minute
+		ratelimit.WithFixedWindowStrategy( // Primary: Hard limits
+			ratelimit.TierConfig{Interval: time.Minute, Limit: 10}, // 10 requests per minute
 			ratelimit.TierConfig{Interval: time.Hour, Limit: 50},   // 50 requests per hour
 		),
-		ratelimit.WithTokenBucketStrategy(5, 0.5),                   // Secondary: 5 burst, 0.5 req/sec refill
+		ratelimit.WithTokenBucketStrategy(5, 0.5), // Secondary: 5 burst, 0.5 req/sec refill
 		ratelimit.WithBaseKey("api:user:dual"),
 	)
 	if err != nil {
@@ -444,58 +437,6 @@ func dualStrategyExample() error {
 	fmt.Println("- Primary Fixed Window enforces hard caps (never exceeded)")
 	fmt.Println("- Secondary Token Bucket smooths bursts and controls request patterns")
 	fmt.Println("- Both strategies must allow for a request to be accepted")
-
-	return nil
-}
-
-func customCleanupExample() error {
-	// Create a rate limiter with a custom cleanup interval
-	limiter, err := ratelimit.New(
-		ratelimit.WithBackend(memory.New()),
-		ratelimit.WithFixedWindowStrategy(
-			ratelimit.TierConfig{
-				Interval: time.Second * 30, // 30 second window
-				Limit:    50,               // 50 requests per window
-			},
-		),
-		ratelimit.WithCleanupInterval(time.Minute*5), // Cleanup every 5 minutes
-		ratelimit.WithBaseKey("user:custom_cleanup:123"),
-	)
-	if err != nil {
-		return err
-	}
-	defer func() {
-		_ = limiter.Close()
-	}()
-
-	fmt.Println("Rate limiter created with 5-minute cleanup interval")
-	fmt.Println("Making requests...")
-
-	// Make a few requests
-	for i := range 10 {
-		var stats map[string]ratelimit.TierResult
-		allowed, err := limiter.Allow(
-			ratelimit.WithResult(&stats),
-			ratelimit.WithContext(context.Background()),
-		)
-		if err != nil {
-			return err
-		}
-
-		if allowed {
-			fmt.Printf("Request %d: ALLOWED\n", i+1)
-		} else {
-			fmt.Printf("Request %d: BLOCKED\n", i+1)
-		}
-
-		// Print stats for the first tier
-		for tierName, tierStats := range stats {
-			fmt.Printf("  Tier %s: remaining=%d, used=%d\n", tierName, tierStats.Remaining, tierStats.Used)
-			break // Just show the first tier for brevity
-		}
-
-		time.Sleep(100 * time.Millisecond)
-	}
 
 	return nil
 }

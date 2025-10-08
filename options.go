@@ -112,15 +112,6 @@ func WithBaseKey(key string) Option {
 	}
 }
 
-// WithCleanupInterval configures the interval for cleaning up stale locks
-// Set to 0 to disable automatic cleanup
-func WithCleanupInterval(interval time.Duration) Option {
-	return func(config *MultiTierConfig) error {
-		config.CleanupInterval = interval
-		return nil
-	}
-}
-
 // AccessOption defines a functional option for rate limiter access methods
 type AccessOption func(*accessOptions) error
 

@@ -37,7 +37,6 @@ func TestNew_WithOptions(t *testing.T) {
 		limiter, err := New(
 			WithBaseKey("test-key"),
 			WithFixedWindowStrategy(customTiers...),
-			WithCleanupInterval(time.Hour),
 			WithBackend(mem),
 		)
 		require.NoError(t, err)
@@ -53,11 +52,6 @@ func TestNew_WithOptions(t *testing.T) {
 		assert.Len(t, fixedWindowConfig.Tiers, 2)
 		assert.Equal(t, 5*time.Second, fixedWindowConfig.Tiers[0].Interval)
 		assert.Equal(t, 5, fixedWindowConfig.Tiers[0].Limit)
-
-		// Wait for cleanup to run
-		time.Sleep(time.Hour + time.Nanosecond)
-		synctest.Wait()
-		// the cleanup goroutine area should be covered at this point
 
 		err = limiter.Close()
 		require.NoError(t, err)

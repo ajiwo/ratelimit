@@ -150,7 +150,6 @@ for strategy, result := range results {
 - `WithPrimaryStrategy(strategyConfig)` - Explicitly set primary strategy with custom configuration
 - `WithSecondaryStrategy(strategyConfig)` - Explicitly set secondary smoother strategy
 - `WithBaseKey(key)` - Set the base key for rate limiting
-- `WithCleanupInterval(interval)` - Set cleanup interval for internal stale data
 
 **Access Options (for Allow method):**
 - `WithContext(ctx)` - Provide context for the operation

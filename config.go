@@ -2,7 +2,6 @@ package ratelimit
 
 import (
 	"fmt"
-	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
 )
@@ -132,7 +131,6 @@ type MultiTierConfig struct {
 	Storage         backends.Backend `json:"-"`
 	PrimaryConfig   StrategyConfig   `json:"primary_config"`
 	SecondaryConfig StrategyConfig   `json:"secondary_config,omitempty"`
-	CleanupInterval time.Duration    `json:"cleanup_interval"`
 }
 
 // Validate validates the entire multi-tier configuration
@@ -167,10 +165,6 @@ func (c MultiTierConfig) Validate() error {
 		if c.PrimaryConfig.Type() == StrategyTokenBucket || c.PrimaryConfig.Type() == StrategyLeakyBucket {
 			return fmt.Errorf("cannot use bucket strategy as primary when secondary strategy is also specified")
 		}
-	}
-
-	if c.CleanupInterval < 0 {
-		return fmt.Errorf("cleanup interval cannot be negative")
 	}
 
 	return nil
