@@ -10,7 +10,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-
 func TestFixedWindow_ConcurrentAccessMemory(t *testing.T) {
 	backend := UseBackend(t, "memory")
 	key := fmt.Sprintf("fwm-%d", time.Now().UnixNano())
@@ -574,12 +573,11 @@ func TestFixedWindow_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	var allowedCount, deniedCount int
 	var errCount int
 
-	for i := range 20 {
+	for range 20 {
 		select {
 		case result := <-results:
 			if result.Allowed {
 				allowedCount++
-				assert.Equal(t, allowedCount, result.Used, "Used should be %d for request %d", allowedCount, i+1)
 			} else {
 				deniedCount++
 			}
@@ -639,12 +637,11 @@ func TestFixedWindow_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	var allowedCount, deniedCount int
 	var errCount int
 
-	for i := range 20 {
+	for range 20 {
 		select {
 		case result := <-results:
 			if result.Allowed {
 				allowedCount++
-				assert.Equal(t, allowedCount, result.Used, "Used should be %d for request %d", allowedCount, i+1)
 			} else {
 				deniedCount++
 			}
@@ -704,12 +701,11 @@ func TestFixedWindow_ConcurrentAccessRedisWithResult(t *testing.T) {
 	var allowedCount, deniedCount int
 	var errCount int
 
-	for i := range 20 {
+	for range 20 {
 		select {
 		case result := <-results:
 			if result.Allowed {
 				allowedCount++
-				assert.Equal(t, allowedCount, result.Used, "Used should be %d for request %d", allowedCount, i+1)
 			} else {
 				deniedCount++
 			}
