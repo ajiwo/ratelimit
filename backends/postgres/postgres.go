@@ -146,27 +146,18 @@ func (p *PostgresStorage) CheckAndSet(ctx context.Context, key string, oldValue,
 			return false, err
 		}
 
-		// Only set if key doesn't exist
-		var count int
-		err = p.pool.QueryRow(ctx, `
-			SELECT COUNT(*)
-			FROM ratelimit_kv
-			WHERE key = $1 AND (expires_at IS NULL OR expires_at > NOW())
-		`, key).Scan(&count)
+		// Insert new key only if it doesn't exist (atomic operation)
+		result, err := p.pool.Exec(ctx, `
+			INSERT INTO ratelimit_kv (key, value, expires_at)
+			VALUES ($1, $2, $3)
+			ON CONFLICT (key) DO NOTHING
+		`, key, newStr, expiresAt)
 		if err != nil {
 			return false, err
 		}
 
-		if count > 0 {
-			return false, nil // Key exists
-		}
-
-		// Insert new key
-		_, err = p.pool.Exec(ctx, `
-			INSERT INTO ratelimit_kv (key, value, expires_at)
-			VALUES ($1, $2, $3)
-		`, key, newStr, expiresAt)
-		return err == nil, err
+		// Return true if a row was inserted, false if key already existed
+		return result.RowsAffected() > 0, nil
 	}
 
 	oldStr := fmt.Sprintf("%v", oldValue)
