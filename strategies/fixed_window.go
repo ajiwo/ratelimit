@@ -191,6 +191,11 @@ func (f *FixedWindowStrategy) AllowWithResult(ctx context.Context, config any) (
 
 	// Try atomic CheckAndSet operations first
 	for attempt := range checkAndSetRetries {
+		// Check if context is cancelled or timed out
+		if ctx.Err() != nil {
+			return Result{}, fmt.Errorf("context cancelled or timed out: %w", ctx.Err())
+		}
+
 		// Get current window state
 		data, err := f.storage.Get(ctx, fixedConfig.Key)
 		if err != nil {

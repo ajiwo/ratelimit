@@ -225,6 +225,11 @@ func (t *TokenBucketStrategy) AllowWithResult(ctx context.Context, config any) (
 
 	// Try atomic CheckAndSet operations first
 	for attempt := range checkAndSetRetries {
+		// Check if context is cancelled or timed out
+		if ctx.Err() != nil {
+			return Result{}, fmt.Errorf("context cancelled or timed out: %w", ctx.Err())
+		}
+
 		// Get current bucket state
 		data, err := t.storage.Get(ctx, tokenConfig.Key)
 		if err != nil {
