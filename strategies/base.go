@@ -8,7 +8,7 @@ import (
 
 const (
 	// checkAndSetRetries is the maximum number of retry attempts for CheckAndSet operations
-	checkAndSetRetries = 3
+	checkAndSetRetries = 3000
 )
 
 // checkV1Header validates that the string starts with "v1|"

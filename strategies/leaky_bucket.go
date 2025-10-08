@@ -294,9 +294,9 @@ func (l *LeakyBucketStrategy) AllowWithResult(ctx context.Context, config any) (
 			}
 			// If CheckAndSet failed, retry if we haven't exhausted attempts
 			if attempt < checkAndSetRetries-1 {
+				time.Sleep(time.Duration(3*(attempt+1)) * time.Microsecond)
 				continue
 			}
-			// Exhausted attempts, fall back to lock-based approach
 			break
 		} else {
 			// Request denied, return current remaining capacity
