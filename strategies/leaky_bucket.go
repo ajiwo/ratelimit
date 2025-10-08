@@ -48,11 +48,6 @@ func (l *LeakyBucketStrategy) GetResult(ctx context.Context, config any) (Result
 		return Result{}, fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
 	}
 
-	// Get per-key lock to prevent concurrent access to the same bucket
-	lock := l.getLock(leakyConfig.Key)
-	lock.Lock()
-	defer lock.Unlock()
-
 	now := time.Now()
 
 	// Get current bucket state
@@ -101,11 +96,6 @@ func (l *LeakyBucketStrategy) Reset(ctx context.Context, config any) error {
 	if !ok {
 		return fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
 	}
-
-	// Get per-key lock to prevent concurrent access to the same bucket
-	lock := l.getLock(leakyConfig.Key)
-	lock.Lock()
-	defer lock.Unlock()
 
 	// Delete the key from storage to reset the bucket
 	return l.storage.Delete(ctx, leakyConfig.Key)
@@ -203,98 +193,7 @@ func decodeLeakyBucket(s string) (LeakyBucket, bool) {
 
 // Cleanup removes stale locks
 func (l *LeakyBucketStrategy) Cleanup(maxAge time.Duration) {
-	l.CleanupLocks(maxAge)
-}
-
-// allowGMS checks if a request is allowed using the Get-Modify-Set pattern with locks.
-// This is the fallback method when CheckAndSet atomic operations fail after multiple retries.
-func (l *LeakyBucketStrategy) allowGMS(ctx context.Context, config any) (Result, error) {
-	// Type assert to LeakyBucketConfig
-	leakyConfig, ok := config.(LeakyBucketConfig)
-	if !ok {
-		return Result{}, fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
-	}
-
-	// Get per-key lock to prevent concurrent access to the same bucket
-	lock := l.getLock(leakyConfig.Key)
-	lock.Lock()
-	defer lock.Unlock()
-
-	capacity := float64(leakyConfig.Capacity)
-	leakRate := leakyConfig.LeakRate
-
-	now := time.Now()
-
-	// Get current bucket state
-	data, err := l.storage.Get(ctx, leakyConfig.Key)
-	if err != nil {
-		return Result{}, fmt.Errorf("failed to get bucket state: %w", err)
-	}
-
-	var bucket LeakyBucket
-	if data == "" {
-		// Initialize new bucket
-		bucket = LeakyBucket{
-			Requests: 0,
-			LastLeak: now,
-			Capacity: capacity,
-			LeakRate: leakRate,
-		}
-	} else {
-		// Parse existing bucket state (compact format only)
-		if b, ok := decodeLeakyBucket(data); ok {
-			bucket = b
-		} else {
-			return Result{}, fmt.Errorf("failed to parse bucket state: invalid encoding")
-		}
-
-		// Leak requests based on elapsed time
-		elapsed := now.Sub(bucket.LastLeak)
-		requestsToLeak := float64(elapsed.Nanoseconds()) * bucket.LeakRate / 1e9
-		bucket.Requests = max(bucket.Requests-requestsToLeak, 0)
-		bucket.LastLeak = now
-	}
-
-	// Calculate if request is allowed
-	allowed := bucket.Requests+1 <= float64(leakyConfig.Capacity)
-
-	// Calculate remaining capacity (before adding request if allowed)
-	remaining := max(leakyConfig.Capacity-int(bucket.Requests), 0)
-
-	// Only add request to bucket if allowed
-	if allowed {
-		// Add request to bucket
-		bucket.Requests += 1
-
-		// Update remaining after adding the request
-		remaining = max(leakyConfig.Capacity-int(bucket.Requests), 0)
-	}
-
-	// Save updated bucket state in compact format
-	bucketData := encodeLeakyBucket(bucket)
-	expiration := calcExpiration(leakyConfig.Capacity, leakyConfig.LeakRate)
-
-	// Save the bucket state
-	err = l.storage.Set(ctx, leakyConfig.Key, bucketData, expiration)
-	if err != nil {
-		return Result{}, fmt.Errorf("failed to save bucket state: %w", err)
-	}
-
-	// Calculate reset time - when bucket will have capacity for at least one more request
-	var resetTime time.Time
-	if allowed {
-		// When allowed, no specific reset needed, use current time
-		resetTime = now
-	} else {
-		// When denied, calculate when bucket will leak enough to allow a request
-		resetTime = calculateLBResetTime(now, bucket, leakyConfig.Capacity)
-	}
-
-	return Result{
-		Allowed:   allowed,
-		Remaining: remaining,
-		Reset:     resetTime,
-	}, nil
+	// No-op since we removed per-key locking
 }
 
 // calculateLBResetTime calculates when the bucket will have capacity for another request
@@ -423,6 +322,6 @@ func (l *LeakyBucketStrategy) AllowWithResult(ctx context.Context, config any) (
 		}
 	}
 
-	// CheckAndSet failed after checkAndSetRetries attempts, fall back to lock-based approach
-	return l.allowGMS(ctx, config)
+	// CheckAndSet failed after checkAndSetRetries attempts
+	return Result{}, fmt.Errorf("failed to update bucket state after %d attempts due to concurrent access", checkAndSetRetries)
 }

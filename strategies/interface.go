@@ -2,7 +2,6 @@ package strategies
 
 import (
 	"context"
-	"sync"
 	"time"
 )
 
@@ -38,13 +37,6 @@ type Result struct {
 	Allowed   bool      // Whether the request is allowed
 	Remaining int       // Remaining requests in the current window
 	Reset     time.Time // When the current window resets
-}
-
-// LockInfo tracks information about a lock for cleanup purposes
-type LockInfo struct {
-	mutex    *sync.Mutex
-	mu       sync.Mutex // protects lastUsed
-	lastUsed time.Time
 }
 
 // Strategy defines the interface for rate limiting strategies

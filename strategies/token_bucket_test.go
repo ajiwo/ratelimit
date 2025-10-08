@@ -6,7 +6,7 @@ import (
 	"testing/synctest"
 	"time"
 
-	_ "github.com/ajiwo/ratelimit/backends/memory"
+	"github.com/ajiwo/ratelimit/backends/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,7 +14,7 @@ import (
 func TestTokenBucket_GetResult(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
-		storage := testCreateMemoryStorage(t)
+		storage := memory.New()
 		strategy := NewTokenBucket(storage)
 
 		config := TokenBucketConfig{
@@ -67,7 +67,7 @@ func TestTokenBucket_GetResult(t *testing.T) {
 func TestTokenBucket_Reset(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
-		storage := testCreateMemoryStorage(t)
+		storage := memory.New()
 		strategy := NewTokenBucket(storage)
 
 		config := TokenBucketConfig{
@@ -112,7 +112,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 	t.Run("initial bucket should allow requests", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
-			storage := testCreateMemoryStorage(t)
+			storage := memory.New()
 			strategy := NewTokenBucket(storage)
 
 			config := TokenBucketConfig{
@@ -134,7 +134,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 	t.Run("should respect capacity limit", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
-			storage := testCreateMemoryStorage(t)
+			storage := memory.New()
 			strategy := NewTokenBucket(storage)
 
 			config := TokenBucketConfig{
@@ -164,7 +164,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 	t.Run("basic refill functionality", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
-			storage := testCreateMemoryStorage(t)
+			storage := memory.New()
 			strategy := NewTokenBucket(storage)
 
 			config := TokenBucketConfig{
@@ -203,7 +203,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 	t.Run("should handle multiple keys independently", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
-			storage := testCreateMemoryStorage(t)
+			storage := memory.New()
 			strategy := NewTokenBucket(storage)
 
 			config1 := TokenBucketConfig{
@@ -253,7 +253,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 	t.Run("fractional refill rate functionality", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
-			storage := testCreateMemoryStorage(t)
+			storage := memory.New()
 			strategy := NewTokenBucket(storage)
 
 			config := TokenBucketConfig{
@@ -291,7 +291,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 
 func TestTokenBucket_ConcurrentAccess(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		storage := testCreateMemoryStorage(t)
+		storage := memory.New()
 		strategy := NewTokenBucket(storage)
 
 		config := TokenBucketConfig{

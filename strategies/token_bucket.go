@@ -48,11 +48,6 @@ func (t *TokenBucketStrategy) GetResult(ctx context.Context, config any) (Result
 		return Result{}, fmt.Errorf("TokenBucket strategy requires TokenBucketConfig")
 	}
 
-	// Get per-key lock to prevent concurrent access to the same bucket
-	lock := t.getLock(tokenConfig.Key)
-	lock.Lock()
-	defer lock.Unlock()
-
 	now := time.Now()
 
 	// Get current bucket state
@@ -101,11 +96,6 @@ func (t *TokenBucketStrategy) Reset(ctx context.Context, config any) error {
 	if !ok {
 		return fmt.Errorf("TokenBucket strategy requires TokenBucketConfig")
 	}
-
-	// Get per-key lock to prevent concurrent access to the same bucket
-	lock := t.getLock(tokenConfig.Key)
-	lock.Lock()
-	defer lock.Unlock()
 
 	// Delete the key from storage to reset the bucket
 	return t.storage.Delete(ctx, tokenConfig.Key)
@@ -204,89 +194,7 @@ func decodeTokenBucket(s string) (TokenBucket, bool) {
 
 // Cleanup removes stale locks
 func (t *TokenBucketStrategy) Cleanup(maxAge time.Duration) {
-	t.CleanupLocks(maxAge)
-}
-
-// allowGMS checks if a request is allowed using the Get-Modify-Set pattern with locks.
-// This is the fallback method when CheckAndSet atomic operations fail after multiple retries.
-func (t *TokenBucketStrategy) allowGMS(ctx context.Context, config any) (Result, error) {
-	// Type assert to TokenBucketConfig
-	tokenConfig, ok := config.(TokenBucketConfig)
-	if !ok {
-		return Result{}, fmt.Errorf("TokenBucket strategy requires TokenBucketConfig")
-	}
-
-	// Get per-key lock to prevent concurrent access to the same bucket
-	lock := t.getLock(tokenConfig.Key)
-	lock.Lock()
-	defer lock.Unlock()
-
-	capacity := float64(tokenConfig.BurstSize)
-	refillRate := tokenConfig.RefillRate
-
-	now := time.Now()
-
-	// Get current bucket state
-	data, err := t.storage.Get(ctx, tokenConfig.Key)
-	if err != nil {
-		return Result{}, fmt.Errorf("failed to get bucket state: %w", err)
-	}
-
-	var bucket TokenBucket
-	if data == "" {
-		// Initialize new bucket
-		bucket = TokenBucket{
-			Tokens:     capacity,
-			LastRefill: now,
-			Capacity:   capacity,
-			RefillRate: refillRate,
-		}
-	} else {
-		// Parse existing bucket state (compact format only)
-		if b, ok := decodeTokenBucket(data); ok {
-			bucket = b
-		} else {
-			return Result{}, fmt.Errorf("failed to parse bucket state: invalid encoding")
-		}
-
-		// Refill tokens based on elapsed time
-		elapsed := now.Sub(bucket.LastRefill)
-		tokensToAdd := float64(elapsed.Nanoseconds()) * bucket.RefillRate / 1e9
-		bucket.Tokens = math.Min(bucket.Tokens+tokensToAdd, bucket.Capacity)
-		bucket.LastRefill = now
-	}
-
-	// Determine if request is allowed based on available tokens
-	allowed := math.Floor(bucket.Tokens) >= 1.0
-
-	// Calculate remaining tokens
-	remaining := max(int(bucket.Tokens), 0)
-
-	// Save updated bucket state in compact format
-	bucketData := encodeTokenBucket(bucket)
-	expiration := calcExpiration(tokenConfig.BurstSize, tokenConfig.RefillRate)
-
-	// Save the bucket state
-	err = t.storage.Set(ctx, tokenConfig.Key, bucketData, expiration)
-	if err != nil {
-		return Result{}, fmt.Errorf("failed to save bucket state: %w", err)
-	}
-
-	// Calculate reset time - when bucket will have at least one full token
-	var resetTime time.Time
-	if allowed {
-		// When allowed, no specific reset needed, use current time
-		resetTime = now
-	} else {
-		// When denied, calculate when bucket will have at least 1 token
-		resetTime = calculateTBResetTime(now, bucket)
-	}
-
-	return Result{
-		Allowed:   allowed,
-		Remaining: remaining,
-		Reset:     resetTime,
-	}, nil
+	// No-op since we removed per-key locking
 }
 
 // calculateTBResetTime calculates when the bucket will have at least one full token
@@ -415,6 +323,6 @@ func (t *TokenBucketStrategy) AllowWithResult(ctx context.Context, config any) (
 		}
 	}
 
-	// CheckAndSet failed after checkAndSetRetries attempts, fall back to lock-based approach
-	return t.allowGMS(ctx, config)
+	// CheckAndSet failed after checkAndSetRetries attempts
+	return Result{}, fmt.Errorf("failed to update bucket state after %d attempts due to concurrent access", checkAndSetRetries)
 }

@@ -8,8 +8,8 @@ import (
 )
 
 type MemoryStorage struct {
-	mu     sync.RWMutex
-	values map[string]memoryValue
+	locks  sync.Map // map[string]*sync.Mutex
+	values sync.Map // map[string]memoryValue
 }
 
 type memoryValue struct {
@@ -20,20 +20,29 @@ type memoryValue struct {
 // New initializes a new in-memory storage instance.
 func New() *MemoryStorage {
 	return &MemoryStorage{
-		values: make(map[string]memoryValue),
+		// sync.Map doesn't need initialization with make()
 	}
 }
 
-func (m *MemoryStorage) Get(ctx context.Context, key string) (string, error) {
-	m.mu.RLock()
-	defer m.mu.RUnlock()
+// getLock returns a mutex for the given key
+func (m *MemoryStorage) getLock(key string) *sync.Mutex {
+	actual, _ := m.locks.LoadOrStore(key, &sync.Mutex{})
+	return actual.(*sync.Mutex)
+}
 
-	val, exists := m.values[key]
+func (m *MemoryStorage) Get(ctx context.Context, key string) (string, error) {
+	lock := m.getLock(key)
+	lock.Lock()
+	defer lock.Unlock()
+
+	valAny, exists := m.values.Load(key)
 	if !exists {
 		return "", nil
 	}
 
+	val := valAny.(memoryValue)
 	if time.Now().After(val.expiration) {
+		m.values.Delete(key) // Clean up expired key
 		return "", nil
 	}
 
@@ -48,40 +57,55 @@ func (m *MemoryStorage) Get(ctx context.Context, key string) (string, error) {
 }
 
 func (m *MemoryStorage) Set(ctx context.Context, key string, value any, expiration time.Duration) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	lock := m.getLock(key)
+	lock.Lock()
+	defer lock.Unlock()
 
 	expirationTime := time.Now().Add(expiration)
-	m.values[key] = memoryValue{
+	m.values.Store(key, memoryValue{
 		value:      value,
 		expiration: expirationTime,
-	}
+	})
 
 	return nil
 }
 
 func (m *MemoryStorage) Delete(ctx context.Context, key string) error {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	lock := m.getLock(key)
+	lock.Lock()
+	defer lock.Unlock()
 
-	delete(m.values, key)
+	m.values.Delete(key)
 	return nil
 }
 
 func (m *MemoryStorage) cleanup() {
 	now := time.Now()
-	for key, val := range m.values {
+	var keysToDelete []string
+
+	// First pass: find expired keys
+	m.values.Range(func(key, valAny any) bool {
+		val := valAny.(memoryValue)
 		if now.After(val.expiration) {
-			delete(m.values, key)
+			keysToDelete = append(keysToDelete, key.(string))
 		}
+		return true
+	})
+
+	// Second pass: delete expired keys with their individual locks
+	for _, key := range keysToDelete {
+		lock := m.getLock(key)
+		lock.Lock()
+		m.values.Delete(key)
+		lock.Unlock()
 	}
 }
 
 func (m *MemoryStorage) Close() error {
 	// For in-memory storage, just clear the map and return nil
-	m.mu.Lock()
-	defer m.mu.Unlock()
-	m.values = make(map[string]memoryValue)
+	// Note: We don't need to acquire individual locks here since we're replacing the entire map
+	m.values = sync.Map{} // Clear the values map
+	m.locks = sync.Map{}  // Clear the locks map
 	return nil
 }
 
@@ -89,14 +113,20 @@ func (m *MemoryStorage) Close() error {
 // Returns true if the set was successful, false if value didn't match or key expired
 // oldValue=nil means "only set if key doesn't exist"
 func (m *MemoryStorage) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, expiration time.Duration) (bool, error) {
-	m.mu.Lock()
-	defer m.mu.Unlock()
+	lock := m.getLock(key)
+	lock.Lock()
+	defer lock.Unlock()
 
 	// Check if key exists and is not expired
-	val, exists := m.values[key]
-	if exists && time.Now().After(val.expiration) {
-		// Key has expired, treat as non-existent
-		exists = false
+	valAny, exists := m.values.Load(key)
+	var val memoryValue
+	if exists {
+		val = valAny.(memoryValue)
+		if time.Now().After(val.expiration) {
+			// Key has expired, treat as non-existent
+			exists = false
+			m.values.Delete(key)
+		}
 	}
 
 	if oldValue == nil {
@@ -107,10 +137,10 @@ func (m *MemoryStorage) CheckAndSet(ctx context.Context, key string, oldValue, n
 
 		// Set new value
 		expirationTime := time.Now().Add(expiration)
-		m.values[key] = memoryValue{
+		m.values.Store(key, memoryValue{
 			value:      newValue,
 			expiration: expirationTime,
-		}
+		})
 		return true, nil
 	}
 
@@ -129,10 +159,10 @@ func (m *MemoryStorage) CheckAndSet(ctx context.Context, key string, oldValue, n
 
 	// Value matches, update it
 	expirationTime := time.Now().Add(expiration)
-	m.values[key] = memoryValue{
+	m.values.Store(key, memoryValue{
 		value:      newValue,
 		expiration: expirationTime,
-	}
+	})
 
 	return true, nil
 }

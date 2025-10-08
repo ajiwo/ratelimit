@@ -47,11 +47,6 @@ func (f *FixedWindowStrategy) GetResult(ctx context.Context, config any) (Result
 		return Result{}, fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
 	}
 
-	// Get per-key lock to prevent concurrent access to the same window
-	lock := f.getLock(fixedConfig.Key)
-	lock.Lock()
-	defer lock.Unlock()
-
 	now := time.Now()
 
 	// Get current window state
@@ -106,11 +101,6 @@ func (f *FixedWindowStrategy) Reset(ctx context.Context, config any) error {
 	if !ok {
 		return fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
 	}
-
-	// Get per-key lock to prevent concurrent access to the same window
-	lock := f.getLock(fixedConfig.Key)
-	lock.Lock()
-	defer lock.Unlock()
 
 	// Delete the key from storage to reset the counter
 	return f.storage.Delete(ctx, fixedConfig.Key)
@@ -191,100 +181,7 @@ func decodeFixedWindow(s string) (FixedWindow, bool) {
 
 // Cleanup removes stale locks
 func (f *FixedWindowStrategy) Cleanup(maxAge time.Duration) {
-	f.CleanupLocks(maxAge)
-}
-
-// allowGMS checks if a request is allowed using the Get-Modify-Set pattern with locks.
-// This is the fallback method when CheckAndSet atomic operations fail after multiple retries.
-func (f *FixedWindowStrategy) allowGMS(ctx context.Context, config any) (Result, error) {
-	// Type assert to FixedWindowConfig
-	fixedConfig, ok := config.(FixedWindowConfig)
-	if !ok {
-		return Result{}, fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
-	}
-
-	// Get per-key lock to prevent concurrent access to the same window
-	lock := f.getLock(fixedConfig.Key)
-	lock.Lock()
-	defer lock.Unlock()
-
-	now := time.Now()
-
-	// Get current window state
-	data, err := f.storage.Get(ctx, fixedConfig.Key)
-	if err != nil {
-		return Result{}, fmt.Errorf("failed to get window state: %w", err)
-	}
-
-	var window FixedWindow
-	if data == "" {
-		// Initialize new window
-		window = FixedWindow{
-			Count:    0,
-			Start:    now,
-			Duration: fixedConfig.Window,
-		}
-	} else {
-		// Parse existing window state (compact format only)
-		if w, ok := decodeFixedWindow(data); ok {
-			window = w
-		} else {
-			return Result{}, fmt.Errorf("failed to parse window state: invalid encoding")
-		}
-
-		// Check if current window has expired
-		if now.Sub(window.Start) >= window.Duration {
-			// Start new window
-			window.Count = 0
-			window.Start = now
-			window.Duration = fixedConfig.Window
-		}
-	}
-
-	// Determine if request is allowed based on current count
-	allowed := window.Count < fixedConfig.Limit
-
-	// Calculate reset time
-	resetTime := window.Start.Add(window.Duration)
-
-	if allowed {
-		// Increment request count
-		window.Count += 1
-
-		// Calculate remaining after increment (subtract 1 for the request we just processed)
-		remaining := max(fixedConfig.Limit-window.Count, 0)
-
-		// Save updated window state in compact format
-		windowData := encodeFixedWindow(window)
-
-		// Save the updated window state with expiration set to window duration
-		err = f.storage.Set(ctx, fixedConfig.Key, windowData, window.Duration)
-		if err != nil {
-			return Result{}, fmt.Errorf("failed to save window state: %w", err)
-		}
-
-		return Result{
-			Allowed:   true,
-			Remaining: remaining,
-			Reset:     resetTime,
-		}, nil
-	} else {
-		// Request was denied, return original remaining count
-		remaining := max(fixedConfig.Limit-window.Count, 0)
-
-		// Save the current window state (even when denying, to handle window expiry)
-		windowData := encodeFixedWindow(window)
-		err = f.storage.Set(ctx, fixedConfig.Key, windowData, window.Duration)
-		if err != nil {
-			return Result{}, fmt.Errorf("failed to save window state: %w", err)
-		}
-
-		return Result{
-			Allowed:   false,
-			Remaining: remaining,
-			Reset:     resetTime,
-		}, nil
-	}
+	// No-op since we removed per-key locking
 }
 
 // AllowWithResult checks if a request is allowed and returns detailed statistics
@@ -396,8 +293,8 @@ func (f *FixedWindowStrategy) AllowWithResult(ctx context.Context, config any) (
 		}
 	}
 
-	// CheckAndSet failed after checkAndSetRetries attempts, fall back to lock-based approach
-	return f.allowGMS(ctx, config)
+	// CheckAndSet failed after checkAndSetRetries attempts
+	return Result{}, fmt.Errorf("failed to update window state after %d attempts due to concurrent access", checkAndSetRetries)
 }
 
 // CheckOnly checks if a request would be allowed without consuming quota

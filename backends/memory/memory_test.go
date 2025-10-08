@@ -9,12 +9,6 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestNewMemoryStorage(t *testing.T) {
-	storage := New()
-	require.NotNil(t, storage)
-	require.NotNil(t, storage.values)
-}
-
 func TestMemoryStorage_Get(t *testing.T) {
 	storage := New()
 	ctx := context.Background()
@@ -182,9 +176,7 @@ func TestMemoryStorage_cleanup(t *testing.T) {
 
 		time.Sleep(time.Millisecond * 20)
 
-		storage.mu.Lock()
-		storage.cleanup()
-		storage.mu.Unlock()
+		storage.cleanup() // cleanup() now handles its own locking
 
 		val, _ := storage.Get(ctx, "expired1")
 		require.Equal(t, "", val, "Expected expired1 to be cleaned up, got %q", val)
