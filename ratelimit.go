@@ -558,15 +558,7 @@ func (m *MultiTierLimiter) Close() error {
 func New(opts ...Option) (*MultiTierLimiter, error) {
 	// Create default configuration
 	config := MultiTierConfig{
-		BaseKey: "default",
-		PrimaryConfig: FixedWindowConfig{
-			Tiers: []TierConfig{
-				{
-					Interval: time.Minute,
-					Limit:    100,
-				},
-			},
-		},
+		BaseKey:         "default",
 		CleanupInterval: DefaultCleanupInterval,
 	}
 

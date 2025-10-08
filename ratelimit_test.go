@@ -16,6 +16,14 @@ func TestNew_DefaultConfiguration(t *testing.T) {
 	limiter, err := New()
 	require.Error(t, err)
 	require.Nil(t, limiter)
+	require.Contains(t, err.Error(), "storage backend cannot be nil")
+}
+func TestNew_DefaultNoStrategy(t *testing.T) {
+	backend := memory.New()
+	limiter, err := New(WithBackend(backend))
+	require.Error(t, err)
+	require.Nil(t, limiter)
+	require.Contains(t, err.Error(), "primary strategy config cannot be nil")
 }
 
 func TestNew_WithOptions(t *testing.T) {
