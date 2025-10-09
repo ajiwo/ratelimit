@@ -1,4 +1,4 @@
-package strategies
+package tokenbucket
 
 import (
 	"context"
@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
+	"github.com/ajiwo/ratelimit/strategies"
 )
 
 // TokenBucket represents the state of a token bucket
@@ -19,33 +20,38 @@ type TokenBucket struct {
 	RefillRate float64   `json:"refill_rate"` // tokens per second
 }
 
-// TokenBucketStrategy implements the token bucket rate limiting algorithm
-type TokenBucketStrategy struct {
-	BaseStrategy
+// Config extends RateLimitConfig for token bucket strategy
+type Config struct {
+	strategies.RateLimitConfig
+	BurstSize  int     // Maximum tokens the bucket can hold
+	RefillRate float64 // Tokens to add per second
 }
 
-func NewTokenBucket(storage backends.Backend) *TokenBucketStrategy {
-	return &TokenBucketStrategy{
-		BaseStrategy: BaseStrategy{
-			storage: storage,
-		},
+// Strategy implements the token bucket rate limiting algorithm
+type Strategy struct {
+	storage backends.Backend
+}
+
+func New(storage backends.Backend) *Strategy {
+	return &Strategy{
+		storage: storage,
 	}
 }
 
 // Allow checks if a request is allowed based on token bucket algorithm
 //
 // Deprecated: Use AllowWithResult instead. Allow will be removed in a future release.
-func (t *TokenBucketStrategy) Allow(ctx context.Context, config any) (bool, error) {
+func (t *Strategy) Allow(ctx context.Context, config any) (bool, error) {
 	result, err := t.AllowWithResult(ctx, config)
 	return result.Allowed, err
 }
 
 // GetResult returns detailed statistics for the current bucket state
-func (t *TokenBucketStrategy) GetResult(ctx context.Context, config any) (Result, error) {
+func (t *Strategy) GetResult(ctx context.Context, config any) (strategies.Result, error) {
 	// Type assert to TokenBucketConfig
-	tokenConfig, ok := config.(TokenBucketConfig)
+	tokenConfig, ok := config.(Config)
 	if !ok {
-		return Result{}, fmt.Errorf("TokenBucket strategy requires TokenBucketConfig")
+		return strategies.Result{}, fmt.Errorf("TokenBucket strategy requires TokenBucketConfig")
 	}
 
 	now := time.Now()
@@ -53,13 +59,13 @@ func (t *TokenBucketStrategy) GetResult(ctx context.Context, config any) (Result
 	// Get current bucket state
 	data, err := t.storage.Get(ctx, tokenConfig.Key)
 	if err != nil {
-		return Result{}, fmt.Errorf("failed to get bucket state: %w", err)
+		return strategies.Result{}, fmt.Errorf("failed to get bucket state: %w", err)
 	}
 
 	var bucket TokenBucket
 	if data == "" {
 		// No existing bucket, return default state
-		return Result{
+		return strategies.Result{
 			Allowed:   true,
 			Remaining: tokenConfig.BurstSize,
 			Reset:     now, // Token buckets don't have a reset time, they continuously refill
@@ -70,7 +76,7 @@ func (t *TokenBucketStrategy) GetResult(ctx context.Context, config any) (Result
 	if b, ok := decodeTokenBucket(data); ok {
 		bucket = b
 	} else {
-		return Result{}, fmt.Errorf("failed to parse bucket state: invalid encoding")
+		return strategies.Result{}, fmt.Errorf("failed to parse bucket state: invalid encoding")
 	}
 
 	// Refill tokens based on time elapsed
@@ -82,7 +88,7 @@ func (t *TokenBucketStrategy) GetResult(ctx context.Context, config any) (Result
 	// Calculate remaining requests (floor of available tokens)
 	remaining := max(int(bucket.Tokens), 0)
 
-	return Result{
+	return strategies.Result{
 		Allowed:   remaining > 0,
 		Remaining: remaining,
 		Reset:     now, // Token buckets don't have a reset time
@@ -90,9 +96,9 @@ func (t *TokenBucketStrategy) GetResult(ctx context.Context, config any) (Result
 }
 
 // Reset resets the token bucket counter for the given key
-func (t *TokenBucketStrategy) Reset(ctx context.Context, config any) error {
+func (t *Strategy) Reset(ctx context.Context, config any) error {
 	// Type assert to TokenBucketConfig
-	tokenConfig, ok := config.(TokenBucketConfig)
+	tokenConfig, ok := config.(Config)
 	if !ok {
 		return fmt.Errorf("TokenBucket strategy requires TokenBucketConfig")
 	}
@@ -173,7 +179,7 @@ func parseTokenBucketFields(data string) (float64, int64, float64, float64, bool
 
 // decodeTokenBucket deserializes from compact format; returns ok=false if not compact.
 func decodeTokenBucket(s string) (TokenBucket, bool) {
-	if !checkV1Header(s) {
+	if !strategies.CheckV1Header(s) {
 		return TokenBucket{}, false
 	}
 
@@ -211,11 +217,11 @@ func calculateTBResetTime(now time.Time, bucket TokenBucket) time.Time {
 }
 
 // AllowWithResult checks if a request is allowed and returns detailed statistics
-func (t *TokenBucketStrategy) AllowWithResult(ctx context.Context, config any) (Result, error) {
+func (t *Strategy) AllowWithResult(ctx context.Context, config any) (strategies.Result, error) {
 	// Type assert to TokenBucketConfig
-	tokenConfig, ok := config.(TokenBucketConfig)
+	tokenConfig, ok := config.(Config)
 	if !ok {
-		return Result{}, fmt.Errorf("TokenBucket strategy requires TokenBucketConfig")
+		return strategies.Result{}, fmt.Errorf("TokenBucket strategy requires TokenBucketConfig")
 	}
 
 	capacity := float64(tokenConfig.BurstSize)
@@ -224,16 +230,16 @@ func (t *TokenBucketStrategy) AllowWithResult(ctx context.Context, config any) (
 	now := time.Now()
 
 	// Try atomic CheckAndSet operations first
-	for attempt := range checkAndSetRetries {
+	for attempt := range strategies.CheckAndSetRetries {
 		// Check if context is cancelled or timed out
 		if ctx.Err() != nil {
-			return Result{}, fmt.Errorf("context cancelled or timed out: %w", ctx.Err())
+			return strategies.Result{}, fmt.Errorf("context cancelled or timed out: %w", ctx.Err())
 		}
 
 		// Get current bucket state
 		data, err := t.storage.Get(ctx, tokenConfig.Key)
 		if err != nil {
-			return Result{}, fmt.Errorf("failed to get bucket state: %w", err)
+			return strategies.Result{}, fmt.Errorf("failed to get bucket state: %w", err)
 		}
 
 		var bucket TokenBucket
@@ -252,7 +258,7 @@ func (t *TokenBucketStrategy) AllowWithResult(ctx context.Context, config any) (
 			if b, ok := decodeTokenBucket(data); ok {
 				bucket = b
 			} else {
-				return Result{}, fmt.Errorf("failed to parse bucket state: invalid encoding")
+				return strategies.Result{}, fmt.Errorf("failed to parse bucket state: invalid encoding")
 			}
 			oldValue = data // Current value for CheckAndSet
 
@@ -277,24 +283,24 @@ func (t *TokenBucketStrategy) AllowWithResult(ctx context.Context, config any) (
 			newValue := encodeTokenBucket(bucket)
 
 			// Use a reasonable expiration time (based on burst size and refill rate)
-			expiration := calcExpiration(tokenConfig.BurstSize, tokenConfig.RefillRate)
+			expiration := strategies.CalcExpiration(tokenConfig.BurstSize, tokenConfig.RefillRate)
 
 			// Use CheckAndSet for atomic update
 			success, err := t.storage.CheckAndSet(ctx, tokenConfig.Key, oldValue, newValue, expiration)
 			if err != nil {
-				return Result{}, fmt.Errorf("failed to save bucket state: %w", err)
+				return strategies.Result{}, fmt.Errorf("failed to save bucket state: %w", err)
 			}
 
 			if success {
 				// Atomic update succeeded
-				return Result{
+				return strategies.Result{
 					Allowed:   true,
 					Remaining: remaining,
 					Reset:     now, // When allowed, no specific reset needed
 				}, nil
 			}
 			// If CheckAndSet failed, retry if we haven't exhausted attempts
-			if attempt < checkAndSetRetries-1 {
+			if attempt < strategies.CheckAndSetRetries-1 {
 				time.Sleep(time.Duration(3*(attempt+1)) * time.Microsecond)
 				continue
 			}
@@ -305,17 +311,17 @@ func (t *TokenBucketStrategy) AllowWithResult(ctx context.Context, config any) (
 
 			// Save the current bucket state (even when denying, to handle token refills)
 			bucketData := encodeTokenBucket(bucket)
-			expiration := calcExpiration(tokenConfig.BurstSize, tokenConfig.RefillRate)
+			expiration := strategies.CalcExpiration(tokenConfig.BurstSize, tokenConfig.RefillRate)
 
 			// If this was a new bucket (rare case), set it
 			if oldValue == nil {
 				_, err := t.storage.CheckAndSet(ctx, tokenConfig.Key, oldValue, bucketData, expiration)
 				if err != nil {
-					return Result{}, fmt.Errorf("failed to initialize bucket state: %w", err)
+					return strategies.Result{}, fmt.Errorf("failed to initialize bucket state: %w", err)
 				}
 			}
 
-			return Result{
+			return strategies.Result{
 				Allowed:   false,
 				Remaining: remaining,
 				Reset:     calculateTBResetTime(now, bucket),
@@ -324,5 +330,5 @@ func (t *TokenBucketStrategy) AllowWithResult(ctx context.Context, config any) (
 	}
 
 	// CheckAndSet failed after checkAndSetRetries attempts
-	return Result{}, fmt.Errorf("failed to update bucket state after %d attempts due to concurrent access", checkAndSetRetries)
+	return strategies.Result{}, fmt.Errorf("failed to update bucket state after %d attempts due to concurrent access", strategies.CheckAndSetRetries)
 }

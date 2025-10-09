@@ -1,4 +1,4 @@
-package strategies
+package leakybucket
 
 import (
 	"testing"
@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends/memory"
+	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,10 +15,10 @@ func TestLeakyBucketAllow(t *testing.T) {
 	ctx := t.Context()
 	storage := memory.New()
 
-	strategy := NewLeakyBucket(storage)
+	strategy := New(storage)
 
-	config := LeakyBucketConfig{
-		RateLimitConfig: RateLimitConfig{
+	config := Config{
+		RateLimitConfig: strategies.RateLimitConfig{
 			Key:   "test-user",
 			Limit: 10,
 		},
@@ -43,10 +44,10 @@ func TestLeakyBucketLeak(t *testing.T) {
 		ctx := t.Context()
 		storage := memory.New()
 
-		strategy := NewLeakyBucket(storage)
+		strategy := New(storage)
 
-		config := LeakyBucketConfig{
-			RateLimitConfig: RateLimitConfig{
+		config := Config{
+			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   "test-user-2",
 				Limit: 10,
 			},
@@ -80,10 +81,10 @@ func TestLeakyBucketLeak(t *testing.T) {
 func TestLeakyBucketGetResult(t *testing.T) {
 	ctx := t.Context()
 	storage := memory.New()
-	strategy := NewLeakyBucket(storage)
+	strategy := New(storage)
 
-	config := LeakyBucketConfig{
-		RateLimitConfig: RateLimitConfig{
+	config := Config{
+		RateLimitConfig: strategies.RateLimitConfig{
 			Key:   "result-test-user",
 			Limit: 10,
 		},
@@ -125,7 +126,7 @@ func TestLeakyBucketGetResult(t *testing.T) {
 	assert.False(t, allowed, "Request should be denied when bucket is full")
 
 	// Test invalid config type
-	_, err = strategy.GetResult(ctx, TokenBucketConfig{})
+	_, err = strategy.GetResult(ctx, struct{}{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "LeakyBucket strategy requires LeakyBucketConfig")
 }
@@ -133,10 +134,10 @@ func TestLeakyBucketGetResult(t *testing.T) {
 func TestLeakyBucketReset(t *testing.T) {
 	ctx := t.Context()
 	storage := memory.New()
-	strategy := NewLeakyBucket(storage)
+	strategy := New(storage)
 
-	config := LeakyBucketConfig{
-		RateLimitConfig: RateLimitConfig{
+	config := Config{
+		RateLimitConfig: strategies.RateLimitConfig{
 			Key:   "reset-test-user",
 			Limit: 10,
 		},
@@ -166,7 +167,7 @@ func TestLeakyBucketReset(t *testing.T) {
 	assert.True(t, allowed, "Request should be allowed after reset")
 
 	// Test invalid config type
-	err = strategy.Reset(ctx, TokenBucketConfig{})
+	err = strategy.Reset(ctx, struct{}{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "LeakyBucket strategy requires LeakyBucketConfig")
 }
@@ -175,10 +176,10 @@ func TestLeakyBucketInvalidConfig(t *testing.T) {
 	ctx := t.Context()
 	storage := memory.New()
 
-	strategy := NewLeakyBucket(storage)
+	strategy := New(storage)
 
 	// Try with wrong config type
-	result, err := strategy.AllowWithResult(ctx, TokenBucketConfig{})
+	result, err := strategy.AllowWithResult(ctx, struct{}{})
 	assert.Error(t, err)
 	assert.False(t, result.Allowed)
 	assert.Contains(t, err.Error(), "LeakyBucket strategy requires LeakyBucketConfig")

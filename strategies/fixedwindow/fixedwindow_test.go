@@ -1,4 +1,4 @@
-package strategies
+package fixedwindow
 
 import (
 	"sync"
@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends/memory"
+	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -14,10 +15,10 @@ import (
 func TestFixedWindow_Allow(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := memory.New()
-		strategy := NewFixedWindow(storage)
+		strategy := New(storage)
 
-		config := FixedWindowConfig{
-			RateLimitConfig: RateLimitConfig{
+		config := Config{
+			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   "test-key",
 				Limit: 5,
 			},
@@ -43,10 +44,10 @@ func TestFixedWindow_Allow(t *testing.T) {
 func TestFixedWindow_WindowReset(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := memory.New()
-		strategy := NewFixedWindow(storage)
+		strategy := New(storage)
 
-		config := FixedWindowConfig{
-			RateLimitConfig: RateLimitConfig{
+		config := Config{
+			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   "test-key",
 				Limit: 2,
 			},
@@ -81,18 +82,18 @@ func TestFixedWindow_WindowReset(t *testing.T) {
 func TestFixedWindow_MultipleKeys(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := memory.New()
-		strategy := NewFixedWindow(storage)
+		strategy := New(storage)
 
-		config1 := FixedWindowConfig{
-			RateLimitConfig: RateLimitConfig{
+		config1 := Config{
+			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   "user1",
 				Limit: 1,
 			},
 			Window: time.Minute,
 		}
 
-		config2 := FixedWindowConfig{
-			RateLimitConfig: RateLimitConfig{
+		config2 := Config{
+			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   "user2",
 				Limit: 1,
 			},
@@ -120,12 +121,12 @@ func TestFixedWindow_MultipleKeys(t *testing.T) {
 
 func TestFixedWindow_InvalidConfig(t *testing.T) {
 	storage := memory.New()
-	strategy := NewFixedWindow(storage)
+	strategy := New(storage)
 
 	ctx := t.Context()
 
 	// Test with wrong config type
-	result, err := strategy.AllowWithResult(ctx, TokenBucketConfig{})
+	result, err := strategy.AllowWithResult(ctx, struct{}{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "requires FixedWindowConfig")
 	assert.False(t, result.Allowed)
@@ -134,10 +135,10 @@ func TestFixedWindow_InvalidConfig(t *testing.T) {
 func TestFixedWindow_ZeroLimit(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := memory.New()
-		strategy := NewFixedWindow(storage)
+		strategy := New(storage)
 
-		config := FixedWindowConfig{
-			RateLimitConfig: RateLimitConfig{
+		config := Config{
+			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   "test-key",
 				Limit: 0,
 			},
@@ -156,10 +157,10 @@ func TestFixedWindow_ZeroLimit(t *testing.T) {
 func TestFixedWindow_GetResult(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := memory.New()
-		strategy := NewFixedWindow(storage)
+		strategy := New(storage)
 
-		config := FixedWindowConfig{
-			RateLimitConfig: RateLimitConfig{
+		config := Config{
+			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   "result-test-key",
 				Limit: 5,
 			},
@@ -207,7 +208,7 @@ func TestFixedWindow_GetResult(t *testing.T) {
 		assert.Equal(t, 0, result.Remaining, "Remaining should be 0 when at limit")
 
 		// Test invalid config type
-		_, err = strategy.GetResult(ctx, TokenBucketConfig{})
+		_, err = strategy.GetResult(ctx, struct{}{})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "requires FixedWindowConfig")
 	})
@@ -216,10 +217,10 @@ func TestFixedWindow_GetResult(t *testing.T) {
 func TestFixedWindow_Reset(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := memory.New()
-		strategy := NewFixedWindow(storage)
+		strategy := New(storage)
 
-		config := FixedWindowConfig{
-			RateLimitConfig: RateLimitConfig{
+		config := Config{
+			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   "reset-test-key",
 				Limit: 2,
 			},
@@ -250,7 +251,7 @@ func TestFixedWindow_Reset(t *testing.T) {
 		assert.True(t, result.Allowed, "Request after reset should be allowed")
 
 		// Test invalid config type
-		err = strategy.Reset(ctx, TokenBucketConfig{})
+		err = strategy.Reset(ctx, struct{}{})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "requires FixedWindowConfig")
 	})
@@ -259,10 +260,10 @@ func TestFixedWindow_Reset(t *testing.T) {
 func TestFixedWindow_ConcurrentAccess(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := memory.New()
-		strategy := NewFixedWindow(storage)
+		strategy := New(storage)
 
-		config := FixedWindowConfig{
-			RateLimitConfig: RateLimitConfig{
+		config := Config{
+			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   "concurrent-key",
 				Limit: 5,
 			},
@@ -312,10 +313,10 @@ func TestFixedWindow_ConcurrentAccess(t *testing.T) {
 func TestFixedWindow_PreciseTiming(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := memory.New()
-		strategy := NewFixedWindow(storage)
+		strategy := New(storage)
 
-		config := FixedWindowConfig{
-			RateLimitConfig: RateLimitConfig{
+		config := Config{
+			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   "timing-key",
 				Limit: 3,
 			},

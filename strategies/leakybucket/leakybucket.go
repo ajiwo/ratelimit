@@ -1,4 +1,4 @@
-package strategies
+package leakybucket
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
+	"github.com/ajiwo/ratelimit/strategies"
 )
 
 // LeakyBucket represents the state of a leaky bucket
@@ -18,34 +19,39 @@ type LeakyBucket struct {
 	LeakRate float64   `json:"leak_rate"` // Requests to leak per second
 }
 
-// LeakyBucketStrategy implements the leaky bucket rate limiting algorithm
-type LeakyBucketStrategy struct {
-	BaseStrategy
+// Config extends RateLimitConfig for leaky bucket strategy
+type Config struct {
+	strategies.RateLimitConfig
+	Capacity int     // Maximum requests the bucket can hold
+	LeakRate float64 // Requests to process per second
 }
 
-// NewLeakyBucket creates a new leaky bucket strategy
-func NewLeakyBucket(storage backends.Backend) *LeakyBucketStrategy {
-	return &LeakyBucketStrategy{
-		BaseStrategy: BaseStrategy{
-			storage: storage,
-		},
+// Strategy implements the leaky bucket rate limiting algorithm
+type Strategy struct {
+	storage backends.Backend
+}
+
+// New creates a new leaky bucket strategy
+func New(storage backends.Backend) *Strategy {
+	return &Strategy{
+		storage: storage,
 	}
 }
 
 // Allow checks if a request is allowed based on leaky bucket algorithm
 //
 // Deprecated: Use AllowWithResult instead. Allow will be removed in a future release.
-func (l *LeakyBucketStrategy) Allow(ctx context.Context, config any) (bool, error) {
+func (l *Strategy) Allow(ctx context.Context, config any) (bool, error) {
 	result, err := l.AllowWithResult(ctx, config)
 	return result.Allowed, err
 }
 
 // GetResult returns detailed statistics for the current bucket state
-func (l *LeakyBucketStrategy) GetResult(ctx context.Context, config any) (Result, error) {
+func (l *Strategy) GetResult(ctx context.Context, config any) (strategies.Result, error) {
 	// Type assert to LeakyBucketConfig
-	leakyConfig, ok := config.(LeakyBucketConfig)
+	leakyConfig, ok := config.(Config)
 	if !ok {
-		return Result{}, fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
+		return strategies.Result{}, fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
 	}
 
 	now := time.Now()
@@ -53,13 +59,13 @@ func (l *LeakyBucketStrategy) GetResult(ctx context.Context, config any) (Result
 	// Get current bucket state
 	data, err := l.storage.Get(ctx, leakyConfig.Key)
 	if err != nil {
-		return Result{}, fmt.Errorf("failed to get bucket state: %w", err)
+		return strategies.Result{}, fmt.Errorf("failed to get bucket state: %w", err)
 	}
 
 	var bucket LeakyBucket
 	if data == "" {
 		// No existing bucket, return default state
-		return Result{
+		return strategies.Result{
 			Allowed:   true,
 			Remaining: leakyConfig.Capacity,
 			Reset:     now, // Leaky buckets don't have a reset time, they continuously leak
@@ -70,7 +76,7 @@ func (l *LeakyBucketStrategy) GetResult(ctx context.Context, config any) (Result
 	if b, ok := decodeLeakyBucket(data); ok {
 		bucket = b
 	} else {
-		return Result{}, fmt.Errorf("failed to parse bucket state: invalid encoding")
+		return strategies.Result{}, fmt.Errorf("failed to parse bucket state: invalid encoding")
 	}
 
 	// Leak requests based on time elapsed
@@ -82,7 +88,7 @@ func (l *LeakyBucketStrategy) GetResult(ctx context.Context, config any) (Result
 	// Calculate remaining capacity
 	remaining := max(leakyConfig.Capacity-int(bucket.Requests), 0)
 
-	return Result{
+	return strategies.Result{
 		Allowed:   remaining > 0,
 		Remaining: remaining,
 		Reset:     now, // Leaky buckets don't have a reset time
@@ -90,9 +96,9 @@ func (l *LeakyBucketStrategy) GetResult(ctx context.Context, config any) (Result
 }
 
 // Reset resets the leaky bucket counter for the given key
-func (l *LeakyBucketStrategy) Reset(ctx context.Context, config any) error {
+func (l *Strategy) Reset(ctx context.Context, config any) error {
 	// Type assert to LeakyBucketConfig
-	leakyConfig, ok := config.(LeakyBucketConfig)
+	leakyConfig, ok := config.(Config)
 	if !ok {
 		return fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
 	}
@@ -172,7 +178,7 @@ func parseLeakyBucketFields(data string) (float64, int64, float64, float64, bool
 
 // decodeLeakyBucket deserializes from compact format; returns ok=false if not compact.
 func decodeLeakyBucket(s string) (LeakyBucket, bool) {
-	if !checkV1Header(s) {
+	if !strategies.CheckV1Header(s) {
 		return LeakyBucket{}, false
 	}
 
@@ -210,11 +216,11 @@ func calculateLBResetTime(now time.Time, bucket LeakyBucket, capacity int) time.
 }
 
 // AllowWithResult checks if a request is allowed and returns detailed statistics
-func (l *LeakyBucketStrategy) AllowWithResult(ctx context.Context, config any) (Result, error) {
+func (l *Strategy) AllowWithResult(ctx context.Context, config any) (strategies.Result, error) {
 	// Type assert to LeakyBucketConfig
-	leakyConfig, ok := config.(LeakyBucketConfig)
+	leakyConfig, ok := config.(Config)
 	if !ok {
-		return Result{}, fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
+		return strategies.Result{}, fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
 	}
 
 	capacity := float64(leakyConfig.Capacity)
@@ -223,16 +229,16 @@ func (l *LeakyBucketStrategy) AllowWithResult(ctx context.Context, config any) (
 	now := time.Now()
 
 	// Try atomic CheckAndSet operations first
-	for attempt := range checkAndSetRetries {
+	for attempt := range strategies.CheckAndSetRetries {
 		// Check if context is cancelled or timed out
 		if ctx.Err() != nil {
-			return Result{}, fmt.Errorf("context cancelled or timed out: %w", ctx.Err())
+			return strategies.Result{}, fmt.Errorf("context cancelled or timed out: %w", ctx.Err())
 		}
 
 		// Get current bucket state
 		data, err := l.storage.Get(ctx, leakyConfig.Key)
 		if err != nil {
-			return Result{}, fmt.Errorf("failed to get bucket state: %w", err)
+			return strategies.Result{}, fmt.Errorf("failed to get bucket state: %w", err)
 		}
 
 		var bucket LeakyBucket
@@ -251,7 +257,7 @@ func (l *LeakyBucketStrategy) AllowWithResult(ctx context.Context, config any) (
 			if b, ok := decodeLeakyBucket(data); ok {
 				bucket = b
 			} else {
-				return Result{}, fmt.Errorf("failed to parse bucket state: invalid encoding")
+				return strategies.Result{}, fmt.Errorf("failed to parse bucket state: invalid encoding")
 			}
 			oldValue = data // Current value for CheckAndSet
 
@@ -276,24 +282,24 @@ func (l *LeakyBucketStrategy) AllowWithResult(ctx context.Context, config any) (
 			newValue := encodeLeakyBucket(bucket)
 
 			// Use a reasonable expiration time (based on capacity and leak rate)
-			expiration := calcExpiration(leakyConfig.Capacity, leakyConfig.LeakRate)
+			expiration := strategies.CalcExpiration(leakyConfig.Capacity, leakyConfig.LeakRate)
 
 			// Use CheckAndSet for atomic update
 			success, err := l.storage.CheckAndSet(ctx, leakyConfig.Key, oldValue, newValue, expiration)
 			if err != nil {
-				return Result{}, fmt.Errorf("failed to save bucket state: %w", err)
+				return strategies.Result{}, fmt.Errorf("failed to save bucket state: %w", err)
 			}
 
 			if success {
 				// Atomic update succeeded
-				return Result{
+				return strategies.Result{
 					Allowed:   true,
 					Remaining: remaining,
 					Reset:     now, // When allowed, no specific reset needed
 				}, nil
 			}
 			// If CheckAndSet failed, retry if we haven't exhausted attempts
-			if attempt < checkAndSetRetries-1 {
+			if attempt < strategies.CheckAndSetRetries-1 {
 				time.Sleep(time.Duration(3*(attempt+1)) * time.Microsecond)
 				continue
 			}
@@ -304,17 +310,17 @@ func (l *LeakyBucketStrategy) AllowWithResult(ctx context.Context, config any) (
 
 			// Save the current bucket state (even when denying, to handle leaks)
 			bucketData := encodeLeakyBucket(bucket)
-			expiration := calcExpiration(leakyConfig.Capacity, leakyConfig.LeakRate)
+			expiration := strategies.CalcExpiration(leakyConfig.Capacity, leakyConfig.LeakRate)
 
 			// If this was a new bucket (rare case), set it
 			if oldValue == nil {
 				_, err := l.storage.CheckAndSet(ctx, leakyConfig.Key, oldValue, bucketData, expiration)
 				if err != nil {
-					return Result{}, fmt.Errorf("failed to initialize bucket state: %w", err)
+					return strategies.Result{}, fmt.Errorf("failed to initialize bucket state: %w", err)
 				}
 			}
 
-			return Result{
+			return strategies.Result{
 				Allowed:   false,
 				Remaining: remaining,
 				Reset:     calculateLBResetTime(now, bucket, leakyConfig.Capacity),
@@ -323,5 +329,5 @@ func (l *LeakyBucketStrategy) AllowWithResult(ctx context.Context, config any) (
 	}
 
 	// CheckAndSet failed after checkAndSetRetries attempts
-	return Result{}, fmt.Errorf("failed to update bucket state after %d attempts due to concurrent access", checkAndSetRetries)
+	return strategies.Result{}, fmt.Errorf("failed to update bucket state after %d attempts due to concurrent access", strategies.CheckAndSetRetries)
 }

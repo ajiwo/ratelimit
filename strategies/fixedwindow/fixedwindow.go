@@ -1,4 +1,4 @@
-package strategies
+package fixedwindow
 
 import (
 	"context"
@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
+	"github.com/ajiwo/ratelimit/strategies"
 )
 
 // FixedWindow represents the state of a fixed window
@@ -17,34 +18,38 @@ type FixedWindow struct {
 	Duration time.Duration `json:"duration"` // Window duration
 }
 
-// FixedWindowStrategy implements the fixed window rate limiting algorithm
-type FixedWindowStrategy struct {
-	BaseStrategy
+// Config extends RateLimitConfig for fixed window strategy
+type Config struct {
+	strategies.RateLimitConfig
+	Window time.Duration
 }
 
-// NewFixedWindow creates a new fixed window strategy
-func NewFixedWindow(storage backends.Backend) *FixedWindowStrategy {
-	return &FixedWindowStrategy{
-		BaseStrategy: BaseStrategy{
-			storage: storage,
-		},
+// Strategy implements the fixed window rate limiting algorithm
+type Strategy struct {
+	storage backends.Backend
+}
+
+// New creates a new fixed window strategy
+func New(storage backends.Backend) *Strategy {
+	return &Strategy{
+		storage: storage,
 	}
 }
 
 // Allow checks if a request is allowed based on fixed window algorithm
 //
 // Deprecated: Use AllowWithResult instead. Allow will be removed in a future release.
-func (f *FixedWindowStrategy) Allow(ctx context.Context, config any) (bool, error) {
+func (f *Strategy) Allow(ctx context.Context, config any) (bool, error) {
 	result, err := f.AllowWithResult(ctx, config)
 	return result.Allowed, err
 }
 
 // GetResult returns detailed statistics for the current window state
-func (f *FixedWindowStrategy) GetResult(ctx context.Context, config any) (Result, error) {
+func (f *Strategy) GetResult(ctx context.Context, config any) (strategies.Result, error) {
 	// Type assert to FixedWindowConfig
-	fixedConfig, ok := config.(FixedWindowConfig)
+	fixedConfig, ok := config.(Config)
 	if !ok {
-		return Result{}, fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
+		return strategies.Result{}, fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
 	}
 
 	now := time.Now()
@@ -52,13 +57,13 @@ func (f *FixedWindowStrategy) GetResult(ctx context.Context, config any) (Result
 	// Get current window state
 	data, err := f.storage.Get(ctx, fixedConfig.Key)
 	if err != nil {
-		return Result{}, fmt.Errorf("failed to get window state: %w", err)
+		return strategies.Result{}, fmt.Errorf("failed to get window state: %w", err)
 	}
 
 	var window FixedWindow
 	if data == "" {
 		// No existing window, return default state
-		return Result{
+		return strategies.Result{
 			Allowed:   true,
 			Remaining: fixedConfig.Limit,
 			Reset:     now.Add(fixedConfig.Window),
@@ -69,13 +74,13 @@ func (f *FixedWindowStrategy) GetResult(ctx context.Context, config any) (Result
 	if w, ok := decodeFixedWindow(data); ok {
 		window = w
 	} else {
-		return Result{}, fmt.Errorf("failed to parse window state: invalid encoding")
+		return strategies.Result{}, fmt.Errorf("failed to parse window state: invalid encoding")
 	}
 
 	// Check if current window has expired
 	if now.Sub(window.Start) >= window.Duration {
 		// Window has expired, return fresh state
-		return Result{
+		return strategies.Result{
 			Allowed:   true,
 			Remaining: fixedConfig.Limit,
 			Reset:     now.Add(fixedConfig.Window),
@@ -87,7 +92,7 @@ func (f *FixedWindowStrategy) GetResult(ctx context.Context, config any) (Result
 
 	resetTime := window.Start.Add(window.Duration)
 
-	return Result{
+	return strategies.Result{
 		Allowed:   remaining > 0,
 		Remaining: remaining,
 		Reset:     resetTime,
@@ -95,9 +100,9 @@ func (f *FixedWindowStrategy) GetResult(ctx context.Context, config any) (Result
 }
 
 // Reset resets the rate limit counter for the given key
-func (f *FixedWindowStrategy) Reset(ctx context.Context, config any) error {
+func (f *Strategy) Reset(ctx context.Context, config any) error {
 	// Type assert to FixedWindowConfig
-	fixedConfig, ok := config.(FixedWindowConfig)
+	fixedConfig, ok := config.(Config)
 	if !ok {
 		return fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
 	}
@@ -161,7 +166,7 @@ func parseFixedWindowFields(data string) (int, int64, int64, bool) {
 
 // decodeFixedWindow deserializes from compact format; returns ok=false if not compact.
 func decodeFixedWindow(s string) (FixedWindow, bool) {
-	if !checkV1Header(s) {
+	if !strategies.CheckV1Header(s) {
 		return FixedWindow{}, false
 	}
 
@@ -180,26 +185,26 @@ func decodeFixedWindow(s string) (FixedWindow, bool) {
 }
 
 // AllowWithResult checks if a request is allowed and returns detailed statistics
-func (f *FixedWindowStrategy) AllowWithResult(ctx context.Context, config any) (Result, error) {
+func (f *Strategy) AllowWithResult(ctx context.Context, config any) (strategies.Result, error) {
 	// Type assert to FixedWindowConfig
-	fixedConfig, ok := config.(FixedWindowConfig)
+	fixedConfig, ok := config.(Config)
 	if !ok {
-		return Result{}, fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
+		return strategies.Result{}, fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
 	}
 
 	now := time.Now()
 
 	// Try atomic CheckAndSet operations first
-	for attempt := range checkAndSetRetries {
+	for attempt := range strategies.CheckAndSetRetries {
 		// Check if context is cancelled or timed out
 		if ctx.Err() != nil {
-			return Result{}, fmt.Errorf("context cancelled or timed out: %w", ctx.Err())
+			return strategies.Result{}, fmt.Errorf("context cancelled or timed out: %w", ctx.Err())
 		}
 
 		// Get current window state
 		data, err := f.storage.Get(ctx, fixedConfig.Key)
 		if err != nil {
-			return Result{}, fmt.Errorf("failed to get window state: %w", err)
+			return strategies.Result{}, fmt.Errorf("failed to get window state: %w", err)
 		}
 
 		var window FixedWindow
@@ -217,7 +222,7 @@ func (f *FixedWindowStrategy) AllowWithResult(ctx context.Context, config any) (
 			if w, ok := decodeFixedWindow(data); ok {
 				window = w
 			} else {
-				return Result{}, fmt.Errorf("failed to parse window state: invalid encoding")
+				return strategies.Result{}, fmt.Errorf("failed to parse window state: invalid encoding")
 			}
 
 			// Check if current window has expired
@@ -249,19 +254,19 @@ func (f *FixedWindowStrategy) AllowWithResult(ctx context.Context, config any) (
 			// Use CheckAndSet for atomic update
 			success, err := f.storage.CheckAndSet(ctx, fixedConfig.Key, oldValue, newValue, window.Duration)
 			if err != nil {
-				return Result{}, fmt.Errorf("failed to save window state: %w", err)
+				return strategies.Result{}, fmt.Errorf("failed to save window state: %w", err)
 			}
 
 			if success {
 				// Atomic update succeeded
-				return Result{
+				return strategies.Result{
 					Allowed:   true,
 					Remaining: remaining,
 					Reset:     resetTime,
 				}, nil
 			}
 			// If CheckAndSet failed, retry if we haven't exhausted attempts
-			if attempt < checkAndSetRetries-1 {
+			if attempt < strategies.CheckAndSetRetries-1 {
 				time.Sleep(time.Duration(3*(attempt+1)) * time.Microsecond)
 				continue
 			}
@@ -281,11 +286,11 @@ func (f *FixedWindowStrategy) AllowWithResult(ctx context.Context, config any) (
 				newValue := encodeFixedWindow(window)
 				_, err := f.storage.CheckAndSet(ctx, fixedConfig.Key, oldValue, newValue, window.Duration)
 				if err != nil {
-					return Result{}, fmt.Errorf("failed to reset expired window: %w", err)
+					return strategies.Result{}, fmt.Errorf("failed to reset expired window: %w", err)
 				}
 			}
 
-			return Result{
+			return strategies.Result{
 				Allowed:   false,
 				Remaining: remaining,
 				Reset:     resetTime,
@@ -294,5 +299,5 @@ func (f *FixedWindowStrategy) AllowWithResult(ctx context.Context, config any) (
 	}
 
 	// CheckAndSet failed after checkAndSetRetries attempts
-	return Result{}, fmt.Errorf("failed to update window state after %d attempts due to concurrent access", checkAndSetRetries)
+	return strategies.Result{}, fmt.Errorf("failed to update window state after %d attempts due to concurrent access", strategies.CheckAndSetRetries)
 }

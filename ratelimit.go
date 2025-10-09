@@ -8,6 +8,9 @@ import (
 
 	"github.com/ajiwo/ratelimit/backends"
 	"github.com/ajiwo/ratelimit/strategies"
+	"github.com/ajiwo/ratelimit/strategies/fixedwindow"
+	"github.com/ajiwo/ratelimit/strategies/leakybucket"
+	"github.com/ajiwo/ratelimit/strategies/tokenbucket"
 )
 
 const (
@@ -192,7 +195,7 @@ func (m *MultiTierLimiter) createTierConfig(dynamicKey string, tierName string, 
 	primaryConfig := m.config.PrimaryConfig
 	switch primaryConfig.Type() {
 	case StrategyFixedWindow:
-		return strategies.FixedWindowConfig{
+		return fixedwindow.Config{
 			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   key,
 				Limit: limit,
@@ -205,7 +208,7 @@ func (m *MultiTierLimiter) createTierConfig(dynamicKey string, tierName string, 
 		if !ok {
 			return nil, fmt.Errorf("invalid token bucket configuration")
 		}
-		return strategies.TokenBucketConfig{
+		return tokenbucket.Config{
 			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   key,
 				Limit: limit,
@@ -219,7 +222,7 @@ func (m *MultiTierLimiter) createTierConfig(dynamicKey string, tierName string, 
 		if !ok {
 			return nil, fmt.Errorf("invalid leaky bucket configuration")
 		}
-		return strategies.LeakyBucketConfig{
+		return leakybucket.Config{
 			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   key,
 				Limit: limit,
@@ -249,7 +252,7 @@ func (m *MultiTierLimiter) createBucketConfig(dynamicKey string) (any, error) {
 		if !ok {
 			return nil, fmt.Errorf("invalid token bucket configuration")
 		}
-		return strategies.TokenBucketConfig{
+		return tokenbucket.Config{
 			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   key,
 				Limit: int(tokenConfig.RefillRate * 3600), // Convert to hourly limit for display purposes
@@ -263,7 +266,7 @@ func (m *MultiTierLimiter) createBucketConfig(dynamicKey string) (any, error) {
 		if !ok {
 			return nil, fmt.Errorf("invalid leaky bucket configuration")
 		}
-		return strategies.LeakyBucketConfig{
+		return leakybucket.Config{
 			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   key,
 				Limit: int(leakyConfig.LeakRate * 3600), // Convert to hourly limit for display purposes
@@ -298,7 +301,7 @@ func (m *MultiTierLimiter) createSecondaryBucketConfig(dynamicKey string) (any, 
 		if !ok {
 			return nil, fmt.Errorf("invalid secondary token bucket configuration")
 		}
-		return strategies.TokenBucketConfig{
+		return tokenbucket.Config{
 			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   key,
 				Limit: int(tokenConfig.RefillRate * 3600), // Convert to hourly limit for display purposes
@@ -312,7 +315,7 @@ func (m *MultiTierLimiter) createSecondaryBucketConfig(dynamicKey string) (any, 
 		if !ok {
 			return nil, fmt.Errorf("invalid secondary leaky bucket configuration")
 		}
-		return strategies.LeakyBucketConfig{
+		return leakybucket.Config{
 			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   key,
 				Limit: int(leakyConfig.LeakRate * 3600), // Convert to hourly limit for display purposes
@@ -349,11 +352,11 @@ func getTierName(interval time.Duration) string {
 func createStrategy(strategyType StrategyType, storage backends.Backend) (strategies.Strategy, error) {
 	switch strategyType {
 	case StrategyFixedWindow:
-		return strategies.NewFixedWindow(storage), nil
+		return fixedwindow.New(storage), nil
 	case StrategyTokenBucket:
-		return strategies.NewTokenBucket(storage), nil
+		return tokenbucket.New(storage), nil
 	case StrategyLeakyBucket:
-		return strategies.NewLeakyBucket(storage), nil
+		return leakybucket.New(storage), nil
 	default:
 		return nil, fmt.Errorf("unknown strategy type: %s", strategyType)
 	}
@@ -602,13 +605,13 @@ func (m *MultiTierLimiter) handleDualStrategy(accessOpts *accessOptions, results
 			return false, nil, fmt.Errorf("failed to create config for tier %s: %w", tierName, err)
 		}
 
-		fixedWindowConfig, ok := config.(strategies.FixedWindowConfig)
+		fixedWindowConfig, ok := config.(fixedwindow.Config)
 		if !ok {
 			return false, nil, fmt.Errorf("dual strategy only supports FixedWindow as primary strategy")
 		}
 
 		// Type assert to FixedWindowStrategy and use CheckOnly
-		fixedWindowStrategy, ok := m.strategies[tierName].(*strategies.FixedWindowStrategy)
+		fixedWindowStrategy, ok := m.strategies[tierName].(*fixedwindow.Strategy)
 		if !ok {
 			return false, nil, fmt.Errorf("expected FixedWindowStrategy for tier %s", tierName)
 		}

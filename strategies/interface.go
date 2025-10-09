@@ -12,26 +12,6 @@ type RateLimitConfig struct {
 	Limit int
 }
 
-// FixedWindowConfig extends RateLimitConfig for fixed window strategy
-type FixedWindowConfig struct {
-	RateLimitConfig
-	Window time.Duration
-}
-
-// TokenBucketConfig extends RateLimitConfig for token bucket strategy
-type TokenBucketConfig struct {
-	RateLimitConfig
-	BurstSize  int     // Maximum tokens the bucket can hold
-	RefillRate float64 // Tokens to add per second
-}
-
-// LeakyBucketConfig extends RateLimitConfig for leaky bucket strategy
-type LeakyBucketConfig struct {
-	RateLimitConfig
-	Capacity int     // Maximum requests the bucket can hold
-	LeakRate float64 // Requests to process per second
-}
-
 // Result represents the result of a rate limiting check
 type Result struct {
 	Allowed   bool      // Whether the request is allowed

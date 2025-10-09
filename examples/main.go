@@ -12,6 +12,8 @@ import (
 	"github.com/ajiwo/ratelimit/backends/memory"
 	"github.com/ajiwo/ratelimit/backends/postgres"
 	"github.com/ajiwo/ratelimit/backends/redis"
+	"github.com/ajiwo/ratelimit/strategies/fixedwindow"
+	"github.com/ajiwo/ratelimit/strategies/tokenbucket"
 
 	"github.com/ajiwo/ratelimit/backends"
 
@@ -68,11 +70,11 @@ func tokenBucketExample() error {
 	backend := memory.New()
 
 	// Create token bucket strategy
-	strategy := strategies.NewTokenBucket(backend)
+	strategy := tokenbucket.New(backend)
 
 	// Test rate limiting
 	userID := "user:token_bucket:123"
-	config := strategies.TokenBucketConfig{
+	config := tokenbucket.Config{
 		RateLimitConfig: strategies.RateLimitConfig{
 			Key:   userID,
 			Limit: 20,
@@ -102,11 +104,11 @@ func fixedWindowExample() error {
 	backend, _ := backends.Create("memory", nil)
 
 	// Create fixed window strategy
-	strategy := strategies.NewFixedWindow(backend)
+	strategy := fixedwindow.New(backend)
 
 	// Test rate limiting
 	userID := "user:fixed_window:456"
-	config := strategies.FixedWindowConfig{
+	config := fixedwindow.Config{
 		RateLimitConfig: strategies.RateLimitConfig{
 			Key:   userID,
 			Limit: 10,
@@ -159,11 +161,11 @@ func tokenBucketRedisExample() error {
 	}()
 
 	// Create token bucket strategy
-	strategy := strategies.NewTokenBucket(backend)
+	strategy := tokenbucket.New(backend)
 
 	// Test rate limiting
 	userID := "user:token_bucket:redis:789"
-	config := strategies.TokenBucketConfig{
+	config := tokenbucket.Config{
 		RateLimitConfig: strategies.RateLimitConfig{
 			Key:   userID,
 			Limit: 15,
@@ -229,11 +231,11 @@ func tokenBucketPostgresExample() error {
 	}()
 
 	// Create token bucket strategy
-	strategy := strategies.NewTokenBucket(backend)
+	strategy := tokenbucket.New(backend)
 
 	// Test rate limiting
 	userID := "user:token_bucket:postgres:101"
-	config := strategies.TokenBucketConfig{
+	config := tokenbucket.Config{
 		RateLimitConfig: strategies.RateLimitConfig{
 			Key:   userID,
 			Limit: 12,
@@ -276,10 +278,10 @@ func statusExample() error {
 	backend, _ := backends.Create("memory", nil)
 
 	// Create token bucket strategy
-	strategy := strategies.NewTokenBucket(backend)
+	strategy := tokenbucket.New(backend)
 
 	userID := "user:status:789"
-	config := strategies.TokenBucketConfig{
+	config := tokenbucket.Config{
 		RateLimitConfig: strategies.RateLimitConfig{
 			Key:   userID,
 			Limit: 10,

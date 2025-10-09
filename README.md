@@ -87,6 +87,8 @@ The library supports combining a primary tier-based strategy (like Fixed Window)
 import (
     "github.com/ajiwo/ratelimit"
     "github.com/ajiwo/ratelimit/backends/memory"
+    "github.com/ajiwo/ratelimit/strategies/tokenbucket"
+    "github.com/ajiwo/ratelimit/strategies/leakybucket"
 )
 
 // Create a backend instance
@@ -306,18 +308,18 @@ For direct strategy usage, you can create strategies individually:
 ```go
 import (
     "github.com/ajiwo/ratelimit/backends/memory"
-    "github.com/ajiwo/ratelimit/strategies"
+    "github.com/ajiwo/ratelimit/strategies/fixedwindow"
 )
 
 // Create a memory backend instance
 storage := memory.New()
 
 // Create a fixed window strategy
-strategy := strategies.NewFixedWindow(storage)
+strategy := fixedwindow.New(storage)
 
 // Configure rate limiting
-config := strategies.FixedWindowConfig{
-    RateLimitConfig: strategies.RateLimitConfig{
+config := fixedwindow.Config{
+    RateLimitConfig: fixedwindow.RateLimitConfig{
         Key:   "user:123",
         Limit: 100,
     },
@@ -330,11 +332,11 @@ if err != nil {
     // Handle error
 }
 if result.Allowed {
-    fmt.Printf("Request allowed, %d remaining, resets at %v\n", 
+    fmt.Printf("Request allowed, %d remaining, resets at %v\\n", 
         result.Remaining, result.Reset)
     // Process request
 } else {
-    fmt.Printf("Request blocked, %d remaining, resets at %v\n", 
+    fmt.Printf("Request blocked, %d remaining, resets at %v\\n", 
         result.Remaining, result.Reset)
     // Reject request
 }
@@ -347,11 +349,11 @@ if result.Allowed {
 storage := memory.New()
 
 // Create a token bucket strategy
-strategy := strategies.NewTokenBucket(storage)
+strategy := tokenbucket.New(storage)
 
 // Configure rate limiting
-config := strategies.TokenBucketConfig{
-    RateLimitConfig: strategies.RateLimitConfig{
+config := tokenbucket.Config{
+    RateLimitConfig: tokenbucket.RateLimitConfig{
         Key:   "user:123",
         Limit: 100,
     },
@@ -365,11 +367,11 @@ if err != nil {
     // Handle error
 }
 if result.Allowed {
-    fmt.Printf("Request allowed, %d remaining, resets at %v\n", 
+    fmt.Printf("Request allowed, %d remaining, resets at %v\\n", 
         result.Remaining, result.Reset)
     // Process request
 } else {
-    fmt.Printf("Request blocked, %d remaining, resets at %v\n", 
+    fmt.Printf("Request blocked, %d remaining, resets at %v\\n", 
         result.Remaining, result.Reset)
     // Reject request
 }
@@ -382,11 +384,11 @@ if result.Allowed {
 storage := memory.New()
 
 // Create a leaky bucket strategy
-strategy := strategies.NewLeakyBucket(storage)
+strategy := leakybucket.New(storage)
 
 // Configure rate limiting
-config := strategies.LeakyBucketConfig{
-    RateLimitConfig: strategies.RateLimitConfig{
+config := leakybucket.Config{
+    RateLimitConfig: leakybucket.RateLimitConfig{
         Key:   "user:123",
         Limit: 100,
     },
@@ -400,11 +402,11 @@ if err != nil {
     // Handle error
 }
 if result.Allowed {
-    fmt.Printf("Request allowed, %d remaining, resets at %v\n", 
+    fmt.Printf("Request allowed, %d remaining, resets at %v\\n", 
         result.Remaining, result.Reset)
     // Process request
 } else {
-    fmt.Printf("Request blocked, %d remaining, resets at %v\n", 
+    fmt.Printf("Request blocked, %d remaining, resets at %v\\n", 
         result.Remaining, result.Reset)
     // Reject request
 }

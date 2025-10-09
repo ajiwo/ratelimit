@@ -1,4 +1,4 @@
-package strategies
+package tokenbucket
 
 import (
 	"sync"
@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends/memory"
+	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -15,10 +16,10 @@ func TestTokenBucket_GetResult(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
 		storage := memory.New()
-		strategy := NewTokenBucket(storage)
+		strategy := New(storage)
 
-		config := TokenBucketConfig{
-			RateLimitConfig: RateLimitConfig{
+		config := Config{
+			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   "result-test-key",
 				Limit: 10,
 			},
@@ -58,7 +59,7 @@ func TestTokenBucket_GetResult(t *testing.T) {
 		assert.False(t, result.Allowed, "Request should be denied when no tokens")
 
 		// Test invalid config type
-		_, err = strategy.GetResult(ctx, FixedWindowConfig{})
+		_, err = strategy.GetResult(ctx, struct{}{})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "requires TokenBucketConfig")
 	})
@@ -68,10 +69,10 @@ func TestTokenBucket_Reset(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
 		storage := memory.New()
-		strategy := NewTokenBucket(storage)
+		strategy := New(storage)
 
-		config := TokenBucketConfig{
-			RateLimitConfig: RateLimitConfig{
+		config := Config{
+			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   "reset-test-key",
 				Limit: 3,
 			},
@@ -101,7 +102,7 @@ func TestTokenBucket_Reset(t *testing.T) {
 		assert.True(t, result.Allowed, "Request after reset should be allowed")
 
 		// Test invalid config type
-		err = strategy.Reset(ctx, FixedWindowConfig{})
+		err = strategy.Reset(ctx, struct{}{})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "requires TokenBucketConfig")
 	})
@@ -113,10 +114,10 @@ func TestTokenBucket_Allow(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
 			storage := memory.New()
-			strategy := NewTokenBucket(storage)
+			strategy := New(storage)
 
-			config := TokenBucketConfig{
-				RateLimitConfig: RateLimitConfig{
+			config := Config{
+				RateLimitConfig: strategies.RateLimitConfig{
 					Key:   "test_initial",
 					Limit: 10,
 				},
@@ -135,10 +136,10 @@ func TestTokenBucket_Allow(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
 			storage := memory.New()
-			strategy := NewTokenBucket(storage)
+			strategy := New(storage)
 
-			config := TokenBucketConfig{
-				RateLimitConfig: RateLimitConfig{
+			config := Config{
+				RateLimitConfig: strategies.RateLimitConfig{
 					Key:   "test_capacity",
 					Limit: 3,
 				},
@@ -165,10 +166,10 @@ func TestTokenBucket_Allow(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
 			storage := memory.New()
-			strategy := NewTokenBucket(storage)
+			strategy := New(storage)
 
-			config := TokenBucketConfig{
-				RateLimitConfig: RateLimitConfig{
+			config := Config{
+				RateLimitConfig: strategies.RateLimitConfig{
 					Key:   "test_refill",
 					Limit: 3,
 				},
@@ -204,18 +205,18 @@ func TestTokenBucket_Allow(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
 			storage := memory.New()
-			strategy := NewTokenBucket(storage)
+			strategy := New(storage)
 
-			config1 := TokenBucketConfig{
-				RateLimitConfig: RateLimitConfig{
+			config1 := Config{
+				RateLimitConfig: strategies.RateLimitConfig{
 					Key:   "user1",
 					Limit: 2,
 				},
 				BurstSize:  2,
 				RefillRate: 2.0, // 2 tokens per second
 			}
-			config2 := TokenBucketConfig{
-				RateLimitConfig: RateLimitConfig{
+			config2 := Config{
+				RateLimitConfig: strategies.RateLimitConfig{
 					Key:   "user2",
 					Limit: 2,
 				},
@@ -254,10 +255,10 @@ func TestTokenBucket_Allow(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
 			storage := memory.New()
-			strategy := NewTokenBucket(storage)
+			strategy := New(storage)
 
-			config := TokenBucketConfig{
-				RateLimitConfig: RateLimitConfig{
+			config := Config{
+				RateLimitConfig: strategies.RateLimitConfig{
 					Key:   "test_fractional",
 					Limit: 10,
 				},
@@ -292,10 +293,10 @@ func TestTokenBucket_Allow(t *testing.T) {
 func TestTokenBucket_ConcurrentAccess(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := memory.New()
-		strategy := NewTokenBucket(storage)
+		strategy := New(storage)
 
-		config := TokenBucketConfig{
-			RateLimitConfig: RateLimitConfig{
+		config := Config{
+			RateLimitConfig: strategies.RateLimitConfig{
 				Key:   "concurrent-key",
 				Limit: 5,
 			},
