@@ -17,16 +17,28 @@ func UseBackend(t *testing.T, name string) backends.Backend {
 	var backend backends.Backend
 	var err error
 
+	postgresConn := os.Getenv("TEST_POSTGRES_DSN")
+	if postgresConn == "" {
+		postgresConn = "postgres://postgres:postgres@localhost:5432/ratelimit_test?sslmode=disable"
+	}
+
+	redisAddr := os.Getenv("REDIS_ADDR")
+	if redisAddr == "" {
+		redisAddr = "localhost:6379"
+	}
+	redisPassword := os.Getenv("REDIS_PASSWORD")
+
 	switch name {
 	case "memory":
 		backend = memory.New()
 	case "postgres":
 		backend, err = postgres.New(postgres.PostgresConfig{
-			ConnString: os.Getenv("TEST_POSTGRES_DSN"),
+			ConnString: postgresConn,
 		})
 	case "redis":
 		backend, err = redis.New(redis.RedisConfig{
-			Addr: os.Getenv("REDIS_ADDR"),
+			Addr:     redisAddr,
+			Password: redisPassword,
 		})
 	default:
 		err = fmt.Errorf("unknown backend %s", name)

@@ -16,10 +16,11 @@ func setupRedisTest(t *testing.T) (*RedisStorage, func()) {
 	if redisAddr == "" {
 		redisAddr = "localhost:6379"
 	}
+	redisPassword := os.Getenv("REDIS_PASSWORD")
 
 	storage, err := New(RedisConfig{
 		Addr:     redisAddr,
-		Password: "",
+		Password: redisPassword,
 		DB:       0,
 	})
 
