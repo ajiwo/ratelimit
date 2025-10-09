@@ -613,7 +613,7 @@ func (m *MultiTierLimiter) handleDualStrategy(accessOpts *accessOptions, results
 			return false, nil, fmt.Errorf("expected FixedWindowStrategy for tier %s", tierName)
 		}
 
-		tierResult, err := fixedWindowStrategy.CheckOnly(accessOpts.ctx, fixedWindowConfig)
+		tierResult, err := fixedWindowStrategy.GetResult(accessOpts.ctx, fixedWindowConfig)
 		if err != nil {
 			return false, nil, fmt.Errorf("tier %s check failed: %w", tierName, err)
 		}
