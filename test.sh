@@ -4,7 +4,7 @@
 set -e
 
 go test -count=1 -timeout=30s -v -race  -coverprofile=coverage.out \
-  . ./strategies ./backends ./backends/memory 
+  . ./strategies/... ./backends ./backends/memory 
 go tool cover -func=coverage.out 
 
 cd backends/postgres
