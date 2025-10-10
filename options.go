@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
+	"github.com/ajiwo/ratelimit/strategies"
 )
 
 // Option is a functional option for configuring the rate limiter
@@ -38,7 +39,7 @@ func WithFixedWindowStrategy(tiers ...TierConfig) Option {
 // If used with another strategy (like Fixed Window), it becomes the secondary smoother strategy
 func WithTokenBucketStrategy(burstSize int, refillRate float64) Option {
 	return func(config *MultiTierConfig) error {
-		tokenConfig := TokenBucketConfig{
+		tokenConfig := strategies.TokenBucketConfig{
 			BurstSize:  burstSize,
 			RefillRate: refillRate,
 		}
@@ -59,7 +60,7 @@ func WithTokenBucketStrategy(burstSize int, refillRate float64) Option {
 // If used with another strategy (like Fixed Window), it becomes the secondary smoother strategy
 func WithLeakyBucketStrategy(capacity int, leakRate float64) Option {
 	return func(config *MultiTierConfig) error {
-		leakyConfig := LeakyBucketConfig{
+		leakyConfig := strategies.LeakyBucketConfig{
 			Capacity: capacity,
 			LeakRate: leakRate,
 		}
@@ -77,7 +78,7 @@ func WithLeakyBucketStrategy(capacity int, leakRate float64) Option {
 }
 
 // WithPrimaryStrategy configures the primary rate limiting strategy with custom configuration
-func WithPrimaryStrategy(strategyConfig StrategyConfig) Option {
+func WithPrimaryStrategy(strategyConfig strategies.StrategyConfig) Option {
 	return func(config *MultiTierConfig) error {
 		if strategyConfig == nil {
 			return fmt.Errorf("primary strategy config cannot be nil")
@@ -88,14 +89,14 @@ func WithPrimaryStrategy(strategyConfig StrategyConfig) Option {
 }
 
 // WithSecondaryStrategy configures the secondary smoother strategy
-func WithSecondaryStrategy(strategyConfig StrategyConfig) Option {
+func WithSecondaryStrategy(strategyConfig strategies.StrategyConfig) Option {
 	return func(config *MultiTierConfig) error {
 		if strategyConfig == nil {
 			return fmt.Errorf("secondary strategy config cannot be nil")
 		}
 
 		// Secondary strategy must be a bucket-based strategy
-		if strategyConfig.Type() != StrategyTokenBucket && strategyConfig.Type() != StrategyLeakyBucket {
+		if strategyConfig.Type() != strategies.StrategyTokenBucket && strategyConfig.Type() != strategies.StrategyLeakyBucket {
 			return fmt.Errorf("secondary strategy must be token bucket or leaky bucket, got %s", strategyConfig.Type())
 		}
 

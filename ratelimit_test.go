@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends/memory"
+	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -48,7 +49,7 @@ func TestNew_WithOptions(t *testing.T) {
 		// Check primary strategy configuration
 		fixedWindowConfig, ok := config.PrimaryConfig.(FixedWindowConfig)
 		require.True(t, ok)
-		assert.Equal(t, StrategyFixedWindow, fixedWindowConfig.Type())
+		assert.Equal(t, strategies.StrategyFixedWindow, fixedWindowConfig.Type())
 		assert.Len(t, fixedWindowConfig.Tiers, 2)
 		assert.Equal(t, 5*time.Second, fixedWindowConfig.Tiers[0].Interval)
 		assert.Equal(t, 5, fixedWindowConfig.Tiers[0].Limit)

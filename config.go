@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	"github.com/ajiwo/ratelimit/backends"
+	"github.com/ajiwo/ratelimit/strategies"
 )
 
 // allowedCharsArray is a precomputed boolean array for O(1) character validation
@@ -50,12 +51,6 @@ func validateKey(key string, keyType string) error {
 	return nil
 }
 
-// StrategyConfig defines the interface for all strategy configurations
-type StrategyConfig interface {
-	Validate() error
-	Type() StrategyType
-}
-
 // FixedWindowConfig implements StrategyConfig for fixed window rate limiting
 type FixedWindowConfig struct {
 	Tiers []TierConfig `json:"tiers"`
@@ -81,56 +76,16 @@ func (c FixedWindowConfig) Validate() error {
 	return nil
 }
 
-func (c FixedWindowConfig) Type() StrategyType {
-	return StrategyFixedWindow
-}
-
-// TokenBucketConfig implements StrategyConfig for token bucket rate limiting
-type TokenBucketConfig struct {
-	BurstSize  int     `json:"burst_size"`
-	RefillRate float64 `json:"refill_rate"` // tokens per second
-}
-
-func (c TokenBucketConfig) Validate() error {
-	if c.BurstSize <= 0 {
-		return fmt.Errorf("token bucket burst size must be positive, got %d", c.BurstSize)
-	}
-	if c.RefillRate <= 0 {
-		return fmt.Errorf("token bucket refill rate must be positive, got %f", c.RefillRate)
-	}
-	return nil
-}
-
-func (c TokenBucketConfig) Type() StrategyType {
-	return StrategyTokenBucket
-}
-
-// LeakyBucketConfig implements StrategyConfig for leaky bucket rate limiting
-type LeakyBucketConfig struct {
-	Capacity int     `json:"capacity"`
-	LeakRate float64 `json:"leak_rate"` // requests per second
-}
-
-func (c LeakyBucketConfig) Validate() error {
-	if c.Capacity <= 0 {
-		return fmt.Errorf("leaky bucket capacity must be positive, got %d", c.Capacity)
-	}
-	if c.LeakRate <= 0 {
-		return fmt.Errorf("leaky bucket leak rate must be positive, got %f", c.LeakRate)
-	}
-	return nil
-}
-
-func (c LeakyBucketConfig) Type() StrategyType {
-	return StrategyLeakyBucket
+func (c FixedWindowConfig) Type() strategies.StrategyType {
+	return strategies.StrategyFixedWindow
 }
 
 // MultiTierConfig defines the configuration for multi-tier rate limiting
 type MultiTierConfig struct {
-	BaseKey         string           `json:"base_key"`
-	Storage         backends.Backend `json:"-"`
-	PrimaryConfig   StrategyConfig   `json:"primary_config"`
-	SecondaryConfig StrategyConfig   `json:"secondary_config,omitempty"`
+	BaseKey         string                    `json:"base_key"`
+	Storage         backends.Backend          `json:"-"`
+	PrimaryConfig   strategies.StrategyConfig `json:"primary_config"`
+	SecondaryConfig strategies.StrategyConfig `json:"secondary_config,omitempty"`
 }
 
 // Validate validates the entire multi-tier configuration
@@ -157,12 +112,12 @@ func (c MultiTierConfig) Validate() error {
 		}
 
 		// Secondary strategy must be a bucket-based strategy (for smoothing)
-		if c.SecondaryConfig.Type() != StrategyTokenBucket && c.SecondaryConfig.Type() != StrategyLeakyBucket {
+		if c.SecondaryConfig.Type() != strategies.StrategyTokenBucket && c.SecondaryConfig.Type() != strategies.StrategyLeakyBucket {
 			return fmt.Errorf("secondary strategy must be token bucket or leaky bucket, got %s", c.SecondaryConfig.Type())
 		}
 
 		// Primary strategy cannot be bucket-based if secondary is also bucket-based
-		if c.PrimaryConfig.Type() == StrategyTokenBucket || c.PrimaryConfig.Type() == StrategyLeakyBucket {
+		if c.PrimaryConfig.Type() == strategies.StrategyTokenBucket || c.PrimaryConfig.Type() == strategies.StrategyLeakyBucket {
 			return fmt.Errorf("cannot use bucket strategy as primary when secondary strategy is also specified")
 		}
 	}
