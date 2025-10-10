@@ -18,12 +18,6 @@ type FixedWindow struct {
 	Duration time.Duration `json:"duration"` // Window duration
 }
 
-type Config struct {
-	Key    string
-	Limit  int
-	Window time.Duration
-}
-
 // Strategy implements the fixed window rate limiting algorithm
 type Strategy struct {
 	storage backends.Backend
@@ -47,7 +41,7 @@ func (f *Strategy) Allow(ctx context.Context, config any) (bool, error) {
 // GetResult returns detailed statistics for the current window state
 func (f *Strategy) GetResult(ctx context.Context, config any) (strategies.Result, error) {
 	// Type assert to FixedWindowConfig
-	fixedConfig, ok := config.(Config)
+	fixedConfig, ok := config.(strategies.FixedWindowConfig)
 	if !ok {
 		return strategies.Result{}, fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
 	}
@@ -102,7 +96,7 @@ func (f *Strategy) GetResult(ctx context.Context, config any) (strategies.Result
 // Reset resets the rate limit counter for the given key
 func (f *Strategy) Reset(ctx context.Context, config any) error {
 	// Type assert to FixedWindowConfig
-	fixedConfig, ok := config.(Config)
+	fixedConfig, ok := config.(strategies.FixedWindowConfig)
 	if !ok {
 		return fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
 	}
@@ -187,7 +181,7 @@ func decodeFixedWindow(s string) (FixedWindow, bool) {
 // AllowWithResult checks if a request is allowed and returns detailed statistics
 func (f *Strategy) AllowWithResult(ctx context.Context, config any) (strategies.Result, error) {
 	// Type assert to FixedWindowConfig
-	fixedConfig, ok := config.(Config)
+	fixedConfig, ok := config.(strategies.FixedWindowConfig)
 	if !ok {
 		return strategies.Result{}, fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
 	}

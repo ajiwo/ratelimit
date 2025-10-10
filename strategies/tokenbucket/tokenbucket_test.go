@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends/memory"
+	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,7 +18,7 @@ func TestTokenBucket_GetResult(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := Config{
+		config := strategies.TokenBucketConfig{
 			Key:        "result-test-key",
 			BurstSize:  10,
 			RefillRate: 10.0, // 10 tokens per second
@@ -67,14 +68,14 @@ func TestTokenBucket_Reset(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := Config{
+		config := strategies.TokenBucketConfig{
 			Key:        "reset-test-key",
 			BurstSize:  4,
 			RefillRate: 1.0, // 1 token per second
 		}
 
 		// Use all tokens
-		for i := range 3 {
+		for i := range 4 {
 			result, err := strategy.AllowWithResult(ctx, config)
 			require.NoError(t, err)
 			assert.True(t, result.Allowed, "Request %d should be allowed", i)
@@ -109,7 +110,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 			storage := memory.New()
 			strategy := New(storage)
 
-			config := Config{
+			config := strategies.TokenBucketConfig{
 				Key:        "test_initial",
 				BurstSize:  10,
 				RefillRate: 10.0, // 10 tokens per second
@@ -128,7 +129,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 			storage := memory.New()
 			strategy := New(storage)
 
-			config := Config{
+			config := strategies.TokenBucketConfig{
 				Key:        "test_capacity",
 				BurstSize:  3,
 				RefillRate: 1.0, // 1 token per second
@@ -155,7 +156,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 			storage := memory.New()
 			strategy := New(storage)
 
-			config := Config{
+			config := strategies.TokenBucketConfig{
 				Key:        "test_refill",
 				BurstSize:  3,
 				RefillRate: 1.0, // 1 token per second
@@ -191,12 +192,12 @@ func TestTokenBucket_Allow(t *testing.T) {
 			storage := memory.New()
 			strategy := New(storage)
 
-			config1 := Config{
+			config1 := strategies.TokenBucketConfig{
 				Key:        "user1",
 				BurstSize:  2,
 				RefillRate: 2.0, // 2 tokens per second
 			}
-			config2 := Config{
+			config2 := strategies.TokenBucketConfig{
 				Key:        "user2",
 				BurstSize:  2,
 				RefillRate: 2.0, // 2 tokens per second
@@ -235,7 +236,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 			storage := memory.New()
 			strategy := New(storage)
 
-			config := Config{
+			config := strategies.TokenBucketConfig{
 				Key:        "test_fractional",
 				BurstSize:  10,
 				RefillRate: 2.0, // 2 tokens per second
@@ -270,7 +271,7 @@ func TestTokenBucket_ConcurrentAccess(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := Config{
+		config := strategies.TokenBucketConfig{
 			Key:        "concurrent-key",
 			BurstSize:  5,
 			RefillRate: 5.0,

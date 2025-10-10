@@ -19,12 +19,6 @@ type LeakyBucket struct {
 	LeakRate float64   `json:"leak_rate"` // Requests to leak per second
 }
 
-type Config struct {
-	Key      string
-	Capacity int     // Maximum requests the bucket can hold
-	LeakRate float64 // Requests to process per second
-}
-
 // Strategy implements the leaky bucket rate limiting algorithm
 type Strategy struct {
 	storage backends.Backend
@@ -48,7 +42,7 @@ func (l *Strategy) Allow(ctx context.Context, config any) (bool, error) {
 // GetResult returns detailed statistics for the current bucket state
 func (l *Strategy) GetResult(ctx context.Context, config any) (strategies.Result, error) {
 	// Type assert to LeakyBucketConfig
-	leakyConfig, ok := config.(Config)
+	leakyConfig, ok := config.(strategies.LeakyBucketConfig)
 	if !ok {
 		return strategies.Result{}, fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
 	}
@@ -97,7 +91,7 @@ func (l *Strategy) GetResult(ctx context.Context, config any) (strategies.Result
 // Reset resets the leaky bucket counter for the given key
 func (l *Strategy) Reset(ctx context.Context, config any) error {
 	// Type assert to LeakyBucketConfig
-	leakyConfig, ok := config.(Config)
+	leakyConfig, ok := config.(strategies.LeakyBucketConfig)
 	if !ok {
 		return fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
 	}
@@ -217,7 +211,7 @@ func calculateLBResetTime(now time.Time, bucket LeakyBucket, capacity int) time.
 // AllowWithResult checks if a request is allowed and returns detailed statistics
 func (l *Strategy) AllowWithResult(ctx context.Context, config any) (strategies.Result, error) {
 	// Type assert to LeakyBucketConfig
-	leakyConfig, ok := config.(Config)
+	leakyConfig, ok := config.(strategies.LeakyBucketConfig)
 	if !ok {
 		return strategies.Result{}, fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
 	}

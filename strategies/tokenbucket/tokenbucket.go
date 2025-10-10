@@ -20,12 +20,6 @@ type TokenBucket struct {
 	RefillRate float64   `json:"refill_rate"` // tokens per second
 }
 
-type Config struct {
-	Key        string
-	BurstSize  int     // Maximum tokens the bucket can hold
-	RefillRate float64 // Tokens to add per second
-}
-
 // Strategy implements the token bucket rate limiting algorithm
 type Strategy struct {
 	storage backends.Backend
@@ -48,7 +42,7 @@ func (t *Strategy) Allow(ctx context.Context, config any) (bool, error) {
 // GetResult returns detailed statistics for the current bucket state
 func (t *Strategy) GetResult(ctx context.Context, config any) (strategies.Result, error) {
 	// Type assert to TokenBucketConfig
-	tokenConfig, ok := config.(Config)
+	tokenConfig, ok := config.(strategies.TokenBucketConfig)
 	if !ok {
 		return strategies.Result{}, fmt.Errorf("TokenBucket strategy requires TokenBucketConfig")
 	}
@@ -97,7 +91,7 @@ func (t *Strategy) GetResult(ctx context.Context, config any) (strategies.Result
 // Reset resets the token bucket counter for the given key
 func (t *Strategy) Reset(ctx context.Context, config any) error {
 	// Type assert to TokenBucketConfig
-	tokenConfig, ok := config.(Config)
+	tokenConfig, ok := config.(strategies.TokenBucketConfig)
 	if !ok {
 		return fmt.Errorf("TokenBucket strategy requires TokenBucketConfig")
 	}
@@ -218,7 +212,7 @@ func calculateTBResetTime(now time.Time, bucket TokenBucket) time.Time {
 // AllowWithResult checks if a request is allowed and returns detailed statistics
 func (t *Strategy) AllowWithResult(ctx context.Context, config any) (strategies.Result, error) {
 	// Type assert to TokenBucketConfig
-	tokenConfig, ok := config.(Config)
+	tokenConfig, ok := config.(strategies.TokenBucketConfig)
 	if !ok {
 		return strategies.Result{}, fmt.Errorf("TokenBucket strategy requires TokenBucketConfig")
 	}

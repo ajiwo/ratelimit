@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends/memory"
+	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,7 +17,7 @@ func TestFixedWindow_Allow(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := Config{
+		config := strategies.FixedWindowConfig{
 			Key:    "test-key",
 			Limit:  5,
 			Window: time.Minute,
@@ -43,7 +44,7 @@ func TestFixedWindow_WindowReset(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := Config{
+		config := strategies.FixedWindowConfig{
 			Key:    "test-key",
 			Limit:  2,
 			Window: time.Second, // Window duration
@@ -79,13 +80,13 @@ func TestFixedWindow_MultipleKeys(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config1 := Config{
+		config1 := strategies.FixedWindowConfig{
 			Key:    "user1",
 			Limit:  1,
 			Window: time.Minute,
 		}
 
-		config2 := Config{
+		config2 := strategies.FixedWindowConfig{
 			Key:    "user2",
 			Limit:  1,
 			Window: time.Minute,
@@ -128,7 +129,7 @@ func TestFixedWindow_ZeroLimit(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := Config{
+		config := strategies.FixedWindowConfig{
 			Key:    "test-key",
 			Limit:  0,
 			Window: time.Minute,
@@ -148,7 +149,7 @@ func TestFixedWindow_GetResult(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := Config{
+		config := strategies.FixedWindowConfig{
 			Key:    "result-test-key",
 			Limit:  5,
 			Window: time.Minute,
@@ -206,7 +207,7 @@ func TestFixedWindow_Reset(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := Config{
+		config := strategies.FixedWindowConfig{
 			Key:    "reset-test-key",
 			Limit:  2,
 			Window: time.Minute,
@@ -247,7 +248,7 @@ func TestFixedWindow_ConcurrentAccess(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := Config{
+		config := strategies.FixedWindowConfig{
 			Key:    "concurrent-key",
 			Limit:  5,
 			Window: time.Minute,
@@ -298,7 +299,7 @@ func TestFixedWindow_PreciseTiming(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := Config{
+		config := strategies.FixedWindowConfig{
 			Key:    "timing-key",
 			Limit:  3,
 			Window: 5 * time.Second,

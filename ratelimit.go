@@ -195,7 +195,7 @@ func (m *MultiTierLimiter) createTierConfig(dynamicKey string, tierName string, 
 	primaryConfig := m.config.PrimaryConfig
 	switch primaryConfig.Type() {
 	case StrategyFixedWindow:
-		return fixedwindow.Config{
+		return strategies.FixedWindowConfig{
 			Key:    key,
 			Limit:  limit,
 			Window: interval,
@@ -206,7 +206,7 @@ func (m *MultiTierLimiter) createTierConfig(dynamicKey string, tierName string, 
 		if !ok {
 			return nil, fmt.Errorf("invalid token bucket configuration")
 		}
-		return tokenbucket.Config{
+		return strategies.TokenBucketConfig{
 			Key:        key,
 			BurstSize:  tokenConfig.BurstSize,
 			RefillRate: tokenConfig.RefillRate,
@@ -217,7 +217,7 @@ func (m *MultiTierLimiter) createTierConfig(dynamicKey string, tierName string, 
 		if !ok {
 			return nil, fmt.Errorf("invalid leaky bucket configuration")
 		}
-		return leakybucket.Config{
+		return strategies.LeakyBucketConfig{
 			Key:      key,
 			Capacity: leakyConfig.Capacity,
 			LeakRate: leakyConfig.LeakRate,
@@ -244,7 +244,7 @@ func (m *MultiTierLimiter) createBucketConfig(dynamicKey string) (any, error) {
 		if !ok {
 			return nil, fmt.Errorf("invalid token bucket configuration")
 		}
-		return tokenbucket.Config{
+		return strategies.TokenBucketConfig{
 			Key:        key,
 			BurstSize:  tokenConfig.BurstSize,
 			RefillRate: tokenConfig.RefillRate,
@@ -255,7 +255,7 @@ func (m *MultiTierLimiter) createBucketConfig(dynamicKey string) (any, error) {
 		if !ok {
 			return nil, fmt.Errorf("invalid leaky bucket configuration")
 		}
-		return leakybucket.Config{
+		return strategies.LeakyBucketConfig{
 			Key:      key,
 			Capacity: leakyConfig.Capacity,
 			LeakRate: leakyConfig.LeakRate,
@@ -287,7 +287,7 @@ func (m *MultiTierLimiter) createSecondaryBucketConfig(dynamicKey string) (any, 
 		if !ok {
 			return nil, fmt.Errorf("invalid secondary token bucket configuration")
 		}
-		return tokenbucket.Config{
+		return strategies.TokenBucketConfig{
 			Key:        key,
 			BurstSize:  tokenConfig.BurstSize,
 			RefillRate: tokenConfig.RefillRate,
@@ -298,7 +298,7 @@ func (m *MultiTierLimiter) createSecondaryBucketConfig(dynamicKey string) (any, 
 		if !ok {
 			return nil, fmt.Errorf("invalid secondary leaky bucket configuration")
 		}
-		return leakybucket.Config{
+		return strategies.LeakyBucketConfig{
 			Key:      key,
 			Capacity: leakyConfig.Capacity,
 			LeakRate: leakyConfig.LeakRate,
@@ -585,7 +585,7 @@ func (m *MultiTierLimiter) handleDualStrategy(accessOpts *accessOptions, results
 			return false, nil, fmt.Errorf("failed to create config for tier %s: %w", tierName, err)
 		}
 
-		fixedWindowConfig, ok := config.(fixedwindow.Config)
+		fixedWindowConfig, ok := config.(strategies.FixedWindowConfig)
 		if !ok {
 			return false, nil, fmt.Errorf("dual strategy only supports FixedWindow as primary strategy")
 		}
