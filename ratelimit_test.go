@@ -47,7 +47,7 @@ func TestNew_WithOptions(t *testing.T) {
 		assert.Equal(t, "test-key", config.BaseKey)
 
 		// Check primary strategy configuration
-		fixedWindowConfig, ok := config.PrimaryConfig.(FixedWindowConfig)
+		fixedWindowConfig, ok := config.PrimaryConfig.(MultiFixedWindowConfig)
 		require.True(t, ok)
 		assert.Equal(t, strategies.StrategyFixedWindow, fixedWindowConfig.Type())
 		assert.Len(t, fixedWindowConfig.Tiers, 2)

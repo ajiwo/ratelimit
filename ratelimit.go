@@ -97,7 +97,7 @@ func (m *MultiTierLimiter) setupPrimaryStrategies(config MultiTierConfig) error 
 
 // setupFixedWindowStrategies creates strategies for each tier in fixed window configuration
 func (m *MultiTierLimiter) setupFixedWindowStrategies(config MultiTierConfig, primaryStrategyType strategies.StrategyType) error {
-	fixedWindowConfig, ok := config.PrimaryConfig.(FixedWindowConfig)
+	fixedWindowConfig, ok := config.PrimaryConfig.(MultiFixedWindowConfig)
 	if !ok {
 		return fmt.Errorf("invalid configuration type for fixed window strategy")
 	}
@@ -355,7 +355,7 @@ func (m *MultiTierLimiter) GetStats(opts ...AccessOption) (map[string]TierResult
 
 	// Only fixed window strategy has tiers
 	if m.config.PrimaryConfig.Type() == strategies.StrategyFixedWindow {
-		fixedWindowConfig, ok := m.config.PrimaryConfig.(FixedWindowConfig)
+		fixedWindowConfig, ok := m.config.PrimaryConfig.(MultiFixedWindowConfig)
 		if !ok {
 			return nil, fmt.Errorf("invalid fixed window configuration")
 		}
@@ -429,7 +429,7 @@ func (m *MultiTierLimiter) Reset(opts ...AccessOption) error {
 
 	// Only fixed window strategy has tiers
 	if m.config.PrimaryConfig.Type() == strategies.StrategyFixedWindow {
-		fixedWindowConfig, ok := m.config.PrimaryConfig.(FixedWindowConfig)
+		fixedWindowConfig, ok := m.config.PrimaryConfig.(MultiFixedWindowConfig)
 		if !ok {
 			return fmt.Errorf("invalid fixed window configuration")
 		}
@@ -562,7 +562,7 @@ func (m *MultiTierLimiter) handleDualStrategy(accessOpts *accessOptions, results
 	// First check primary strategy using CheckOnly (no quota consumption)
 	primaryAllowed := true
 
-	fixedWindowConfig, ok := m.config.PrimaryConfig.(FixedWindowConfig)
+	fixedWindowConfig, ok := m.config.PrimaryConfig.(MultiFixedWindowConfig)
 	if !ok {
 		return false, nil, fmt.Errorf("dual strategy only supports FixedWindow as primary strategy")
 	}
@@ -654,7 +654,7 @@ func (m *MultiTierLimiter) handleDualStrategy(accessOpts *accessOptions, results
 // consumeFromBothStrategies consumes quota from both primary and secondary strategies
 func (m *MultiTierLimiter) consumeFromBothStrategies(accessOpts *accessOptions, secondaryConfig any, results map[string]TierResult) (bool, map[string]TierResult, error) {
 	// Consume from primary strategy
-	fixedWindowConfig := m.config.PrimaryConfig.(FixedWindowConfig)
+	fixedWindowConfig := m.config.PrimaryConfig.(MultiFixedWindowConfig)
 	for _, tier := range fixedWindowConfig.Tiers {
 		tierName := getTierName(tier.Interval)
 		config, err := m.createTierConfig(accessOpts.key, tierName, tier.Limit, tier.Interval)
@@ -681,7 +681,7 @@ func (m *MultiTierLimiter) consumeFromBothStrategies(accessOpts *accessOptions, 
 // handleSingleTierStrategy handles the case where only a single tier-based strategy is used
 func (m *MultiTierLimiter) handleSingleTierStrategy(accessOpts *accessOptions, results map[string]TierResult) (bool, map[string]TierResult, error) {
 	deniedTiers := []string{}
-	fixedWindowConfig := m.config.PrimaryConfig.(FixedWindowConfig)
+	fixedWindowConfig := m.config.PrimaryConfig.(MultiFixedWindowConfig)
 	for _, tier := range fixedWindowConfig.Tiers {
 		tierName := getTierName(tier.Interval)
 

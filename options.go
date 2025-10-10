@@ -17,7 +17,7 @@ func WithFixedWindowStrategy(tiers ...TierConfig) Option {
 	return func(config *MultiTierConfig) error {
 		// Default tier if none provided
 		if len(tiers) == 0 {
-			config.PrimaryConfig = FixedWindowConfig{
+			config.PrimaryConfig = MultiFixedWindowConfig{
 				Tiers: []TierConfig{
 					{
 						Interval: time.Minute,
@@ -26,7 +26,7 @@ func WithFixedWindowStrategy(tiers ...TierConfig) Option {
 				},
 			}
 		} else {
-			config.PrimaryConfig = FixedWindowConfig{
+			config.PrimaryConfig = MultiFixedWindowConfig{
 				Tiers: tiers,
 			}
 		}
