@@ -27,13 +27,13 @@ func TestFixedWindow_Allow(t *testing.T) {
 
 		// First 5 requests should be allowed
 		for i := range 5 {
-			result, err := strategy.AllowWithResult(ctx, config)
+			result, err := strategy.Allow(ctx, config)
 			require.NoError(t, err)
 			assert.True(t, result.Allowed, "Request %d should be allowed", i)
 		}
 
 		// 6th request should be denied
-		result, err := strategy.AllowWithResult(ctx, config)
+		result, err := strategy.Allow(ctx, config)
 		require.NoError(t, err)
 		assert.False(t, result.Allowed, "6th request should be denied")
 	})
@@ -54,13 +54,13 @@ func TestFixedWindow_WindowReset(t *testing.T) {
 
 		// Use up the limit
 		for i := range 2 {
-			result, err := strategy.AllowWithResult(ctx, config)
+			result, err := strategy.Allow(ctx, config)
 			require.NoError(t, err)
 			assert.True(t, result.Allowed, "Request %d should be allowed", i)
 		}
 
 		// 3rd request should be denied
-		result, err := strategy.AllowWithResult(ctx, config)
+		result, err := strategy.Allow(ctx, config)
 		require.NoError(t, err)
 		assert.False(t, result.Allowed, "3rd request should be denied")
 
@@ -69,7 +69,7 @@ func TestFixedWindow_WindowReset(t *testing.T) {
 		synctest.Wait()
 
 		// New request should be allowed in new window
-		result, err = strategy.AllowWithResult(ctx, config)
+		result, err = strategy.Allow(ctx, config)
 		require.NoError(t, err)
 		assert.True(t, result.Allowed, "Request in new window should be allowed")
 	})
@@ -95,17 +95,17 @@ func TestFixedWindow_MultipleKeys(t *testing.T) {
 		ctx := t.Context()
 
 		// First request for user1 should be allowed
-		result, err := strategy.AllowWithResult(ctx, config1)
+		result, err := strategy.Allow(ctx, config1)
 		require.NoError(t, err)
 		assert.True(t, result.Allowed, "First request for user1 should be allowed")
 
 		// Second request for user1 should be denied
-		result, err = strategy.AllowWithResult(ctx, config1)
+		result, err = strategy.Allow(ctx, config1)
 		require.NoError(t, err)
 		assert.False(t, result.Allowed, "Second request for user1 should be denied")
 
 		// First request for user2 should be allowed (different key)
-		result, err = strategy.AllowWithResult(ctx, config2)
+		result, err = strategy.Allow(ctx, config2)
 		require.NoError(t, err)
 		assert.True(t, result.Allowed, "First request for user2 should be allowed")
 	})
@@ -118,7 +118,7 @@ func TestFixedWindow_InvalidConfig(t *testing.T) {
 	ctx := t.Context()
 
 	// Test with wrong config type
-	result, err := strategy.AllowWithResult(ctx, struct{}{})
+	result, err := strategy.Allow(ctx, struct{}{})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "requires FixedWindowConfig")
 	assert.False(t, result.Allowed)
@@ -138,7 +138,7 @@ func TestFixedWindow_ZeroLimit(t *testing.T) {
 		ctx := t.Context()
 
 		// Any request should be denied when limit is 0
-		result, err := strategy.AllowWithResult(ctx, config)
+		result, err := strategy.Allow(ctx, config)
 		require.NoError(t, err)
 		assert.False(t, result.Allowed, "Request should be denied when limit is 0")
 	})
@@ -166,7 +166,7 @@ func TestFixedWindow_GetResult(t *testing.T) {
 
 		// Make some requests
 		for range 3 {
-			result, err = strategy.AllowWithResult(ctx, config)
+			result, err = strategy.Allow(ctx, config)
 			require.NoError(t, err)
 			assert.True(t, result.Allowed, "Request should be allowed")
 		}
@@ -179,13 +179,13 @@ func TestFixedWindow_GetResult(t *testing.T) {
 
 		// Make remaining requests to hit the limit
 		for range 2 {
-			result, err = strategy.AllowWithResult(ctx, config)
+			result, err = strategy.Allow(ctx, config)
 			require.NoError(t, err)
 			assert.True(t, result.Allowed, "Request should be allowed")
 		}
 
 		// Next request should be denied
-		result, err = strategy.AllowWithResult(ctx, config)
+		result, err = strategy.Allow(ctx, config)
 		require.NoError(t, err)
 		assert.False(t, result.Allowed, "Request should be denied")
 
@@ -217,13 +217,13 @@ func TestFixedWindow_Reset(t *testing.T) {
 
 		// Make requests to use up the limit
 		for i := range 2 {
-			result, err := strategy.AllowWithResult(ctx, config)
+			result, err := strategy.Allow(ctx, config)
 			require.NoError(t, err)
 			assert.True(t, result.Allowed, "Request %d should be allowed", i)
 		}
 
 		// Next request should be denied
-		result, err := strategy.AllowWithResult(ctx, config)
+		result, err := strategy.Allow(ctx, config)
 		require.NoError(t, err)
 		assert.False(t, result.Allowed, "Request should be denied (limit exceeded)")
 
@@ -232,7 +232,7 @@ func TestFixedWindow_Reset(t *testing.T) {
 		require.NoError(t, err)
 
 		// After reset, requests should be allowed again
-		result, err = strategy.AllowWithResult(ctx, config)
+		result, err = strategy.Allow(ctx, config)
 		require.NoError(t, err)
 		assert.True(t, result.Allowed, "Request after reset should be allowed")
 
@@ -263,7 +263,7 @@ func TestFixedWindow_ConcurrentAccess(t *testing.T) {
 		// Launch 10 goroutines that will all try to make a request
 		for range 10 {
 			waitGroup.Go(func() {
-				result, err := strategy.AllowWithResult(ctx, config)
+				result, err := strategy.Allow(ctx, config)
 				if err != nil {
 					t.Errorf("Unexpected error: %v", err)
 					return
@@ -288,7 +288,7 @@ func TestFixedWindow_ConcurrentAccess(t *testing.T) {
 		assert.Equal(t, 5, allowedCount, "Exactly 5 requests should be allowed")
 
 		// Verify that we can't make any more requests
-		result2, err := strategy.AllowWithResult(ctx, config)
+		result2, err := strategy.Allow(ctx, config)
 		require.NoError(t, err)
 		assert.False(t, result2.Allowed, "11th request should be denied")
 	})
@@ -308,7 +308,7 @@ func TestFixedWindow_PreciseTiming(t *testing.T) {
 		ctx := t.Context()
 
 		// Make requests at different times within the window
-		result, err := strategy.AllowWithResult(ctx, config)
+		result, err := strategy.Allow(ctx, config)
 		require.NoError(t, err)
 		assert.True(t, result.Allowed, "First request should be allowed")
 
@@ -316,7 +316,7 @@ func TestFixedWindow_PreciseTiming(t *testing.T) {
 		time.Sleep(2 * time.Second)
 		synctest.Wait()
 
-		result, err = strategy.AllowWithResult(ctx, config)
+		result, err = strategy.Allow(ctx, config)
 		require.NoError(t, err)
 		assert.True(t, result.Allowed, "Second request should be allowed")
 
@@ -324,7 +324,7 @@ func TestFixedWindow_PreciseTiming(t *testing.T) {
 		time.Sleep(2 * time.Second)
 		synctest.Wait()
 
-		result, err = strategy.AllowWithResult(ctx, config)
+		result, err = strategy.Allow(ctx, config)
 		require.NoError(t, err)
 		assert.True(t, result.Allowed, "Third request should be allowed")
 
@@ -337,21 +337,21 @@ func TestFixedWindow_PreciseTiming(t *testing.T) {
 		synctest.Wait()
 
 		// This request should be allowed because we're in a new window
-		result, err = strategy.AllowWithResult(ctx, config)
+		result, err = strategy.Allow(ctx, config)
 		require.NoError(t, err)
 		assert.True(t, result.Allowed, "Fourth request should be allowed in new window")
 
 		// Use up the rest of the limit in the new window
-		result, err = strategy.AllowWithResult(ctx, config)
+		result, err = strategy.Allow(ctx, config)
 		require.NoError(t, err)
 		assert.True(t, result.Allowed, "Fifth request should be allowed")
 
-		result, err = strategy.AllowWithResult(ctx, config)
+		result, err = strategy.Allow(ctx, config)
 		require.NoError(t, err)
 		assert.True(t, result.Allowed, "Sixth request should be allowed")
 
 		// This one should be denied
-		result, err = strategy.AllowWithResult(ctx, config)
+		result, err = strategy.Allow(ctx, config)
 		require.NoError(t, err)
 		assert.False(t, result.Allowed, "Seventh request should be denied")
 	})

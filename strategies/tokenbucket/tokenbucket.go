@@ -31,14 +31,6 @@ func New(storage backends.Backend) *Strategy {
 	}
 }
 
-// Allow checks if a request is allowed based on token bucket algorithm
-//
-// Deprecated: Use AllowWithResult instead. Allow will be removed in a future release.
-func (t *Strategy) Allow(ctx context.Context, config any) (bool, error) {
-	result, err := t.AllowWithResult(ctx, config)
-	return result.Allowed, err
-}
-
 // GetResult returns detailed statistics for the current bucket state
 func (t *Strategy) GetResult(ctx context.Context, config any) (strategies.Result, error) {
 	// Type assert to TokenBucketConfig
@@ -209,8 +201,8 @@ func calculateTBResetTime(now time.Time, bucket TokenBucket) time.Time {
 	return now.Add(time.Duration(timeToRefillSeconds * float64(time.Second)))
 }
 
-// AllowWithResult checks if a request is allowed and returns detailed statistics
-func (t *Strategy) AllowWithResult(ctx context.Context, config any) (strategies.Result, error) {
+// Allow checks if a request is allowed and returns detailed statistics
+func (t *Strategy) Allow(ctx context.Context, config any) (strategies.Result, error) {
 	// Type assert to TokenBucketConfig
 	tokenConfig, ok := config.(strategies.TokenBucketConfig)
 	if !ok {

@@ -524,7 +524,7 @@ func (m *MultiTierLimiter) handleSingleBucketStrategy(accessOpts *accessOptions,
 
 	// Check if request is allowed using the bucket strategy
 	strategy := m.strategies["default"]
-	tierResult, err := strategy.AllowWithResult(accessOpts.ctx, config)
+	tierResult, err := strategy.Allow(accessOpts.ctx, config)
 	if err != nil {
 		return false, nil, fmt.Errorf("bucket strategy check failed: %w", err)
 	}
@@ -653,14 +653,14 @@ func (m *MultiTierLimiter) consumeFromBothStrategies(accessOpts *accessOptions, 
 		}
 
 		strategy := m.strategies[tierName]
-		_, err = strategy.AllowWithResult(accessOpts.ctx, config)
+		_, err = strategy.Allow(accessOpts.ctx, config)
 		if err != nil {
 			return false, nil, fmt.Errorf("tier %s quota consumption failed: %w", tierName, err)
 		}
 	}
 
 	// Consume from secondary strategy
-	_, err := m.secondaryStrategy.AllowWithResult(accessOpts.ctx, secondaryConfig)
+	_, err := m.secondaryStrategy.Allow(accessOpts.ctx, secondaryConfig)
 	if err != nil {
 		return false, nil, fmt.Errorf("secondary strategy quota consumption failed: %w", err)
 	}
@@ -683,7 +683,7 @@ func (m *MultiTierLimiter) handleSingleTierStrategy(accessOpts *accessOptions, r
 
 		// Check if request is allowed for this tier
 		strategy := m.strategies[tierName]
-		tierResult, err := strategy.AllowWithResult(accessOpts.ctx, config)
+		tierResult, err := strategy.Allow(accessOpts.ctx, config)
 		if err != nil {
 			return false, nil, fmt.Errorf("tier %s check failed: %w", tierName, err)
 		}

@@ -945,6 +945,7 @@ func TestDualStrategy_QuotaConsumption(t *testing.T) {
 		stats, err := limiter.GetStats(WithContext(ctx))
 		require.NoError(t, err)
 		minuteStats := stats["minute"]
+		assert.Equal(t, 2, minuteStats.Remaining, "Should have 2 remaining quota")
 
 		// Phase 2: Request should be denied by secondary strategy, but primary quota preserved
 		allowed, err = limiter.Allow(WithContext(ctx))

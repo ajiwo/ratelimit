@@ -32,7 +32,7 @@ func TestTokenBucket_GetResult(t *testing.T) {
 
 		// Make some requests
 		for i := range 5 {
-			result, err := strategy.AllowWithResult(ctx, config)
+			result, err := strategy.Allow(ctx, config)
 			require.NoError(t, err)
 			assert.True(t, result.Allowed, "Request %d should be allowed", i)
 		}
@@ -45,13 +45,13 @@ func TestTokenBucket_GetResult(t *testing.T) {
 
 		// Use all tokens
 		for i := range 5 {
-			result, err := strategy.AllowWithResult(ctx, config)
+			result, err := strategy.Allow(ctx, config)
 			require.NoError(t, err)
 			assert.True(t, result.Allowed, "Request %d should be allowed", i+5)
 		}
 
 		// Next request should be denied
-		result, err = strategy.AllowWithResult(ctx, config)
+		result, err = strategy.Allow(ctx, config)
 		require.NoError(t, err)
 		assert.False(t, result.Allowed, "Request should be denied when no tokens")
 
@@ -76,13 +76,13 @@ func TestTokenBucket_Reset(t *testing.T) {
 
 		// Use all tokens
 		for i := range 4 {
-			result, err := strategy.AllowWithResult(ctx, config)
+			result, err := strategy.Allow(ctx, config)
 			require.NoError(t, err)
 			assert.True(t, result.Allowed, "Request %d should be allowed", i)
 		}
 
 		// Next request should be denied
-		result, err := strategy.AllowWithResult(ctx, config)
+		result, err := strategy.Allow(ctx, config)
 		require.NoError(t, err)
 		assert.False(t, result.Allowed, "Request should be denied (no tokens)")
 
@@ -91,7 +91,7 @@ func TestTokenBucket_Reset(t *testing.T) {
 		require.NoError(t, err)
 
 		// After reset, requests should be allowed again
-		result, err = strategy.AllowWithResult(ctx, config)
+		result, err = strategy.Allow(ctx, config)
 		require.NoError(t, err)
 		assert.True(t, result.Allowed, "Request after reset should be allowed")
 
@@ -116,9 +116,9 @@ func TestTokenBucket_Allow(t *testing.T) {
 				RefillRate: 10.0, // 10 tokens per second
 			}
 
-			allowed, err := strategy.Allow(ctx, config)
+			result, err := strategy.Allow(ctx, config)
 			require.NoError(t, err)
-			assert.True(t, allowed)
+			assert.True(t, result.Allowed)
 		})
 	})
 
@@ -137,15 +137,15 @@ func TestTokenBucket_Allow(t *testing.T) {
 
 			// First 3 requests should be allowed
 			for i := range 3 {
-				allowed, err := strategy.Allow(ctx, config)
+				result, err := strategy.Allow(ctx, config)
 				require.NoError(t, err)
-				assert.True(t, allowed, "Request %d should be allowed", i)
+				assert.True(t, result.Allowed, "Request %d should be allowed", i)
 			}
 
 			// 4th request should be denied
-			allowed, err := strategy.Allow(ctx, config)
+			result, err := strategy.Allow(ctx, config)
 			require.NoError(t, err)
-			assert.False(t, allowed)
+			assert.False(t, result.Allowed)
 		})
 	})
 
@@ -164,24 +164,24 @@ func TestTokenBucket_Allow(t *testing.T) {
 
 			// Use all tokens
 			for i := range 3 {
-				allowed, err := strategy.Allow(ctx, config)
+				result, err := strategy.Allow(ctx, config)
 				require.NoError(t, err)
-				assert.True(t, allowed, "Request %d should be allowed", i)
+				assert.True(t, result.Allowed, "Request %d should be allowed", i)
 			}
 
 			// Next request should be denied
-			allowed, err := strategy.Allow(ctx, config)
+			result, err := strategy.Allow(ctx, config)
 			require.NoError(t, err)
-			assert.False(t, allowed)
+			assert.False(t, result.Allowed)
 
 			// Wait for a significant time to ensure refill
 			time.Sleep(1500 * time.Millisecond)
 			synctest.Wait()
 
 			// At least one request should be allowed after waiting
-			allowed, err = strategy.Allow(ctx, config)
+			result, err = strategy.Allow(ctx, config)
 			require.NoError(t, err)
-			assert.True(t, allowed, "At least one request should be allowed after refill")
+			assert.True(t, result.Allowed, "At least one request should be allowed after refill")
 		})
 	})
 
@@ -205,27 +205,27 @@ func TestTokenBucket_Allow(t *testing.T) {
 
 			// Use all tokens for key1
 			for i := range 2 {
-				allowed, err := strategy.Allow(ctx, config1)
+				result, err := strategy.Allow(ctx, config1)
 				require.NoError(t, err)
-				assert.True(t, allowed, "Key1 request %d should be allowed", i)
+				assert.True(t, result.Allowed, "Key1 request %d should be allowed", i)
 			}
 
 			// key1 should be denied
-			allowed, err := strategy.Allow(ctx, config1)
+			result, err := strategy.Allow(ctx, config1)
 			require.NoError(t, err)
-			assert.False(t, allowed)
+			assert.False(t, result.Allowed)
 
 			// key2 should still be allowed
 			for i := range 2 {
-				allowed, err := strategy.Allow(ctx, config2)
+				result, err := strategy.Allow(ctx, config2)
 				require.NoError(t, err)
-				assert.True(t, allowed, "Key2 request %d should be allowed", i)
+				assert.True(t, result.Allowed, "Key2 request %d should be allowed", i)
 			}
 
 			// key2 should now be denied
-			allowed, err = strategy.Allow(ctx, config2)
+			result, err = strategy.Allow(ctx, config2)
 			require.NoError(t, err)
-			assert.False(t, allowed)
+			assert.False(t, result.Allowed)
 		})
 	})
 
@@ -244,24 +244,24 @@ func TestTokenBucket_Allow(t *testing.T) {
 
 			// Use all tokens
 			for i := range 10 {
-				allowed, err := strategy.Allow(ctx, config)
+				result, err := strategy.Allow(ctx, config)
 				require.NoError(t, err)
-				assert.True(t, allowed, "Request %d should be allowed", i)
+				assert.True(t, result.Allowed, "Request %d should be allowed", i)
 			}
 
 			// Next request should be denied
-			allowed, err := strategy.Allow(ctx, config)
+			result, err := strategy.Allow(ctx, config)
 			require.NoError(t, err)
-			assert.False(t, allowed)
+			assert.False(t, result.Allowed)
 
 			// Wait for some time to get fractional tokens
 			time.Sleep(1200 * time.Millisecond)
 			synctest.Wait()
 
 			// At least one request should be allowed after waiting
-			allowed, err = strategy.Allow(ctx, config)
+			result, err = strategy.Allow(ctx, config)
 			require.NoError(t, err)
-			assert.True(t, allowed, "At least one request should be allowed after fractional refill")
+			assert.True(t, result.Allowed, "At least one request should be allowed after fractional refill")
 		})
 	})
 }
@@ -286,7 +286,7 @@ func TestTokenBucket_ConcurrentAccess(t *testing.T) {
 		// Launch 10 goroutines that will all try to make a request
 		for range 10 {
 			waitGroup.Go(func() {
-				result, err := strategy.AllowWithResult(ctx, config)
+				result, err := strategy.Allow(ctx, config)
 				if err != nil {
 					t.Errorf("Unexpected error: %v", err)
 					return
@@ -311,7 +311,7 @@ func TestTokenBucket_ConcurrentAccess(t *testing.T) {
 		assert.Equal(t, 5, allowedCount, "Exactly 5 requests should be allowed")
 
 		// Verify that we can't make any more requests
-		result, err := strategy.AllowWithResult(ctx, config)
+		result, err := strategy.Allow(ctx, config)
 		require.NoError(t, err)
 		assert.False(t, result.Allowed, "11th request should be denied")
 	})

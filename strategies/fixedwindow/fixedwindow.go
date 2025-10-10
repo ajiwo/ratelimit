@@ -30,14 +30,6 @@ func New(storage backends.Backend) *Strategy {
 	}
 }
 
-// Allow checks if a request is allowed based on fixed window algorithm
-//
-// Deprecated: Use AllowWithResult instead. Allow will be removed in a future release.
-func (f *Strategy) Allow(ctx context.Context, config any) (bool, error) {
-	result, err := f.AllowWithResult(ctx, config)
-	return result.Allowed, err
-}
-
 // GetResult returns detailed statistics for the current window state
 func (f *Strategy) GetResult(ctx context.Context, config any) (strategies.Result, error) {
 	// Type assert to FixedWindowConfig
@@ -178,8 +170,8 @@ func decodeFixedWindow(s string) (FixedWindow, bool) {
 	}, true
 }
 
-// AllowWithResult checks if a request is allowed and returns detailed statistics
-func (f *Strategy) AllowWithResult(ctx context.Context, config any) (strategies.Result, error) {
+// Allow checks if a request is allowed and returns detailed statistics
+func (f *Strategy) Allow(ctx context.Context, config any) (strategies.Result, error) {
 	// Type assert to FixedWindowConfig
 	fixedConfig, ok := config.(strategies.FixedWindowConfig)
 	if !ok {

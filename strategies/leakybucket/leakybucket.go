@@ -31,14 +31,6 @@ func New(storage backends.Backend) *Strategy {
 	}
 }
 
-// Allow checks if a request is allowed based on leaky bucket algorithm
-//
-// Deprecated: Use AllowWithResult instead. Allow will be removed in a future release.
-func (l *Strategy) Allow(ctx context.Context, config any) (bool, error) {
-	result, err := l.AllowWithResult(ctx, config)
-	return result.Allowed, err
-}
-
 // GetResult returns detailed statistics for the current bucket state
 func (l *Strategy) GetResult(ctx context.Context, config any) (strategies.Result, error) {
 	// Type assert to LeakyBucketConfig
@@ -208,8 +200,8 @@ func calculateLBResetTime(now time.Time, bucket LeakyBucket, capacity int) time.
 	return now.Add(time.Duration(timeToLeakSeconds * float64(time.Second)))
 }
 
-// AllowWithResult checks if a request is allowed and returns detailed statistics
-func (l *Strategy) AllowWithResult(ctx context.Context, config any) (strategies.Result, error) {
+// Allow checks if a request is allowed and returns detailed statistics
+func (l *Strategy) Allow(ctx context.Context, config any) (strategies.Result, error) {
 	// Type assert to LeakyBucketConfig
 	leakyConfig, ok := config.(strategies.LeakyBucketConfig)
 	if !ok {
