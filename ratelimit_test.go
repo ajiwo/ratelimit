@@ -177,14 +177,12 @@ func TestMultiTierLimiter_GetStats(t *testing.T) {
 	assert.True(t, minuteStats.Allowed)
 	assert.Equal(t, 5, minuteStats.Total)
 	assert.Equal(t, 5, minuteStats.Remaining)
-	assert.Equal(t, 0, minuteStats.Used)
 
 	// Check hour tier stats
 	hourStats := stats["hour"]
 	assert.True(t, hourStats.Allowed)
 	assert.Equal(t, 100, hourStats.Total)
 	assert.Equal(t, 100, hourStats.Remaining)
-	assert.Equal(t, 0, hourStats.Used)
 
 	// Make some requests
 	for i := range 3 {
@@ -202,14 +200,12 @@ func TestMultiTierLimiter_GetStats(t *testing.T) {
 	assert.True(t, minuteStats.Allowed)
 	assert.Equal(t, 5, minuteStats.Total)
 	assert.Equal(t, 2, minuteStats.Remaining)
-	assert.Equal(t, 3, minuteStats.Used)
 
 	// Check hour tier after requests
 	hourStats = stats["hour"]
 	assert.True(t, hourStats.Allowed)
 	assert.Equal(t, 100, hourStats.Total)
 	assert.Equal(t, 97, hourStats.Remaining)
-	assert.Equal(t, 3, hourStats.Used)
 
 	err = limiter.Close()
 	require.NoError(t, err)
@@ -697,7 +693,6 @@ func TestAccessOptions_GetStats(t *testing.T) {
 	minuteStats := stats["minute"]
 	assert.Equal(t, 5, minuteStats.Total)
 	assert.Equal(t, 2, minuteStats.Remaining)
-	assert.Equal(t, 3, minuteStats.Used)
 
 	// Get stats for user2 (should be fresh)
 	stats, err = limiter.GetStats(WithContext(ctx), WithKey("user2"))
@@ -707,7 +702,6 @@ func TestAccessOptions_GetStats(t *testing.T) {
 	minuteStats = stats["minute"]
 	assert.Equal(t, 5, minuteStats.Total)
 	assert.Equal(t, 5, minuteStats.Remaining)
-	assert.Equal(t, 0, minuteStats.Used)
 
 	err = limiter.Close()
 	require.NoError(t, err)
@@ -741,7 +735,6 @@ func TestAccessOptions_AllowWithResult(t *testing.T) {
 	minuteStats := stats1["minute"]
 	assert.Equal(t, 5, minuteStats.Total)
 	assert.Equal(t, 2, minuteStats.Remaining)
-	assert.Equal(t, 3, minuteStats.Used)
 
 	var stats2 map[string]TierResult
 	// Make requests for user2
@@ -756,7 +749,6 @@ func TestAccessOptions_AllowWithResult(t *testing.T) {
 	minuteStats = stats2["minute"]
 	assert.Equal(t, 5, minuteStats.Total)
 	assert.Equal(t, 4, minuteStats.Remaining)
-	assert.Equal(t, 1, minuteStats.Used)
 
 	err = limiter.Close()
 	require.NoError(t, err)
@@ -842,7 +834,6 @@ func TestAccessOptions_DefaultBehavior(t *testing.T) {
 	minuteStats := stats["minute"]
 	assert.Equal(t, 3, minuteStats.Total)
 	assert.Equal(t, 0, minuteStats.Remaining)
-	assert.Equal(t, 3, minuteStats.Used)
 
 	err = limiter.Reset(WithContext(ctx))
 	require.NoError(t, err)
@@ -895,7 +886,6 @@ func TestAccessOptions_MiddlewareExample(t *testing.T) {
 		minuteStats := stats["minute"]
 		assert.Equal(t, 5, minuteStats.Total)
 		assert.Equal(t, 2, minuteStats.Remaining)
-		assert.Equal(t, 3, minuteStats.Used)
 	}
 }
 
@@ -955,7 +945,6 @@ func TestDualStrategy_QuotaConsumption(t *testing.T) {
 		stats, err := limiter.GetStats(WithContext(ctx))
 		require.NoError(t, err)
 		minuteStats := stats["minute"]
-		assert.Equal(t, 1, minuteStats.Used, "Primary strategy should show 1 used")
 
 		// Phase 2: Request should be denied by secondary strategy, but primary quota preserved
 		allowed, err = limiter.Allow(WithContext(ctx))
@@ -966,7 +955,6 @@ func TestDualStrategy_QuotaConsumption(t *testing.T) {
 		stats, err = limiter.GetStats(WithContext(ctx))
 		require.NoError(t, err)
 		minuteStats = stats["minute"]
-		assert.Equal(t, 1, minuteStats.Used, "Primary strategy should still show 1 used (quota preserved)")
 		assert.True(t, minuteStats.Allowed, "Primary strategy should still allow")
 
 		smootherStats := stats["smoother"]

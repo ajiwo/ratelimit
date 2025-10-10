@@ -35,7 +35,6 @@ type TierResult struct {
 	Remaining int       // Remaining requests in this tier
 	Reset     time.Time // When this tier resets
 	Total     int       // Total limit for this tier
-	Used      int       // Number of requests used in this tier
 }
 
 // MultiTierLimiter implements multi-tier rate limiting
@@ -381,7 +380,6 @@ func (m *MultiTierLimiter) GetStats(opts ...AccessOption) (map[string]TierResult
 				Remaining: result.Remaining,
 				Reset:     result.Reset,
 				Total:     tier.Limit,
-				Used:      tier.Limit - result.Remaining,
 			}
 		}
 	} else {
@@ -412,7 +410,6 @@ func (m *MultiTierLimiter) GetStats(opts ...AccessOption) (map[string]TierResult
 			Remaining: result.Remaining,
 			Reset:     result.Reset,
 			Total:     total,
-			Used:      total - result.Remaining,
 		}
 	}
 
@@ -533,17 +530,15 @@ func (m *MultiTierLimiter) handleSingleBucketStrategy(accessOpts *accessOptions,
 	}
 
 	// Calculate Total and Used based on the strategy type
-	var total, used int
+	var total int
 	primaryConfig := m.config.PrimaryConfig
 	switch primaryConfig.Type() {
 	case strategies.StrategyTokenBucket:
 		tokenConfig := primaryConfig.(strategies.TokenBucketConfig)
 		total = tokenConfig.BurstSize
-		used = total - tierResult.Remaining
 	case strategies.StrategyLeakyBucket:
 		leakyConfig := primaryConfig.(strategies.LeakyBucketConfig)
 		total = leakyConfig.Capacity
-		used = total - tierResult.Remaining
 	}
 
 	results["default"] = TierResult{
@@ -551,7 +546,6 @@ func (m *MultiTierLimiter) handleSingleBucketStrategy(accessOpts *accessOptions,
 		Remaining: tierResult.Remaining,
 		Reset:     tierResult.Reset,
 		Total:     total,
-		Used:      used,
 	}
 
 	return tierResult.Allowed, results, nil
@@ -597,7 +591,6 @@ func (m *MultiTierLimiter) handleDualStrategy(accessOpts *accessOptions, results
 			Remaining: tierResult.Remaining,
 			Reset:     tierResult.Reset,
 			Total:     tier.Limit,
-			Used:      tier.Limit - tierResult.Remaining,
 		}
 
 		if !tierResult.Allowed {
@@ -622,16 +615,14 @@ func (m *MultiTierLimiter) handleDualStrategy(accessOpts *accessOptions, results
 	}
 
 	// Calculate Total and Used for secondary strategy
-	var total, used int
+	var total int
 	switch m.config.SecondaryConfig.Type() {
 	case strategies.StrategyTokenBucket:
 		tokenConfig := m.config.SecondaryConfig.(strategies.TokenBucketConfig)
 		total = tokenConfig.BurstSize
-		used = total - secondaryResult.Remaining
 	case strategies.StrategyLeakyBucket:
 		leakyConfig := m.config.SecondaryConfig.(strategies.LeakyBucketConfig)
 		total = leakyConfig.Capacity
-		used = total - secondaryResult.Remaining
 	}
 
 	results["smoother"] = TierResult{
@@ -639,7 +630,6 @@ func (m *MultiTierLimiter) handleDualStrategy(accessOpts *accessOptions, results
 		Remaining: secondaryResult.Remaining,
 		Reset:     secondaryResult.Reset,
 		Total:     total,
-		Used:      used,
 	}
 
 	// If secondary strategy doesn't allow, don't consume from either strategy
@@ -703,7 +693,6 @@ func (m *MultiTierLimiter) handleSingleTierStrategy(accessOpts *accessOptions, r
 			Remaining: tierResult.Remaining,
 			Reset:     tierResult.Reset,
 			Total:     tier.Limit,
-			Used:      tier.Limit - tierResult.Remaining,
 		}
 
 		if !tierResult.Allowed {
