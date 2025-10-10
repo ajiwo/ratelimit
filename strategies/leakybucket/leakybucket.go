@@ -19,9 +19,8 @@ type LeakyBucket struct {
 	LeakRate float64   `json:"leak_rate"` // Requests to leak per second
 }
 
-// Config extends RateLimitConfig for leaky bucket strategy
 type Config struct {
-	strategies.RateLimitConfig
+	Key      string
 	Capacity int     // Maximum requests the bucket can hold
 	LeakRate float64 // Requests to process per second
 }

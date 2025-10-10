@@ -18,9 +18,9 @@ type FixedWindow struct {
 	Duration time.Duration `json:"duration"` // Window duration
 }
 
-// Config extends RateLimitConfig for fixed window strategy
 type Config struct {
-	strategies.RateLimitConfig
+	Key    string
+	Limit  int
 	Window time.Duration
 }
 

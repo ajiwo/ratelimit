@@ -5,13 +5,6 @@ import (
 	"time"
 )
 
-// RateLimitConfig contains basic configuration for rate limiting
-// Each strategy may extend this with strategy-specific fields
-type RateLimitConfig struct {
-	Key   string
-	Limit int
-}
-
 // Result represents the result of a rate limiting check
 type Result struct {
 	Allowed   bool      // Whether the request is allowed

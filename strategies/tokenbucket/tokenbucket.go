@@ -20,9 +20,8 @@ type TokenBucket struct {
 	RefillRate float64   `json:"refill_rate"` // tokens per second
 }
 
-// Config extends RateLimitConfig for token bucket strategy
 type Config struct {
-	strategies.RateLimitConfig
+	Key        string
 	BurstSize  int     // Maximum tokens the bucket can hold
 	RefillRate float64 // Tokens to add per second
 }

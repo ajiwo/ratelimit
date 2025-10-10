@@ -196,10 +196,8 @@ func (m *MultiTierLimiter) createTierConfig(dynamicKey string, tierName string, 
 	switch primaryConfig.Type() {
 	case StrategyFixedWindow:
 		return fixedwindow.Config{
-			RateLimitConfig: strategies.RateLimitConfig{
-				Key:   key,
-				Limit: limit,
-			},
+			Key:    key,
+			Limit:  limit,
 			Window: interval,
 		}, nil
 
@@ -209,10 +207,7 @@ func (m *MultiTierLimiter) createTierConfig(dynamicKey string, tierName string, 
 			return nil, fmt.Errorf("invalid token bucket configuration")
 		}
 		return tokenbucket.Config{
-			RateLimitConfig: strategies.RateLimitConfig{
-				Key:   key,
-				Limit: limit,
-			},
+			Key:        key,
 			BurstSize:  tokenConfig.BurstSize,
 			RefillRate: tokenConfig.RefillRate,
 		}, nil
@@ -223,10 +218,7 @@ func (m *MultiTierLimiter) createTierConfig(dynamicKey string, tierName string, 
 			return nil, fmt.Errorf("invalid leaky bucket configuration")
 		}
 		return leakybucket.Config{
-			RateLimitConfig: strategies.RateLimitConfig{
-				Key:   key,
-				Limit: limit,
-			},
+			Key:      key,
 			Capacity: leakyConfig.Capacity,
 			LeakRate: leakyConfig.LeakRate,
 		}, nil
@@ -253,10 +245,7 @@ func (m *MultiTierLimiter) createBucketConfig(dynamicKey string) (any, error) {
 			return nil, fmt.Errorf("invalid token bucket configuration")
 		}
 		return tokenbucket.Config{
-			RateLimitConfig: strategies.RateLimitConfig{
-				Key:   key,
-				Limit: int(tokenConfig.RefillRate * 3600), // Convert to hourly limit for display purposes
-			},
+			Key:        key,
 			BurstSize:  tokenConfig.BurstSize,
 			RefillRate: tokenConfig.RefillRate,
 		}, nil
@@ -267,10 +256,7 @@ func (m *MultiTierLimiter) createBucketConfig(dynamicKey string) (any, error) {
 			return nil, fmt.Errorf("invalid leaky bucket configuration")
 		}
 		return leakybucket.Config{
-			RateLimitConfig: strategies.RateLimitConfig{
-				Key:   key,
-				Limit: int(leakyConfig.LeakRate * 3600), // Convert to hourly limit for display purposes
-			},
+			Key:      key,
 			Capacity: leakyConfig.Capacity,
 			LeakRate: leakyConfig.LeakRate,
 		}, nil
@@ -302,10 +288,7 @@ func (m *MultiTierLimiter) createSecondaryBucketConfig(dynamicKey string) (any, 
 			return nil, fmt.Errorf("invalid secondary token bucket configuration")
 		}
 		return tokenbucket.Config{
-			RateLimitConfig: strategies.RateLimitConfig{
-				Key:   key,
-				Limit: int(tokenConfig.RefillRate * 3600), // Convert to hourly limit for display purposes
-			},
+			Key:        key,
 			BurstSize:  tokenConfig.BurstSize,
 			RefillRate: tokenConfig.RefillRate,
 		}, nil
@@ -316,10 +299,7 @@ func (m *MultiTierLimiter) createSecondaryBucketConfig(dynamicKey string) (any, 
 			return nil, fmt.Errorf("invalid secondary leaky bucket configuration")
 		}
 		return leakybucket.Config{
-			RateLimitConfig: strategies.RateLimitConfig{
-				Key:   key,
-				Limit: int(leakyConfig.LeakRate * 3600), // Convert to hourly limit for display purposes
-			},
+			Key:      key,
 			Capacity: leakyConfig.Capacity,
 			LeakRate: leakyConfig.LeakRate,
 		}, nil

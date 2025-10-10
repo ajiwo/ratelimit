@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends/memory"
-	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,10 +17,8 @@ func TestFixedWindow_Allow(t *testing.T) {
 		strategy := New(storage)
 
 		config := Config{
-			RateLimitConfig: strategies.RateLimitConfig{
-				Key:   "test-key",
-				Limit: 5,
-			},
+			Key:    "test-key",
+			Limit:  5,
 			Window: time.Minute,
 		}
 
@@ -47,10 +44,8 @@ func TestFixedWindow_WindowReset(t *testing.T) {
 		strategy := New(storage)
 
 		config := Config{
-			RateLimitConfig: strategies.RateLimitConfig{
-				Key:   "test-key",
-				Limit: 2,
-			},
+			Key:    "test-key",
+			Limit:  2,
 			Window: time.Second, // Window duration
 		}
 
@@ -85,18 +80,14 @@ func TestFixedWindow_MultipleKeys(t *testing.T) {
 		strategy := New(storage)
 
 		config1 := Config{
-			RateLimitConfig: strategies.RateLimitConfig{
-				Key:   "user1",
-				Limit: 1,
-			},
+			Key:    "user1",
+			Limit:  1,
 			Window: time.Minute,
 		}
 
 		config2 := Config{
-			RateLimitConfig: strategies.RateLimitConfig{
-				Key:   "user2",
-				Limit: 1,
-			},
+			Key:    "user2",
+			Limit:  1,
 			Window: time.Minute,
 		}
 
@@ -138,10 +129,8 @@ func TestFixedWindow_ZeroLimit(t *testing.T) {
 		strategy := New(storage)
 
 		config := Config{
-			RateLimitConfig: strategies.RateLimitConfig{
-				Key:   "test-key",
-				Limit: 0,
-			},
+			Key:    "test-key",
+			Limit:  0,
 			Window: time.Minute,
 		}
 
@@ -160,10 +149,8 @@ func TestFixedWindow_GetResult(t *testing.T) {
 		strategy := New(storage)
 
 		config := Config{
-			RateLimitConfig: strategies.RateLimitConfig{
-				Key:   "result-test-key",
-				Limit: 5,
-			},
+			Key:    "result-test-key",
+			Limit:  5,
 			Window: time.Minute,
 		}
 
@@ -220,10 +207,8 @@ func TestFixedWindow_Reset(t *testing.T) {
 		strategy := New(storage)
 
 		config := Config{
-			RateLimitConfig: strategies.RateLimitConfig{
-				Key:   "reset-test-key",
-				Limit: 2,
-			},
+			Key:    "reset-test-key",
+			Limit:  2,
 			Window: time.Minute,
 		}
 
@@ -263,10 +248,8 @@ func TestFixedWindow_ConcurrentAccess(t *testing.T) {
 		strategy := New(storage)
 
 		config := Config{
-			RateLimitConfig: strategies.RateLimitConfig{
-				Key:   "concurrent-key",
-				Limit: 5,
-			},
+			Key:    "concurrent-key",
+			Limit:  5,
 			Window: time.Minute,
 		}
 
@@ -316,10 +299,8 @@ func TestFixedWindow_PreciseTiming(t *testing.T) {
 		strategy := New(storage)
 
 		config := Config{
-			RateLimitConfig: strategies.RateLimitConfig{
-				Key:   "timing-key",
-				Limit: 3,
-			},
+			Key:    "timing-key",
+			Limit:  3,
 			Window: 5 * time.Second,
 		}
 

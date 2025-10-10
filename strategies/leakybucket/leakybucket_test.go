@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends/memory"
-	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,10 +17,7 @@ func TestLeakyBucketAllow(t *testing.T) {
 	strategy := New(storage)
 
 	config := Config{
-		RateLimitConfig: strategies.RateLimitConfig{
-			Key:   "test-user",
-			Limit: 10,
-		},
+		Key:      "test-user",
 		Capacity: 5,
 		LeakRate: 1.0, // 1 request per second
 	}
@@ -47,10 +43,7 @@ func TestLeakyBucketLeak(t *testing.T) {
 		strategy := New(storage)
 
 		config := Config{
-			RateLimitConfig: strategies.RateLimitConfig{
-				Key:   "test-user-2",
-				Limit: 10,
-			},
+			Key:      "test-user-2",
 			Capacity: 3,
 			LeakRate: 1.0, // 1 request per second
 		}
@@ -84,10 +77,7 @@ func TestLeakyBucketGetResult(t *testing.T) {
 	strategy := New(storage)
 
 	config := Config{
-		RateLimitConfig: strategies.RateLimitConfig{
-			Key:   "result-test-user",
-			Limit: 10,
-		},
+		Key:      "result-test-user",
 		Capacity: 5,
 		LeakRate: 1.0, // 1 request per second
 	}
@@ -137,10 +127,7 @@ func TestLeakyBucketReset(t *testing.T) {
 	strategy := New(storage)
 
 	config := Config{
-		RateLimitConfig: strategies.RateLimitConfig{
-			Key:   "reset-test-user",
-			Limit: 10,
-		},
+		Key:      "reset-test-user",
 		Capacity: 3,
 		LeakRate: 1.0, // 1 request per second
 	}
