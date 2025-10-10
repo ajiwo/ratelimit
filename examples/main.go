@@ -74,17 +74,14 @@ func tokenBucketExample() error {
 
 	// Test rate limiting
 	userID := "user:token_bucket:123"
-	config := tokenbucket.Config{
-		RateLimitConfig: strategies.RateLimitConfig{
-			Key:   userID,
-			Limit: 20,
-		},
+	config := strategies.TokenBucketConfig{
+		Key:        userID,
 		BurstSize:  20,
 		RefillRate: 5.0, // 5 tokens per second
 	}
 
 	for i := range 25 {
-		result, err := strategy.AllowWithResult(context.Background(), config)
+		result, err := strategy.Allow(context.Background(), config)
 		if err != nil {
 			return err
 		}
@@ -108,16 +105,14 @@ func fixedWindowExample() error {
 
 	// Test rate limiting
 	userID := "user:fixed_window:456"
-	config := fixedwindow.Config{
-		RateLimitConfig: strategies.RateLimitConfig{
-			Key:   userID,
-			Limit: 10,
-		},
+	config := strategies.FixedWindowConfig{
+		Key:    userID,
+		Limit:  10,
 		Window: 10 * time.Second, // Short window for demo
 	}
 
 	for i := range 15 {
-		result, err := strategy.AllowWithResult(context.Background(), config)
+		result, err := strategy.Allow(context.Background(), config)
 		if err != nil {
 			return err
 		}
@@ -165,11 +160,8 @@ func tokenBucketRedisExample() error {
 
 	// Test rate limiting
 	userID := "user:token_bucket:redis:789"
-	config := tokenbucket.Config{
-		RateLimitConfig: strategies.RateLimitConfig{
-			Key:   userID,
-			Limit: 15,
-		},
+	config := strategies.TokenBucketConfig{
+		Key:        userID,
 		BurstSize:  15,
 		RefillRate: 3.0, // 3 tokens per second
 	}
@@ -185,7 +177,7 @@ func tokenBucketRedisExample() error {
 			}
 		}
 
-		result, err := strategy.AllowWithResult(context.Background(), config)
+		result, err := strategy.Allow(context.Background(), config)
 		if err != nil {
 			fmt.Printf("Error in AllowWithResult: %v\n", err)
 			// Continue with the example even if there's an error
@@ -235,11 +227,8 @@ func tokenBucketPostgresExample() error {
 
 	// Test rate limiting
 	userID := "user:token_bucket:postgres:101"
-	config := tokenbucket.Config{
-		RateLimitConfig: strategies.RateLimitConfig{
-			Key:   userID,
-			Limit: 12,
-		},
+	config := strategies.TokenBucketConfig{
+		Key:        userID,
 		BurstSize:  12,
 		RefillRate: 2.5, // 2.5 tokens per second
 	}
@@ -255,7 +244,7 @@ func tokenBucketPostgresExample() error {
 			}
 		}
 
-		result, err := strategy.AllowWithResult(context.Background(), config)
+		result, err := strategy.Allow(context.Background(), config)
 		if err != nil {
 			fmt.Printf("Error in AllowWithResult: %v\n", err)
 			// Continue with the example even if there's an error
@@ -281,11 +270,8 @@ func statusExample() error {
 	strategy := tokenbucket.New(backend)
 
 	userID := "user:status:789"
-	config := tokenbucket.Config{
-		RateLimitConfig: strategies.RateLimitConfig{
-			Key:   userID,
-			Limit: 10,
-		},
+	config := strategies.TokenBucketConfig{
+		Key:        userID,
 		BurstSize:  10,
 		RefillRate: 2.0, // 2 tokens per second
 	}
@@ -298,7 +284,7 @@ func statusExample() error {
 
 	// Make some requests to consume tokens
 	for i := range 5 {
-		result, err := strategy.AllowWithResult(context.Background(), config)
+		result, err := strategy.Allow(context.Background(), config)
 		if err != nil {
 			return err
 		}
