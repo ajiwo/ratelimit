@@ -541,46 +541,6 @@ func TestMultiTierLimiter_BackendOperations(t *testing.T) {
 	assert.True(t, allowed, "Operations should work after close")
 }
 
-func TestGetAutoTierName(t *testing.T) {
-	testCases := []struct {
-		interval time.Duration
-		expected string
-	}{
-		{time.Minute, "minute"},
-		{time.Hour, "hour"},
-		{24 * time.Hour, "day"},
-		{7 * 24 * time.Hour, "week"},
-		{30 * 24 * time.Hour, "month"},
-		{2 * time.Minute, "2m0s"},
-		{90 * time.Second, "1m30s"},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.expected, func(t *testing.T) {
-			result := getAutoTierName(tc.interval)
-			assert.Equal(t, tc.expected, result)
-		})
-	}
-}
-
-func TestGetTierName(t *testing.T) {
-	// Test with custom name (should prefer custom name)
-	tierWithCustomName := TierConfig{
-		Interval: time.Minute,
-		Limit:    10,
-		Name:     "custom_limit",
-	}
-	assert.Equal(t, "custom_limit", getTierName(tierWithCustomName))
-
-	// Test without custom name (should fallback to auto-generation)
-	tierWithoutCustomName := TierConfig{
-		Interval: time.Hour,
-		Limit:    100,
-		Name:     "",
-	}
-	assert.Equal(t, "hour", getTierName(tierWithoutCustomName))
-}
-
 func TestMultiTierLimiter_MixedStrategyTypes(t *testing.T) {
 	// Test that we can create limiters with different strategies
 	testCases := []struct {

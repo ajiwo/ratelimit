@@ -18,6 +18,34 @@ type FixedWindow struct {
 	Duration time.Duration `json:"duration"` // Window duration
 }
 
+// TierConfig defines a single tier in multi-tier rate limiting
+type TierConfig struct {
+	Interval time.Duration // Time window (1 minute, 1 hour, 1 day, etc.)
+	Limit    int           // Number of requests allowed in this interval
+	Name     string        // Optional custom name for the tier (e.g., "login_attempts")
+}
+
+// MultiTierConfig defines configuration for multi-tier fixed window rate limiting
+type MultiTierConfig struct {
+	BaseKey    string       // Base key for rate limiting
+	DynamicKey string       // Dynamic key (e.g., user ID)
+	Tiers      []TierConfig // Rate limit tiers
+}
+
+// TierResult represents the result for a single tier
+type TierResult struct {
+	Allowed   bool      // Whether this tier allowed the request
+	Remaining int       // Remaining requests in this tier
+	Reset     time.Time // When this tier resets
+	Total     int       // Total limit for this tier
+}
+
+// MultiTierResult represents the result for all tiers
+type MultiTierResult struct {
+	Results map[string]TierResult // Results for each tier by name
+	Allowed bool                  // Overall decision (all tiers must allow)
+}
+
 // Strategy implements the fixed window rate limiting algorithm
 type Strategy struct {
 	storage backends.Backend
@@ -286,4 +314,153 @@ func (f *Strategy) Allow(ctx context.Context, config any) (strategies.Result, er
 
 	// CheckAndSet failed after checkAndSetRetries attempts
 	return strategies.Result{}, fmt.Errorf("failed to update window state after %d attempts due to concurrent access", strategies.CheckAndSetRetries)
+}
+
+// getTierName generates a tier name based on interval or uses custom name
+func getTierName(tier TierConfig) string {
+	if tier.Name != "" {
+		return tier.Name
+	}
+
+	// Generate name based on interval - match the original ratelimit package behavior
+	switch tier.Interval {
+	case time.Minute:
+		return "minute"
+	case time.Hour:
+		return "hour"
+	case 24 * time.Hour:
+		return "day"
+	case 7 * 24 * time.Hour:
+		return "week"
+	case 30 * 24 * time.Hour:
+		return "month"
+	default:
+		// For custom intervals, use duration string
+		return tier.Interval.String()
+	}
+}
+
+// buildTierKey builds the storage key for a specific tier
+func buildTierKey(baseKey, dynamicKey, tierName string) string {
+	var keyBuilder strings.Builder
+	keyBuilder.Grow(len(baseKey) + len(dynamicKey) + len(tierName) + 2) // +2 for the colons
+	keyBuilder.WriteString(baseKey)
+	keyBuilder.WriteByte(':')
+	keyBuilder.WriteString(dynamicKey)
+	keyBuilder.WriteByte(':')
+	keyBuilder.WriteString(tierName)
+	return keyBuilder.String()
+}
+
+// AllowMulti checks if a request is allowed across all configured tiers
+func (f *Strategy) AllowMulti(ctx context.Context, config MultiTierConfig) (MultiTierResult, error) {
+	results := make(map[string]TierResult)
+	overallAllowed := true
+
+	// Process each tier
+	for _, tier := range config.Tiers {
+		tierName := getTierName(tier)
+		key := buildTierKey(config.BaseKey, config.DynamicKey, tierName)
+
+		// Create single-tier config
+		singleConfig := strategies.FixedWindowConfig{
+			Key:    key,
+			Limit:  tier.Limit,
+			Window: tier.Interval,
+		}
+
+		// Check this tier
+		result, err := f.Allow(ctx, singleConfig)
+		if err != nil {
+			return MultiTierResult{}, fmt.Errorf("tier %s failed: %w", tierName, err)
+		}
+
+		// Convert to tier result
+		tierResult := TierResult{
+			Allowed:   result.Allowed,
+			Remaining: result.Remaining,
+			Reset:     result.Reset,
+			Total:     tier.Limit,
+		}
+		results[tierName] = tierResult
+
+		// Overall decision: all tiers must allow
+		if !result.Allowed {
+			overallAllowed = false
+		}
+	}
+
+	return MultiTierResult{
+		Results: results,
+		Allowed: overallAllowed,
+	}, nil
+}
+
+// GetResultMulti returns detailed statistics for all tiers without consuming quota
+func (f *Strategy) GetResultMulti(ctx context.Context, config MultiTierConfig) (MultiTierResult, error) {
+	results := make(map[string]TierResult)
+	overallAllowed := true
+
+	// Process each tier
+	for _, tier := range config.Tiers {
+		tierName := getTierName(tier)
+		key := buildTierKey(config.BaseKey, config.DynamicKey, tierName)
+
+		// Create single-tier config
+		singleConfig := strategies.FixedWindowConfig{
+			Key:    key,
+			Limit:  tier.Limit,
+			Window: tier.Interval,
+		}
+
+		// Get stats for this tier
+		result, err := f.GetResult(ctx, singleConfig)
+		if err != nil {
+			return MultiTierResult{}, fmt.Errorf("tier %s failed: %w", tierName, err)
+		}
+
+		// Convert to tier result
+		tierResult := TierResult{
+			Allowed:   result.Allowed,
+			Remaining: result.Remaining,
+			Reset:     result.Reset,
+			Total:     tier.Limit,
+		}
+		results[tierName] = tierResult
+
+		// Overall decision: all tiers must allow
+		if !result.Allowed {
+			overallAllowed = false
+		}
+	}
+
+	return MultiTierResult{
+		Results: results,
+		Allowed: overallAllowed,
+	}, nil
+}
+
+// ResetMulti resets rate limit counters for all tiers
+func (f *Strategy) ResetMulti(ctx context.Context, config MultiTierConfig) error {
+	var lastErr error
+
+	// Reset each tier
+	for _, tier := range config.Tiers {
+		tierName := getTierName(tier)
+		key := buildTierKey(config.BaseKey, config.DynamicKey, tierName)
+
+		// Create single-tier config
+		singleConfig := strategies.FixedWindowConfig{
+			Key:    key,
+			Limit:  tier.Limit,
+			Window: tier.Interval,
+		}
+
+		// Reset this tier
+		if err := f.Reset(ctx, singleConfig); err != nil {
+			lastErr = fmt.Errorf("tier %s reset failed: %w", tierName, err)
+		}
+	}
+
+	return lastErr
 }
