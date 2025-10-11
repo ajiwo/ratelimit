@@ -72,8 +72,8 @@ if err != nil {
 
 // Results include detailed information for each tier
 for tier, result := range results {
-    fmt.Printf("Tier %s: allowed=%v, remaining=%d, total=%d, used=%d\n", 
-        tier, result.Allowed, result.Remaining, result.Total, result.Used)
+    fmt.Printf("Tier %s: allowed=%v, remaining=%d, total=%d\n",
+        tier, result.Allowed, result.Remaining, result.Total)
 }
 ```
 
@@ -193,7 +193,6 @@ type TierResult struct {
     Remaining int       // Remaining requests in this tier
     Reset     time.Time // When this tier resets
     Total     int       // Total limit for this tier
-    Used      int       // Number of requests used in this tier
 }
 ```
 
@@ -203,8 +202,8 @@ type TierResult struct {
 - Keys are automatically validated when provided
 
 **Name Field Validation (Optional):**
-- Tier names must be 64 characters or less when provided
-- Only alphanumeric ASCII, underscore (_), hyphen (-), colon (:), period (.), and at (@) symbols are allowed
+- Tier names must be 16 characters or less when provided
+- Same character rules as keys apply (alphanumeric ASCII, underscore _, hyphen -, colon :, period ., and at @)
 - If not provided, tier names are auto-generated based on interval (e.g., "minute", "hour", "day")
 - Custom names provide better debugging and monitoring clarity
 
@@ -286,8 +285,8 @@ if err != nil {
 }
 
 for tier, result := range stats {
-    fmt.Printf("Tier %s: %d/%d used, resets at %v\n", 
-        tier, result.Used, result.Total, result.Reset)
+    fmt.Printf("Tier %s: %d remaining of %d total, resets at %v\n",
+        tier, result.Remaining, result.Total, result.Reset)
 }
 ```
 
@@ -342,16 +341,16 @@ config := fixedwindow.Config{
 }
 
 // Check if request is allowed and get detailed results
-result, err := strategy.AllowWithResult(ctx, config)
+result, err := strategy.Allow(ctx, config)
 if err != nil {
     // Handle error
 }
 if result.Allowed {
-    fmt.Printf("Request allowed, %d remaining, resets at %v\\n", 
+    fmt.Printf("Request allowed, %d remaining, resets at %v\\n",
         result.Remaining, result.Reset)
     // Process request
 } else {
-    fmt.Printf("Request blocked, %d remaining, resets at %v\\n", 
+    fmt.Printf("Request blocked, %d remaining, resets at %v\\n",
         result.Remaining, result.Reset)
     // Reject request
 }
@@ -377,16 +376,16 @@ config := tokenbucket.Config{
 }
 
 // Check if request is allowed and get detailed results
-result, err := strategy.AllowWithResult(ctx, config)
+result, err := strategy.Allow(ctx, config)
 if err != nil {
     // Handle error
 }
 if result.Allowed {
-    fmt.Printf("Request allowed, %d remaining, resets at %v\\n", 
+    fmt.Printf("Request allowed, %d remaining, resets at %v\\n",
         result.Remaining, result.Reset)
     // Process request
 } else {
-    fmt.Printf("Request blocked, %d remaining, resets at %v\\n", 
+    fmt.Printf("Request blocked, %d remaining, resets at %v\\n",
         result.Remaining, result.Reset)
     // Reject request
 }
@@ -412,16 +411,16 @@ config := leakybucket.Config{
 }
 
 // Check if request is allowed and get detailed results
-result, err := strategy.AllowWithResult(ctx, config)
+result, err := strategy.Allow(ctx, config)
 if err != nil {
     // Handle error
 }
 if result.Allowed {
-    fmt.Printf("Request allowed, %d remaining, resets at %v\\n", 
+    fmt.Printf("Request allowed, %d remaining, resets at %v\\n",
         result.Remaining, result.Reset)
     // Process request
 } else {
-    fmt.Printf("Request blocked, %d remaining, resets at %v\\n", 
+    fmt.Printf("Request blocked, %d remaining, resets at %v\\n",
         result.Remaining, result.Reset)
     // Reject request
 }
