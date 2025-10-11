@@ -51,13 +51,13 @@ func validateKey(key string, keyType string) error {
 	return nil
 }
 
-// MultiFixedWindowConfig implements StrategyConfig for multi-tiers fixed window rate limiting
+// FixedWindowConfig implements StrategyConfig for multi-tiers fixed window rate limiting
 // used to create `len(Tiers)` instances of `strategies.FixedWindowConfig`
-type MultiFixedWindowConfig struct {
+type FixedWindowConfig struct {
 	Tiers []TierConfig `json:"tiers"`
 }
 
-func (c MultiFixedWindowConfig) Validate() error {
+func (c FixedWindowConfig) Validate() error {
 	if len(c.Tiers) == 0 {
 		return fmt.Errorf("fixed window strategy requires at least one tier")
 	}
@@ -85,7 +85,7 @@ func (c MultiFixedWindowConfig) Validate() error {
 	return nil
 }
 
-func (c MultiFixedWindowConfig) Type() strategies.StrategyType {
+func (c FixedWindowConfig) Type() strategies.StrategyType {
 	return strategies.StrategyFixedWindow
 }
 

@@ -101,7 +101,7 @@ func (m *MultiTierLimiter) GetStats(opts ...AccessOption) (map[string]TierResult
 
 	// Only fixed window strategy has tiers
 	if m.config.PrimaryConfig.Type() == strategies.StrategyFixedWindow {
-		fixedWindowConfig, ok := m.config.PrimaryConfig.(MultiFixedWindowConfig)
+		fixedWindowConfig, ok := m.config.PrimaryConfig.(FixedWindowConfig)
 		if !ok {
 			return nil, fmt.Errorf("invalid fixed window configuration")
 		}
@@ -183,7 +183,7 @@ func (m *MultiTierLimiter) Reset(opts ...AccessOption) error {
 
 	// Only fixed window strategy has tiers
 	if m.config.PrimaryConfig.Type() == strategies.StrategyFixedWindow {
-		fixedWindowConfig, ok := m.config.PrimaryConfig.(MultiFixedWindowConfig)
+		fixedWindowConfig, ok := m.config.PrimaryConfig.(FixedWindowConfig)
 		if !ok {
 			return fmt.Errorf("invalid fixed window configuration")
 		}
@@ -256,7 +256,7 @@ func (m *MultiTierLimiter) allowWithResult(opts ...AccessOption) (bool, map[stri
 // consumeFromStrategies consumes quota from both primary and secondary strategies
 func (m *MultiTierLimiter) consumeFromStrategies(accessOpts *accessOptions, secondaryConfig any, results map[string]TierResult) (bool, map[string]TierResult, error) {
 	// Consume from primary strategy
-	fixedWindowConfig := m.config.PrimaryConfig.(MultiFixedWindowConfig)
+	fixedWindowConfig := m.config.PrimaryConfig.(FixedWindowConfig)
 	for _, tier := range fixedWindowConfig.Tiers {
 		tierName := getTierName(tier)
 		config, err := m.createTierConfig(accessOpts.key, tier)
@@ -415,7 +415,7 @@ func (m *MultiTierLimiter) handleDualStrategy(accessOpts *accessOptions, results
 	// First check primary strategy using CheckOnly (no quota consumption)
 	primaryAllowed := true
 
-	fixedWindowConfig, ok := m.config.PrimaryConfig.(MultiFixedWindowConfig)
+	fixedWindowConfig, ok := m.config.PrimaryConfig.(FixedWindowConfig)
 	if !ok {
 		return false, nil, fmt.Errorf("dual strategy only supports FixedWindow as primary strategy")
 	}
@@ -540,7 +540,7 @@ func (m *MultiTierLimiter) handleSingleBucketStrategy(accessOpts *accessOptions,
 // handleSingleTierStrategy handles the case where only a single tier-based strategy is used
 func (m *MultiTierLimiter) handleSingleTierStrategy(accessOpts *accessOptions, results map[string]TierResult) (bool, map[string]TierResult, error) {
 	deniedTiers := []string{}
-	fixedWindowConfig := m.config.PrimaryConfig.(MultiFixedWindowConfig)
+	fixedWindowConfig := m.config.PrimaryConfig.(FixedWindowConfig)
 	for _, tier := range fixedWindowConfig.Tiers {
 		tierName := getTierName(tier)
 
@@ -592,7 +592,7 @@ func (m *MultiTierLimiter) parseAccessOptions(opts []AccessOption) (*accessOptio
 
 // setupFixedWindowStrategies creates strategies for each tier in fixed window configuration
 func (m *MultiTierLimiter) setupFixedWindowStrategies(config MultiTierConfig, primaryStrategyType strategies.StrategyType) error {
-	fixedWindowConfig, ok := config.PrimaryConfig.(MultiFixedWindowConfig)
+	fixedWindowConfig, ok := config.PrimaryConfig.(FixedWindowConfig)
 	if !ok {
 		return fmt.Errorf("invalid configuration type for fixed window strategy")
 	}
