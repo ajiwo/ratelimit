@@ -72,6 +72,14 @@ func (c MultiFixedWindowConfig) Validate() error {
 		if tier.Limit <= 0 {
 			return fmt.Errorf("tier %d: limit must be positive, got %d", i, tier.Limit)
 		}
+		if tier.Name != "" {
+			if len(tier.Name) > 16 {
+				return fmt.Errorf("tier %d: name must be 16 characters or less, got %d", i, len(tier.Name))
+			}
+			if err := validateKey(tier.Name, "tier name"); err != nil {
+				return err
+			}
+		}
 	}
 
 	return nil

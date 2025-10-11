@@ -313,8 +313,8 @@ func dualStrategyExample() error {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBackend(memory.New()),
 		ratelimit.WithFixedWindowStrategy( // Primary: Hard limits
-			ratelimit.TierConfig{Interval: time.Minute, Limit: 10}, // 10 requests per minute
-			ratelimit.TierConfig{Interval: time.Hour, Limit: 50},   // 50 requests per hour
+			ratelimit.TierConfig{Interval: time.Minute, Limit: 10, Name: "minute_limit"}, // 10 requests per minute
+			ratelimit.TierConfig{Interval: time.Hour, Limit: 50, Name: "hour_limit"},     // 50 requests per hour
 		),
 		ratelimit.WithTokenBucketStrategy(5, 0.5), // Secondary: 5 burst, 0.5 req/sec refill
 		ratelimit.WithBaseKey("api:user:dual"),

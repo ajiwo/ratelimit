@@ -36,6 +36,7 @@ type MultiTierLimiter struct {
 type TierConfig struct {
 	Interval time.Duration // Time window (1 minute, 1 hour, 1 day, etc.)
 	Limit    int           // Number of requests allowed in this interval
+	Name     string        // Optional custom name for the tier (e.g., "login_attempts")
 }
 
 // TierResult represents the result for a single tier
@@ -106,10 +107,10 @@ func (m *MultiTierLimiter) GetStats(opts ...AccessOption) (map[string]TierResult
 		}
 
 		for _, tier := range fixedWindowConfig.Tiers {
-			tierName := getTierName(tier.Interval)
+			tierName := getTierName(tier)
 
 			// Create strategy-specific config for this tier
-			config, err := m.createTierConfig(accessOpts.key, tierName, tier.Limit, tier.Interval)
+			config, err := m.createTierConfig(accessOpts.key, tier)
 			if err != nil {
 				return nil, fmt.Errorf("failed to create config for tier %s: %w", tierName, err)
 			}
@@ -188,10 +189,10 @@ func (m *MultiTierLimiter) Reset(opts ...AccessOption) error {
 		}
 
 		for _, tier := range fixedWindowConfig.Tiers {
-			tierName := getTierName(tier.Interval)
+			tierName := getTierName(tier)
 
 			// Create strategy-specific config for this tier
-			config, err := m.createTierConfig(accessOpts.key, tierName, tier.Limit, tier.Interval)
+			config, err := m.createTierConfig(accessOpts.key, tier)
 			if err != nil {
 				return fmt.Errorf("failed to create config for tier %s: %w", tierName, err)
 			}
@@ -257,8 +258,8 @@ func (m *MultiTierLimiter) consumeFromStrategies(accessOpts *accessOptions, seco
 	// Consume from primary strategy
 	fixedWindowConfig := m.config.PrimaryConfig.(MultiFixedWindowConfig)
 	for _, tier := range fixedWindowConfig.Tiers {
-		tierName := getTierName(tier.Interval)
-		config, err := m.createTierConfig(accessOpts.key, tierName, tier.Limit, tier.Interval)
+		tierName := getTierName(tier)
+		config, err := m.createTierConfig(accessOpts.key, tier)
 		if err != nil {
 			return false, nil, fmt.Errorf("failed to create config for tier %s: %w", tierName, err)
 		}
@@ -361,7 +362,9 @@ func (m *MultiTierLimiter) createSecondaryBucketConfig(dynamicKey string) (any, 
 }
 
 // createTierConfig creates strategy-specific configuration for a tier
-func (m *MultiTierLimiter) createTierConfig(dynamicKey string, tierName string, limit int, interval time.Duration) (any, error) {
+func (m *MultiTierLimiter) createTierConfig(dynamicKey string, tier TierConfig) (any, error) {
+	tierName := getTierName(tier)
+
 	var keyBuilder strings.Builder
 	keyBuilder.Grow(len(m.config.BaseKey) + len(dynamicKey) + len(tierName) + 2) // +2 for the colons
 	keyBuilder.WriteString(m.config.BaseKey)
@@ -376,8 +379,8 @@ func (m *MultiTierLimiter) createTierConfig(dynamicKey string, tierName string, 
 	case strategies.StrategyFixedWindow:
 		return strategies.FixedWindowConfig{
 			Key:    key,
-			Limit:  limit,
-			Window: interval,
+			Limit:  tier.Limit,
+			Window: tier.Interval,
 		}, nil
 
 	case strategies.StrategyTokenBucket:
@@ -418,10 +421,10 @@ func (m *MultiTierLimiter) handleDualStrategy(accessOpts *accessOptions, results
 	}
 
 	for _, tier := range fixedWindowConfig.Tiers {
-		tierName := getTierName(tier.Interval)
+		tierName := getTierName(tier)
 
 		// Create FixedWindowConfig for this tier
-		config, err := m.createTierConfig(accessOpts.key, tierName, tier.Limit, tier.Interval)
+		config, err := m.createTierConfig(accessOpts.key, tier)
 		if err != nil {
 			return false, nil, fmt.Errorf("failed to create config for tier %s: %w", tierName, err)
 		}
@@ -539,10 +542,10 @@ func (m *MultiTierLimiter) handleSingleTierStrategy(accessOpts *accessOptions, r
 	deniedTiers := []string{}
 	fixedWindowConfig := m.config.PrimaryConfig.(MultiFixedWindowConfig)
 	for _, tier := range fixedWindowConfig.Tiers {
-		tierName := getTierName(tier.Interval)
+		tierName := getTierName(tier)
 
 		// Create strategy-specific config for this tier
-		config, err := m.createTierConfig(accessOpts.key, tierName, tier.Limit, tier.Interval)
+		config, err := m.createTierConfig(accessOpts.key, tier)
 		if err != nil {
 			return false, nil, fmt.Errorf("failed to create config for tier %s: %w", tierName, err)
 		}
@@ -595,7 +598,7 @@ func (m *MultiTierLimiter) setupFixedWindowStrategies(config MultiTierConfig, pr
 	}
 
 	for _, tier := range fixedWindowConfig.Tiers {
-		tierName := getTierName(tier.Interval)
+		tierName := getTierName(tier)
 
 		strategy, err := createStrategy(primaryStrategyType, config.Storage)
 		if err != nil {
@@ -686,8 +689,16 @@ func createStrategy(strategyType strategies.StrategyType, storage backends.Backe
 	}
 }
 
-// getTierName returns a human-readable name for the tier
-func getTierName(interval time.Duration) string {
+// getTierName returns a name for the tier, preferring custom name over auto-generated
+func getTierName(tier TierConfig) string {
+	if tier.Name != "" {
+		return tier.Name
+	}
+	return getAutoTierName(tier.Interval)
+}
+
+// getAutoTierName returns a human-readable name for the tier based on interval
+func getAutoTierName(interval time.Duration) string {
 	switch interval {
 	case time.Minute:
 		return "minute"

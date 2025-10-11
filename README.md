@@ -43,9 +43,9 @@ mem := memory.New()
 limiter, err := ratelimit.New(
     ratelimit.WithBackend(mem),
     ratelimit.WithFixedWindowStrategy(
-        ratelimit.TierConfig{Interval: time.Minute, Limit: 5},    // 5 requests per minute
-        ratelimit.TierConfig{Interval: time.Hour, Limit: 100},   // 100 requests per hour
-        ratelimit.TierConfig{Interval: 24 * time.Hour, Limit: 1000}, // 1000 requests per day
+        ratelimit.TierConfig{Interval: time.Minute, Limit: 5, Name: "requests_per_minute"},    // 5 requests per minute
+        ratelimit.TierConfig{Interval: time.Hour, Limit: 100, Name: "requests_per_hour"},   // 100 requests per hour
+        ratelimit.TierConfig{Interval: 24 * time.Hour, Limit: 1000, Name: "requests_per_day"}, // 1000 requests per day
     ),
     ratelimit.WithBaseKey("user:123"),
 )
@@ -98,8 +98,8 @@ mem := memory.New()
 limiter, err := ratelimit.New(
     ratelimit.WithBackend(mem),
     ratelimit.WithFixedWindowStrategy(                    // Primary: strict rate limiting
-        ratelimit.TierConfig{Interval: time.Minute, Limit: 10},   // 10 requests per minute
-        ratelimit.TierConfig{Interval: time.Hour, Limit: 100},    // 100 requests per hour
+        ratelimit.TierConfig{Interval: time.Minute, Limit: 10, Name: "api_minute"},   // 10 requests per minute
+        ratelimit.TierConfig{Interval: time.Hour, Limit: 100, Name: "api_hour"},    // 100 requests per hour
     ),
     ratelimit.WithTokenBucketStrategy(5, 0.1),             // Secondary: burst smoother (5 burst, 0.1 req/sec refill)
     ratelimit.WithBaseKey("user"),
@@ -177,6 +177,15 @@ for strategy, result := range results {
 - Primary bucket-based strategy (Token/Leaky Bucket) cannot be combined with secondary strategy (only Fixed Window primary can have secondary)
 - Only one secondary strategy allowed per limiter
 
+**TierConfig Structure:**
+```go
+type TierConfig struct {
+    Interval time.Duration // Time window (1 minute, 1 hour, 1 day, etc.)
+    Limit    int           // Number of requests allowed in this interval
+    Name     string        // Optional custom name for the tier (e.g., "login_attempts")
+}
+```
+
 **TierResult Structure:**
 ```go
 type TierResult struct {
@@ -192,6 +201,12 @@ type TierResult struct {
 - Keys must be 1-64 characters long
 - Only alphanumeric ASCII, underscore (_), hyphen (-), colon (:), period (.), and at (@) symbols are allowed
 - Keys are automatically validated when provided
+
+**Name Field Validation (Optional):**
+- Tier names must be 64 characters or less when provided
+- Only alphanumeric ASCII, underscore (_), hyphen (-), colon (:), period (.), and at (@) symbols are allowed
+- If not provided, tier names are auto-generated based on interval (e.g., "minute", "hour", "day")
+- Custom names provide better debugging and monitoring clarity
 
 ### Storage Backends
 
