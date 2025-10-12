@@ -1,6 +1,6 @@
 # Rate Limiting Library
 
-This is a Go library that implements rate limiting functionality with multiple algorithms and storage backends, including high-level multi-tier rate limiting support.
+This is a Go library that implements rate limiting functionality with multiple algorithms and storage backends, including support for single and dual strategy configurations.
 
 ## Features
 
@@ -13,7 +13,7 @@ This is a Go library that implements rate limiting functionality with multiple a
   - Redis (distributed)
   - PostgreSQL (distributed)
 - **Advanced capabilities:**
-  - Multi-tier rate limiting with simultaneous tier enforcement
+  - Single strategy rate limiting
   - Dual strategy support (primary + secondary smoother)
   - Detailed statistics and result tracking
   - Dynamic key support for multi-tenant scenarios
@@ -26,14 +26,15 @@ go get github.com/ajiwo/ratelimit
 
 ## Usage
 
-### Multi-Tier Rate Limiting
+### Single Strategy Rate Limiting
 
-The library provides a high-level multi-tier rate limiting interface that allows you to configure multiple time-based rate limits simultaneously:
+The library provides a high-level rate limiting interface that allows you to configure individual rate limiting strategies:
 
 ```go
 import (
     "github.com/ajiwo/ratelimit"
     "github.com/ajiwo/ratelimit/backends/memory"
+    "github.com/ajiwo/ratelimit/strategies"
 )
 
 // Create a backend instance
@@ -42,12 +43,12 @@ mem := memory.New()
 // Create a rate limiter using functional options
 limiter, err := ratelimit.New(
     ratelimit.WithBackend(mem),
-    ratelimit.WithFixedWindowStrategy(
-        ratelimit.TierConfig{Interval: time.Minute, Limit: 5, Name: "requests_per_minute"},    // 5 requests per minute
-        ratelimit.TierConfig{Interval: time.Hour, Limit: 100, Name: "requests_per_hour"},   // 100 requests per hour
-        ratelimit.TierConfig{Interval: 24 * time.Hour, Limit: 1000, Name: "requests_per_day"}, // 1000 requests per day
-    ),
-    ratelimit.WithBaseKey("user:123"),
+    ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
+        Key:    "user:123",
+        Limit:  100,
+        Window: time.Hour,
+    }),
+    ratelimit.WithBaseKey("api"),
 )
 if err != nil {
     panic(err)
@@ -61,7 +62,7 @@ if err != nil {
 }
 
 // Or get detailed results
-var results map[string]ratelimit.TierResult
+var results map[string]strategies.Result
 allowed, err := limiter.Allow(
     ratelimit.WithContext(ctx),
     ratelimit.WithResult(&results),
@@ -70,25 +71,22 @@ if err != nil {
     // handle error
 }
 
-// Results include detailed information for each tier
-for tier, result := range results {
-    fmt.Printf("Tier %s: allowed=%v, remaining=%d, total=%d\n",
-        tier, result.Allowed, result.Remaining, result.Total)
+// Results include detailed information for each strategy
+for strategy, result := range results {
+    fmt.Printf("Strategy %s: allowed=%v, remaining=%d, reset=%v\n",
+        strategy, result.Allowed, result.Remaining, result.Reset)
 }
 ```
 
-The multi-tier limiter enforces ALL tiers simultaneously - a request is only allowed if it passes ALL configured rate limit tiers.
-
 ### Dual Strategy Rate Limiting
 
-The library supports combining a primary tier-based strategy (like Fixed Window) with an optional secondary bucket strategy (Token Bucket or Leaky Bucket) for request smoothing:
+The library supports combining a primary strategy with an optional secondary bucket strategy for request smoothing:
 
 ```go
 import (
     "github.com/ajiwo/ratelimit"
     "github.com/ajiwo/ratelimit/backends/memory"
-    "github.com/ajiwo/ratelimit/strategies/tokenbucket"
-    "github.com/ajiwo/ratelimit/strategies/leakybucket"
+    "github.com/ajiwo/ratelimit/strategies"
 )
 
 // Create a backend instance
@@ -97,12 +95,18 @@ mem := memory.New()
 // Create a dual-strategy rate limiter
 limiter, err := ratelimit.New(
     ratelimit.WithBackend(mem),
-    ratelimit.WithFixedWindowStrategy(                    // Primary: strict rate limiting
-        ratelimit.TierConfig{Interval: time.Minute, Limit: 10, Name: "api_minute"},   // 10 requests per minute
-        ratelimit.TierConfig{Interval: time.Hour, Limit: 100, Name: "api_hour"},    // 100 requests per hour
-    ),
-    ratelimit.WithTokenBucketStrategy(5, 0.1),             // Secondary: burst smoother (5 burst, 0.1 req/sec refill)
-    ratelimit.WithBaseKey("user"),
+    // Primary: strict rate limiting
+    ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
+        Key:    "api:user",
+        Limit:  100,
+        Window: time.Hour,
+    }),
+    // Secondary: burst smoother (5 burst, 0.1 req/sec refill)
+    ratelimit.WithSecondaryStrategy(strategies.TokenBucketConfig{
+        BurstSize:  5,
+        RefillRate: 0.1,
+    }),
+    ratelimit.WithBaseKey("api"),
 )
 if err != nil {
     panic(err)
@@ -116,7 +120,7 @@ if err != nil {
 }
 
 // Or get detailed results
-var results map[string]TierResult
+var results map[string]strategies.Result
 allowed, err = limiter.Allow(
     ratelimit.WithContext(ctx),
     ratelimit.WithResult(&results),
@@ -125,74 +129,85 @@ if err != nil {
     // handle error
 }
 
-// Results include both tier-based and smoother strategy results
+// Results include both primary and secondary strategy results
 for strategy, result := range results {
-    fmt.Printf("Strategy %s: allowed=%v, remaining=%d\n", strategy, result.Allowed, result.Remaining)
+    fmt.Printf("Strategy %s: allowed=%v, remaining=%d\n", strategy, result.Remaining)
 }
 ```
 
 **Dual Strategy Logic:**
-1. **Primary Strategy** (Fixed Window) provides hard rate limits
-2. **Secondary Strategy** (Token/Leaky Bucket) acts as a smoother/request shaper
+1. **Primary Strategy** provides hard rate limits
+2. **Secondary Strategy** acts as a smoother/request shaper
 3. **Request Flow:** Check primary first -> If allowed, check secondary smoother
 4. **Final Decision:** Both strategies must allow the request
 
 **Supported primary strategies:**
-- `ratelimit.StrategyFixedWindow`
+- `strategies.FixedWindowConfig`
+- `strategies.TokenBucketConfig`
+- `strategies.LeakyBucketConfig`
 
 **Supported secondary strategies (smoothers):**
-- `ratelimit.StrategyTokenBucket`
-- `ratelimit.StrategyLeakyBucket`
+- `strategies.TokenBucketConfig`
+- `strategies.LeakyBucketConfig`
 
 **Available functional options:**
 - `WithBackend(backend)` - Use a custom backend instance
-- `WithFixedWindowStrategy(tiers...)` - Fixed window algorithm (can be primary or standalone)
-- `WithTokenBucketStrategy(burstSize, refillRate)` - Token bucket algorithm (can be primary, secondary smoother, or standalone)
-- `WithLeakyBucketStrategy(capacity, leakRate)` - Leaky bucket algorithm (can be primary, secondary smoother, or standalone)
-- `WithPrimaryStrategy(strategyConfig)` - Explicitly set primary strategy with custom configuration
-- `WithSecondaryStrategy(strategyConfig)` - Explicitly set secondary smoother strategy
+- `WithPrimaryStrategy(strategyConfig)` - Set primary strategy with custom configuration
+- `WithSecondaryStrategy(strategyConfig)` - Set secondary smoother strategy
 - `WithBaseKey(key)` - Set the base key for rate limiting
 
 **Access Options (for Allow method):**
 - `WithContext(ctx)` - Provide context for the operation
 - `WithKey(key)` - Use a dynamic key for this specific request
-- `WithResult(&results)` - Get detailed results in a map[string]TierResult
+- `WithResult(&results)` - Get detailed results in a map[string]strategies.Result
 
 **Additional Methods:**
-- `GetStats(opts...)` - Get detailed statistics for all tiers without consuming quota
+- `GetStats(opts...)` - Get detailed statistics for all strategies without consuming quota
 - `Reset(opts...)` - Reset rate limit counters (mainly for testing)
 - `Close()` - Clean up resources and close the rate limiter
 
 **Strategy Behavior:**
 - **Single Strategy:** Use any strategy alone (Fixed Window, Token Bucket, or Leaky Bucket)
-- **Dual Strategy:** Combine Fixed Window (primary) + Token/Leaky Bucket (secondary smoother)
-- **Strategy Priority:** First strategy option becomes primary, subsequent bucket options become secondary
+- **Dual Strategy:** Combine any primary strategy + bucket-based secondary strategy
+- **Strategy Priority:** Primary strategy provides hard limits, secondary strategy provides smoothing
 
 **Limits and Constraints:**
-- Fixed Window: Maximum 12 tiers per configuration, minimum interval: 5 seconds
-- Each tier must have a positive limit
 - Arbitrary time intervals are supported (30 seconds, 5 minutes, 2 hours, etc.)
-- Bucket strategies (Token Bucket, Leaky Bucket) don't use tiers
-- Fixed Window cannot be used as secondary strategy
-- Primary bucket-based strategy (Token/Leaky Bucket) cannot be combined with secondary strategy (only Fixed Window primary can have secondary)
+- Secondary strategy must be bucket-based (Token Bucket or Leaky Bucket)
+- Primary bucket-based strategy cannot be combined with secondary strategy
 - Only one secondary strategy allowed per limiter
 
-**TierConfig Structure:**
+**Strategy Configuration Structures:**
+
 ```go
-type TierConfig struct {
-    Interval time.Duration // Time window (1 minute, 1 hour, 1 day, etc.)
-    Limit    int           // Number of requests allowed in this interval
-    Name     string        // Optional custom name for the tier (e.g., "login_attempts")
+// Fixed Window Strategy
+type FixedWindowConfig struct {
+    Key    string        // Unique identifier for the rate limit
+    Limit  int           // Number of requests allowed in the window
+    Window time.Duration // Time window (1 minute, 1 hour, 1 day, etc.)
+}
+
+// Token Bucket Strategy
+type TokenBucketConfig struct {
+    Key        string  // Unique identifier for the rate limit
+    BurstSize  int     // Maximum tokens the bucket can hold
+    RefillRate float64 // Tokens to add per second
+}
+
+// Leaky Bucket Strategy
+type LeakyBucketConfig struct {
+    Key      string  // Unique identifier for the rate limit
+    Capacity int     // Maximum requests the bucket can hold
+    LeakRate float64 // Requests to process per second
 }
 ```
 
-**TierResult Structure:**
+**Result Structure:**
 ```go
-type TierResult struct {
-    Allowed   bool      // Whether this tier allowed the request
-    Remaining int       // Remaining requests in this tier
-    Reset     time.Time // When this tier resets
-    Total     int       // Total limit for this tier
+type Result struct {
+    Allowed   bool      // Whether the request is allowed
+    Remaining int       // Remaining requests in the current window
+    Reset     time.Time // When the current window resets
 }
 ```
 
@@ -200,12 +215,6 @@ type TierResult struct {
 - Keys must be 1-64 characters long
 - Only alphanumeric ASCII, underscore (_), hyphen (-), colon (:), period (.), and at (@) symbols are allowed
 - Keys are automatically validated when provided
-
-**Name Field Validation (Optional):**
-- Tier names must be 16 characters or less when provided
-- Same character rules as keys apply (alphanumeric ASCII, underscore _, hyphen -, colon :, period ., and at @)
-- If not provided, tier names are auto-generated based on interval (e.g., "minute", "hour", "day")
-- Custom names provide better debugging and monitoring clarity
 
 ### Storage Backends
 
@@ -275,7 +284,7 @@ limiter, err := ratelimit.New(
 
 ```go
 // Get current statistics without consuming quota
-var stats map[string]ratelimit.TierResult
+var stats map[string]strategies.Result
 stats, err := limiter.GetStats(
     ratelimit.WithContext(ctx),
     ratelimit.WithKey("user:123"),
@@ -284,9 +293,9 @@ if err != nil {
     // handle error
 }
 
-for tier, result := range stats {
-    fmt.Printf("Tier %s: %d remaining of %d total, resets at %v\n",
-        tier, result.Remaining, result.Total, result.Reset)
+for strategy, result := range stats {
+    fmt.Printf("Strategy %s: %d remaining, resets at %v\n",
+        strategy, result.Remaining, result.Reset)
 }
 ```
 
@@ -332,11 +341,9 @@ storage := memory.New()
 strategy := fixedwindow.New(storage)
 
 // Configure rate limiting
-config := fixedwindow.Config{
-    RateLimitConfig: fixedwindow.RateLimitConfig{
-        Key:   "user:123",
-        Limit: 100,
-    },
+config := strategies.FixedWindowConfig{
+    Key:    "user:123",
+    Limit:  100,
     Window: time.Minute, // Time window
 }
 
@@ -346,11 +353,11 @@ if err != nil {
     // Handle error
 }
 if result.Allowed {
-    fmt.Printf("Request allowed, %d remaining, resets at %v\\n",
+    fmt.Printf("Request allowed, %d remaining, resets at %v\n",
         result.Remaining, result.Reset)
     // Process request
 } else {
-    fmt.Printf("Request blocked, %d remaining, resets at %v\\n",
+    fmt.Printf("Request blocked, %d remaining, resets at %v\n",
         result.Remaining, result.Reset)
     // Reject request
 }
@@ -366,11 +373,8 @@ storage := memory.New()
 strategy := tokenbucket.New(storage)
 
 // Configure rate limiting
-config := tokenbucket.Config{
-    RateLimitConfig: tokenbucket.RateLimitConfig{
-        Key:   "user:123",
-        Limit: 100,
-    },
+config := strategies.TokenBucketConfig{
+    Key:        "user:123",
     BurstSize:  10,
     RefillRate: 1.0, // 1 token per second
 }
@@ -381,11 +385,11 @@ if err != nil {
     // Handle error
 }
 if result.Allowed {
-    fmt.Printf("Request allowed, %d remaining, resets at %v\\n",
+    fmt.Printf("Request allowed, %d remaining, resets at %v\n",
         result.Remaining, result.Reset)
     // Process request
 } else {
-    fmt.Printf("Request blocked, %d remaining, resets at %v\\n",
+    fmt.Printf("Request blocked, %d remaining, resets at %v\n",
         result.Remaining, result.Reset)
     // Reject request
 }
@@ -401,11 +405,8 @@ storage := memory.New()
 strategy := leakybucket.New(storage)
 
 // Configure rate limiting
-config := leakybucket.Config{
-    RateLimitConfig: leakybucket.RateLimitConfig{
-        Key:   "user:123",
-        Limit: 100,
-    },
+config := strategies.LeakyBucketConfig{
+    Key:      "user:123",
     Capacity: 50,  // Maximum requests the bucket can hold
     LeakRate: 2.0, // 2 requests per second leak rate
 }
@@ -416,11 +417,11 @@ if err != nil {
     // Handle error
 }
 if result.Allowed {
-    fmt.Printf("Request allowed, %d remaining, resets at %v\\n",
+    fmt.Printf("Request allowed, %d remaining, resets at %v\n",
         result.Remaining, result.Reset)
     // Process request
 } else {
-    fmt.Printf("Request blocked, %d remaining, resets at %v\\n",
+    fmt.Printf("Request blocked, %d remaining, resets at %v\n",
         result.Remaining, result.Reset)
     // Reject request
 }

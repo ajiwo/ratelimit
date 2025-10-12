@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit"
+	"github.com/ajiwo/ratelimit/strategies"
 
 	"github.com/ajiwo/ratelimit/backends/memory"
 	"github.com/ajiwo/ratelimit/backends/postgres"
@@ -16,8 +17,6 @@ import (
 	"github.com/ajiwo/ratelimit/strategies/tokenbucket"
 
 	"github.com/ajiwo/ratelimit/backends"
-
-	"github.com/ajiwo/ratelimit/strategies"
 )
 
 func main() {
@@ -308,15 +307,19 @@ func statusExample() error {
 
 func dualStrategyExample() error {
 	// Create a dual strategy rate limiter:
-	// - Primary: Fixed Window (hard limits: 10 per minute, 50 per hour)
+	// - Primary: Fixed Window (hard limit: 10 per minute)
 	// - Secondary: Token Bucket (smoother: 5 burst, 0.5 req/sec refill)
 	limiter, err := ratelimit.New(
 		ratelimit.WithBackend(memory.New()),
-		ratelimit.WithFixedWindowStrategy( // Primary: Hard limits
-			ratelimit.TierConfig{Interval: time.Minute, Limit: 10, Name: "minute_limit"}, // 10 requests per minute
-			ratelimit.TierConfig{Interval: time.Hour, Limit: 50, Name: "hour_limit"},     // 50 requests per hour
-		),
-		ratelimit.WithTokenBucketStrategy(5, 0.5), // Secondary: 5 burst, 0.5 req/sec refill
+		ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
+			Key:    "api:user:dual",
+			Limit:  10, // 10 requests per minute
+			Window: time.Minute,
+		}), // Primary: Hard limit
+		ratelimit.WithSecondaryStrategy(strategies.TokenBucketConfig{
+			BurstSize:  5,   // 5 burst capacity
+			RefillRate: 0.5, // 0.5 req/sec refill
+		}), // Secondary: Smoother
 		ratelimit.WithBaseKey("api:user:dual"),
 	)
 	if err != nil {
@@ -325,14 +328,14 @@ func dualStrategyExample() error {
 	defer limiter.Close()
 
 	fmt.Println("Dual Strategy Rate Limiter:")
-	fmt.Println("  Primary (Fixed Window): 10 req/min, 50 req/hour (hard limits)")
+	fmt.Println("  Primary (Fixed Window): 10 req/min (hard limit)")
 	fmt.Println("  Secondary (Token Bucket): 5 burst capacity, 0.5 req/sec refill (smoother)")
 	fmt.Println("\nTesting burst behavior...")
 
 	// Test 1: Burst handling - should allow up to 5 requests quickly (smoother limit)
 	fmt.Println("\n=== Burst Test (5 quick requests) ===")
 	for i := range 5 {
-		var results map[string]ratelimit.TierResult
+		var results map[string]strategies.Result
 		allowed, err := limiter.Allow(
 			ratelimit.WithResult(&results),
 			ratelimit.WithContext(context.Background()),
@@ -345,17 +348,17 @@ func dualStrategyExample() error {
 
 		// Show detailed results
 		for strategyName, result := range results {
-			if strategyName == "smoother" {
-				fmt.Printf("  %s: %d/%d remaining (burst control)\n", strategyName, result.Remaining, result.Total)
+			if strategyName == "secondary" {
+				fmt.Printf("  %s: %d remaining (burst control)\n", strategyName, result.Remaining)
 			} else {
-				fmt.Printf("  %s: %d/%d remaining (hard limit)\n", strategyName, result.Remaining, result.Total)
+				fmt.Printf("  %s: %d remaining (hard limit)\n", strategyName, result.Remaining)
 			}
 		}
 	}
 
 	// Test 2: Try to exceed burst capacity - should be blocked by smoother
 	fmt.Println("\n=== Burst Capacity Test (6th quick request) ===")
-	var results map[string]ratelimit.TierResult
+	var results map[string]strategies.Result
 	allowed, err := limiter.Allow(
 		ratelimit.WithResult(&results),
 		ratelimit.WithContext(context.Background()),
@@ -366,10 +369,10 @@ func dualStrategyExample() error {
 
 	fmt.Printf("Request 6: %v\n", map[bool]string{true: "ALLOWED", false: "BLOCKED"}[allowed])
 	for strategyName, result := range results {
-		if strategyName == "smoother" {
-			fmt.Printf("  %s: %d/%d remaining (burst control - BLOCKED)\n", strategyName, result.Remaining, result.Total)
+		if strategyName == "secondary" {
+			fmt.Printf("  %s: %d remaining (burst control - BLOCKED)\n", strategyName, result.Remaining)
 		} else {
-			fmt.Printf("  %s: %d/%d remaining (hard limit)\n", strategyName, result.Remaining, result.Total)
+			fmt.Printf("  %s: %d remaining (hard limit)\n", strategyName, result.Remaining)
 		}
 	}
 
@@ -378,7 +381,7 @@ func dualStrategyExample() error {
 	for i := range 4 {
 		time.Sleep(2 * time.Second) // Wait for token bucket to refill
 
-		var results map[string]ratelimit.TierResult
+		var results map[string]strategies.Result
 		allowed, err := limiter.Allow(
 			ratelimit.WithResult(&results),
 			ratelimit.WithContext(context.Background()),
@@ -389,8 +392,8 @@ func dualStrategyExample() error {
 
 		fmt.Printf("Request %d (after 2s wait): %v\n", i+7, map[bool]string{true: "ALLOWED", false: "BLOCKED"}[allowed])
 		for strategyName, result := range results {
-			if strategyName == "smoother" {
-				fmt.Printf("  %s: %d/%d remaining (burst control)\n", strategyName, result.Remaining, result.Total)
+			if strategyName == "secondary" {
+				fmt.Printf("  %s: %d remaining (burst control)\n", strategyName, result.Remaining)
 			}
 		}
 	}
@@ -400,7 +403,7 @@ func dualStrategyExample() error {
 
 	// Make 5 more requests quickly (we've already made 9 allowed requests total)
 	for i := range 5 {
-		var results map[string]ratelimit.TierResult
+		var results map[string]strategies.Result
 		allowed, err := limiter.Allow(
 			ratelimit.WithResult(&results),
 			ratelimit.WithContext(context.Background()),
@@ -411,11 +414,11 @@ func dualStrategyExample() error {
 
 		fmt.Printf("Request %d: %v\n", i+11, map[bool]string{true: "ALLOWED", false: "BLOCKED"}[allowed])
 
-		// Show primary tier status when blocked
+		// Show primary strategy status when blocked
 		if !allowed {
 			for strategyName, result := range results {
-				if strategyName != "smoother" {
-					fmt.Printf("  %s: %d/%d remaining (hard limit - BLOCKED)\n", strategyName, result.Remaining, result.Total)
+				if strategyName == "primary" {
+					fmt.Printf("  %s: %d remaining (hard limit - BLOCKED)\n", strategyName, result.Remaining)
 				}
 			}
 		}

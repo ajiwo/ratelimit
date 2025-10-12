@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit"
+	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,13 +14,14 @@ import (
 func TestFixedWindow_ConcurrentAccessMemory(t *testing.T) {
 	backend := UseBackend(t, "memory")
 	key := fmt.Sprintf("fwm-%d", time.Now().UnixNano())
-	tiers := []ratelimit.TierConfig{
-		{Interval: ratelimit.MinInterval, Limit: 10},
-	}
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithFixedWindowStrategy(tiers...),
+		ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
+			Key:    "test",
+			Limit:  10,
+			Window: 5 * time.Second,
+		}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -76,13 +78,14 @@ func TestFixedWindow_ConcurrentAccessMemory(t *testing.T) {
 func TestFixedWindow_ConcurrentAccessPostgres(t *testing.T) {
 	backend := UseBackend(t, "postgres")
 	key := fmt.Sprintf("fwp-%d", time.Now().UnixNano())
-	tiers := []ratelimit.TierConfig{
-		{Interval: ratelimit.MinInterval, Limit: 10},
-	}
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithFixedWindowStrategy(tiers...),
+		ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
+			Key:    "test",
+			Limit:  10,
+			Window: 5 * time.Second,
+		}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -139,13 +142,14 @@ func TestFixedWindow_ConcurrentAccessPostgres(t *testing.T) {
 func TestFixedWindow_ConcurrentAccessRedis(t *testing.T) {
 	backend := UseBackend(t, "redis")
 	key := fmt.Sprintf("fwr-%d", time.Now().UnixNano())
-	tiers := []ratelimit.TierConfig{
-		{Interval: ratelimit.MinInterval, Limit: 10},
-	}
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithFixedWindowStrategy(tiers...),
+		ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
+			Key:    "test",
+			Limit:  10,
+			Window: 5 * time.Second,
+		}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -205,7 +209,7 @@ func TestLeakyBucket_ConcurrentAccessMemory(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithLeakyBucketStrategy(10, 0.1),
+		ratelimit.WithPrimaryStrategy(strategies.LeakyBucketConfig{Capacity: 10, LeakRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -265,7 +269,7 @@ func TestLeakyBucket_ConcurrentAccessPostgres(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithLeakyBucketStrategy(10, 0.1),
+		ratelimit.WithPrimaryStrategy(strategies.LeakyBucketConfig{Capacity: 10, LeakRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -325,7 +329,7 @@ func TestLeakyBucket_ConcurrentAccessRedis(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithLeakyBucketStrategy(10, 0.1),
+		ratelimit.WithPrimaryStrategy(strategies.LeakyBucketConfig{Capacity: 10, LeakRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -385,7 +389,7 @@ func TestTokenBucket_ConcurrentAccessMemory(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithTokenBucketStrategy(10, 0.1),
+		ratelimit.WithPrimaryStrategy(strategies.TokenBucketConfig{BurstSize: 10, RefillRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -445,7 +449,7 @@ func TestTokenBucket_ConcurrentAccessPostgres(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithTokenBucketStrategy(10, 0.1),
+		ratelimit.WithPrimaryStrategy(strategies.TokenBucketConfig{BurstSize: 10, RefillRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -505,7 +509,7 @@ func TestTokenBucket_ConcurrentAccessRedis(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithTokenBucketStrategy(10, 0.1),
+		ratelimit.WithPrimaryStrategy(strategies.TokenBucketConfig{BurstSize: 10, RefillRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -562,13 +566,14 @@ func TestTokenBucket_ConcurrentAccessRedis(t *testing.T) {
 func TestFixedWindow_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	backend := UseBackend(t, "memory")
 	key := fmt.Sprintf("fw-mwr-%d", time.Now().UnixNano())
-	tiers := []ratelimit.TierConfig{
-		{Interval: ratelimit.MinInterval, Limit: 10},
-	}
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithFixedWindowStrategy(tiers...),
+		ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
+			Key:    "test",
+			Limit:  10,
+			Window: 5 * time.Second,
+		}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -580,13 +585,13 @@ func TestFixedWindow_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	ctx := t.Context()
 
 	// Start multiple goroutines making requests concurrently
-	results := make(chan ratelimit.TierResult, 20)
+	results := make(chan strategies.Result, 20)
 	errors := make(chan error, 20)
 
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			var res map[string]ratelimit.TierResult
+			var res map[string]strategies.Result
 			_, err := limiter.Allow(
 				ratelimit.WithContext(ctx),
 				ratelimit.WithResult(&res),
@@ -595,7 +600,7 @@ func TestFixedWindow_ConcurrentAccessMemoryWithResult(t *testing.T) {
 				errors <- err
 				return
 			}
-			results <- res["5s"]
+			results <- res["primary"]
 		}()
 	}
 
@@ -629,13 +634,14 @@ func TestFixedWindow_ConcurrentAccessMemoryWithResult(t *testing.T) {
 func TestFixedWindow_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	backend := UseBackend(t, "postgres")
 	key := fmt.Sprintf("fw-pwr-%d", time.Now().UnixNano())
-	tiers := []ratelimit.TierConfig{
-		{Interval: ratelimit.MinInterval, Limit: 10},
-	}
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithFixedWindowStrategy(tiers...),
+		ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
+			Key:    "test",
+			Limit:  10,
+			Window: 5 * time.Second,
+		}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -647,13 +653,13 @@ func TestFixedWindow_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	ctx := t.Context()
 
 	// Start multiple goroutines making requests concurrently
-	results := make(chan ratelimit.TierResult, 20)
+	results := make(chan strategies.Result, 20)
 	errors := make(chan error, 20)
 
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			var res map[string]ratelimit.TierResult
+			var res map[string]strategies.Result
 			_, err := limiter.Allow(
 				ratelimit.WithContext(ctx),
 				ratelimit.WithResult(&res),
@@ -662,7 +668,7 @@ func TestFixedWindow_ConcurrentAccessPostgresWithResult(t *testing.T) {
 				errors <- err
 				return
 			}
-			results <- res["5s"]
+			results <- res["primary"]
 		}()
 	}
 
@@ -696,13 +702,14 @@ func TestFixedWindow_ConcurrentAccessPostgresWithResult(t *testing.T) {
 func TestFixedWindow_ConcurrentAccessRedisWithResult(t *testing.T) {
 	backend := UseBackend(t, "redis")
 	key := fmt.Sprintf("fw-rwr-%d", time.Now().UnixNano())
-	tiers := []ratelimit.TierConfig{
-		{Interval: ratelimit.MinInterval, Limit: 10},
-	}
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithFixedWindowStrategy(tiers...),
+		ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
+			Key:    "test",
+			Limit:  10,
+			Window: 5 * time.Second,
+		}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -714,13 +721,13 @@ func TestFixedWindow_ConcurrentAccessRedisWithResult(t *testing.T) {
 	ctx := t.Context()
 
 	// Start multiple goroutines making requests concurrently
-	results := make(chan ratelimit.TierResult, 20)
+	results := make(chan strategies.Result, 20)
 	errors := make(chan error, 20)
 
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			var res map[string]ratelimit.TierResult
+			var res map[string]strategies.Result
 			_, err := limiter.Allow(
 				ratelimit.WithContext(ctx),
 				ratelimit.WithResult(&res),
@@ -729,7 +736,7 @@ func TestFixedWindow_ConcurrentAccessRedisWithResult(t *testing.T) {
 				errors <- err
 				return
 			}
-			results <- res["5s"]
+			results <- res["primary"]
 		}()
 	}
 
@@ -766,7 +773,7 @@ func TestLeakyBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithLeakyBucketStrategy(10, 0.1),
+		ratelimit.WithPrimaryStrategy(strategies.LeakyBucketConfig{Capacity: 10, LeakRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -778,13 +785,13 @@ func TestLeakyBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	ctx := t.Context()
 
 	// Start multiple goroutines making requests concurrently
-	results := make(chan ratelimit.TierResult, 20)
+	results := make(chan strategies.Result, 20)
 	errors := make(chan error, 20)
 
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			var res map[string]ratelimit.TierResult
+			var res map[string]strategies.Result
 			_, err := limiter.Allow(
 				ratelimit.WithContext(ctx),
 				ratelimit.WithResult(&res),
@@ -793,7 +800,7 @@ func TestLeakyBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
 				errors <- err
 				return
 			}
-			results <- res["default"]
+			results <- res["primary"]
 		}()
 	}
 
@@ -830,7 +837,7 @@ func TestLeakyBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithLeakyBucketStrategy(10, 0.1),
+		ratelimit.WithPrimaryStrategy(strategies.LeakyBucketConfig{Capacity: 10, LeakRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -842,13 +849,13 @@ func TestLeakyBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	ctx := t.Context()
 
 	// Start multiple goroutines making requests concurrently
-	results := make(chan ratelimit.TierResult, 20)
+	results := make(chan strategies.Result, 20)
 	errors := make(chan error, 20)
 
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			var res map[string]ratelimit.TierResult
+			var res map[string]strategies.Result
 			_, err := limiter.Allow(
 				ratelimit.WithContext(ctx),
 				ratelimit.WithResult(&res),
@@ -857,7 +864,7 @@ func TestLeakyBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
 				errors <- err
 				return
 			}
-			results <- res["default"]
+			results <- res["primary"]
 		}()
 	}
 
@@ -894,7 +901,7 @@ func TestLeakyBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithLeakyBucketStrategy(10, 0.1),
+		ratelimit.WithPrimaryStrategy(strategies.LeakyBucketConfig{Capacity: 10, LeakRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -906,13 +913,13 @@ func TestLeakyBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
 	ctx := t.Context()
 
 	// Start multiple goroutines making requests concurrently
-	results := make(chan ratelimit.TierResult, 20)
+	results := make(chan strategies.Result, 20)
 	errors := make(chan error, 20)
 
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			var res map[string]ratelimit.TierResult
+			var res map[string]strategies.Result
 			_, err := limiter.Allow(
 				ratelimit.WithContext(ctx),
 				ratelimit.WithResult(&res),
@@ -921,7 +928,7 @@ func TestLeakyBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
 				errors <- err
 				return
 			}
-			results <- res["default"]
+			results <- res["primary"]
 		}()
 	}
 
@@ -958,7 +965,7 @@ func TestTokenBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithTokenBucketStrategy(10, 0.1),
+		ratelimit.WithPrimaryStrategy(strategies.TokenBucketConfig{BurstSize: 10, RefillRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -970,13 +977,13 @@ func TestTokenBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	ctx := t.Context()
 
 	// Start multiple goroutines making requests concurrently
-	results := make(chan ratelimit.TierResult, 20)
+	results := make(chan strategies.Result, 20)
 	errors := make(chan error, 20)
 
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			var res map[string]ratelimit.TierResult
+			var res map[string]strategies.Result
 			_, err := limiter.Allow(
 				ratelimit.WithContext(ctx),
 				ratelimit.WithResult(&res),
@@ -985,7 +992,7 @@ func TestTokenBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
 				errors <- err
 				return
 			}
-			results <- res["default"]
+			results <- res["primary"]
 		}()
 	}
 
@@ -1022,7 +1029,7 @@ func TestTokenBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithTokenBucketStrategy(10, 0.1),
+		ratelimit.WithPrimaryStrategy(strategies.TokenBucketConfig{BurstSize: 10, RefillRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -1034,13 +1041,13 @@ func TestTokenBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	ctx := t.Context()
 
 	// Start multiple goroutines making requests concurrently
-	results := make(chan ratelimit.TierResult, 20)
+	results := make(chan strategies.Result, 20)
 	errors := make(chan error, 20)
 
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			var res map[string]ratelimit.TierResult
+			var res map[string]strategies.Result
 			_, err := limiter.Allow(
 				ratelimit.WithContext(ctx),
 				ratelimit.WithResult(&res),
@@ -1049,7 +1056,7 @@ func TestTokenBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
 				errors <- err
 				return
 			}
-			results <- res["default"]
+			results <- res["primary"]
 		}()
 	}
 
@@ -1086,7 +1093,7 @@ func TestTokenBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithTokenBucketStrategy(10, 0.1),
+		ratelimit.WithPrimaryStrategy(strategies.TokenBucketConfig{BurstSize: 10, RefillRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -1098,13 +1105,13 @@ func TestTokenBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
 	ctx := t.Context()
 
 	// Start multiple goroutines making requests concurrently
-	results := make(chan ratelimit.TierResult, 20)
+	results := make(chan strategies.Result, 20)
 	errors := make(chan error, 20)
 
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			var res map[string]ratelimit.TierResult
+			var res map[string]strategies.Result
 			_, err := limiter.Allow(
 				ratelimit.WithContext(ctx),
 				ratelimit.WithResult(&res),
@@ -1113,7 +1120,7 @@ func TestTokenBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
 				errors <- err
 				return
 			}
-			results <- res["default"]
+			results <- res["primary"]
 		}()
 	}
 

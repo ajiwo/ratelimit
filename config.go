@@ -51,54 +51,16 @@ func validateKey(key string, keyType string) error {
 	return nil
 }
 
-// FixedWindowConfig implements StrategyConfig for multi-tiers fixed window rate limiting
-// used to create `len(Tiers)` instances of `strategies.FixedWindowConfig`
-type FixedWindowConfig struct {
-	Tiers []TierConfig `json:"tiers"`
-}
-
-func (c FixedWindowConfig) Validate() error {
-	if len(c.Tiers) == 0 {
-		return fmt.Errorf("fixed window strategy requires at least one tier")
-	}
-	if len(c.Tiers) > MaxTiers {
-		return fmt.Errorf("fixed window strategy supports maximum %d tiers, got %d", MaxTiers, len(c.Tiers))
-	}
-
-	for i, tier := range c.Tiers {
-		if tier.Interval < MinInterval {
-			return fmt.Errorf("tier %d: interval %v is below minimum %v", i, tier.Interval, MinInterval)
-		}
-		if tier.Limit <= 0 {
-			return fmt.Errorf("tier %d: limit must be positive, got %d", i, tier.Limit)
-		}
-		if tier.Name != "" {
-			if len(tier.Name) > 16 {
-				return fmt.Errorf("tier %d: name must be 16 characters or less, got %d", i, len(tier.Name))
-			}
-			if err := validateKey(tier.Name, "tier name"); err != nil {
-				return err
-			}
-		}
-	}
-
-	return nil
-}
-
-func (c FixedWindowConfig) Type() strategies.StrategyType {
-	return strategies.StrategyFixedWindow
-}
-
-// MultiTierConfig defines the configuration for multi-tier rate limiting
-type MultiTierConfig struct {
+// Config defines the configuration for single or dual strategy rate limiting
+type Config struct {
 	BaseKey         string                    `json:"base_key"`
 	Storage         backends.Backend          `json:"-"`
 	PrimaryConfig   strategies.StrategyConfig `json:"primary_config"`
 	SecondaryConfig strategies.StrategyConfig `json:"secondary_config,omitempty"`
 }
 
-// Validate validates the entire multi-tier configuration
-func (c MultiTierConfig) Validate() error {
+// Validate validates the entire configuration
+func (c Config) Validate() error {
 	if c.BaseKey == "" {
 		return fmt.Errorf("base key cannot be empty")
 	}

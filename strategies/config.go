@@ -26,6 +26,23 @@ type FixedWindowConfig struct {
 	Window time.Duration
 }
 
+func (c FixedWindowConfig) Validate() error {
+	if c.Key == "" {
+		return fmt.Errorf("fixed window key cannot be empty")
+	}
+	if c.Limit <= 0 {
+		return fmt.Errorf("fixed window limit must be positive, got %d", c.Limit)
+	}
+	if c.Window <= 0 {
+		return fmt.Errorf("fixed window window must be positive, got %v", c.Window)
+	}
+	return nil
+}
+
+func (c FixedWindowConfig) Type() StrategyType {
+	return StrategyFixedWindow
+}
+
 type LeakyBucketConfig struct {
 	Key      string
 	Capacity int     // Maximum requests the bucket can hold
