@@ -3,6 +3,7 @@ package ratelimit
 import (
 	"context"
 	"fmt"
+	"maps"
 	"strings"
 
 	"github.com/ajiwo/ratelimit/backends"
@@ -191,14 +192,19 @@ func (r *RateLimiter) handleDualStrategy(accessOpts *accessOptions, results map[
 	if err != nil {
 		return false, nil, fmt.Errorf("primary strategy check failed: %w", err)
 	}
-	primaryResult := primaryResults["default"]
-	// Merge all strategy results
-	for key, result := range primaryResults {
-		results["primary_"+key] = result
+
+	// Check if all tiers allow the request
+	allAllowed := true
+	for tierName, result := range primaryResults {
+		// Merge all strategy results
+		results["primary_"+tierName] = result
+		if !result.Allowed {
+			allAllowed = false
+		}
 	}
 
-	// If primary strategy doesn't allow, don't check secondary
-	if !primaryResult.Allowed {
+	// If any tier doesn't allow, don't check secondary
+	if !allAllowed {
 		return false, results, nil
 	}
 
@@ -212,14 +218,19 @@ func (r *RateLimiter) handleDualStrategy(accessOpts *accessOptions, results map[
 	if err != nil {
 		return false, nil, fmt.Errorf("secondary strategy check failed: %w", err)
 	}
-	secondaryResult := secondaryResults["default"]
-	// Merge all strategy results
-	for key, result := range secondaryResults {
-		results["secondary_"+key] = result
+
+	// Check if all secondary tiers allow the request
+	secondaryAllAllowed := true
+	for tierName, result := range secondaryResults {
+		// Merge all strategy results
+		results["secondary_"+tierName] = result
+		if !result.Allowed {
+			secondaryAllAllowed = false
+		}
 	}
 
-	// If secondary strategy doesn't allow, don't consume from either strategy
-	if !secondaryResult.Allowed {
+	// If any secondary tier doesn't allow, don't consume from either strategy
+	if !secondaryAllAllowed {
 		return false, results, nil
 	}
 
@@ -247,12 +258,18 @@ func (r *RateLimiter) handleSingleStrategy(accessOpts *accessOptions, results ma
 	if err != nil {
 		return false, nil, fmt.Errorf("primary strategy check failed: %w", err)
 	}
-	result := strategyResults["default"]
-	// Merge all strategy results
-	for key, res := range strategyResults {
-		results["primary_"+key] = res
+
+	// Check if all tiers allow the request
+	allAllowed := true
+	for tierName, result := range strategyResults {
+		// Merge all strategy results
+		results["primary_"+tierName] = result
+		if !result.Allowed {
+			allAllowed = false
+		}
 	}
-	return result.Allowed, results, nil
+
+	return allAllowed, results, nil
 }
 
 // parseAccessOptions parses the provided access options and returns the configuration
@@ -284,10 +301,12 @@ func (r *RateLimiter) createPrimaryConfig(dynamicKey string) (any, error) {
 	switch primaryConfig.Name() {
 	case "fixed_window":
 		fixedConfig := primaryConfig.(strategies.FixedWindowConfig)
+		// Create new tiers map with updated key
+		newTiers := make(map[string]strategies.FixedWindowTier)
+		maps.Copy(newTiers, fixedConfig.Tiers)
 		return strategies.FixedWindowConfig{
-			Key:    key,
-			Limit:  fixedConfig.Limit,
-			Window: fixedConfig.Window,
+			Key:   key,
+			Tiers: newTiers,
 		}, nil
 
 	case "token_bucket":

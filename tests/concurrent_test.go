@@ -18,9 +18,13 @@ func TestFixedWindow_ConcurrentAccessMemory(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
-			Key:    "test",
-			Limit:  10,
-			Window: 5 * time.Second,
+			Key: "test",
+			Tiers: map[string]strategies.FixedWindowTier{
+				"default": {
+					Limit:  10,
+					Window: 5 * time.Second,
+				},
+			},
 		}),
 		ratelimit.WithBackend(backend),
 	)
@@ -82,9 +86,13 @@ func TestFixedWindow_ConcurrentAccessPostgres(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
-			Key:    "test",
-			Limit:  10,
-			Window: 5 * time.Second,
+			Key: "test",
+			Tiers: map[string]strategies.FixedWindowTier{
+				"default": {
+					Limit:  10,
+					Window: 5 * time.Second,
+				},
+			},
 		}),
 		ratelimit.WithBackend(backend),
 	)
@@ -146,9 +154,13 @@ func TestFixedWindow_ConcurrentAccessRedis(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
-			Key:    "test",
-			Limit:  10,
-			Window: 5 * time.Second,
+			Key: "test",
+			Tiers: map[string]strategies.FixedWindowTier{
+				"default": {
+					Limit:  10,
+					Window: 5 * time.Second,
+				},
+			},
 		}),
 		ratelimit.WithBackend(backend),
 	)
@@ -570,9 +582,13 @@ func TestFixedWindow_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
-			Key:    "test",
-			Limit:  10,
-			Window: 5 * time.Second,
+			Key: "test",
+			Tiers: map[string]strategies.FixedWindowTier{
+				"default": {
+					Limit:  10,
+					Window: 5 * time.Second,
+				},
+			},
 		}),
 		ratelimit.WithBackend(backend),
 	)
@@ -638,9 +654,13 @@ func TestFixedWindow_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
-			Key:    "test",
-			Limit:  10,
-			Window: 5 * time.Second,
+			Key: "test",
+			Tiers: map[string]strategies.FixedWindowTier{
+				"default": {
+					Limit:  10,
+					Window: 5 * time.Second,
+				},
+			},
 		}),
 		ratelimit.WithBackend(backend),
 	)
@@ -706,9 +726,13 @@ func TestFixedWindow_ConcurrentAccessRedisWithResult(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
-			Key:    "test",
-			Limit:  10,
-			Window: 5 * time.Second,
+			Key: "test",
+			Tiers: map[string]strategies.FixedWindowTier{
+				"default": {
+					Limit:  10,
+					Window: 5 * time.Second,
+				},
+			},
 		}),
 		ratelimit.WithBackend(backend),
 	)

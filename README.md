@@ -15,6 +15,7 @@ This is a Go library that implements rate limiting functionality with multiple a
 - **Advanced capabilities:**
   - Single strategy rate limiting
   - Dual strategy support (primary + secondary smoother)
+  - Multi-tier rate limiting (fixed window with multiple tiers)
   - Detailed statistics and result tracking
   - Dynamic key support for multi-tenant scenarios
 
@@ -43,11 +44,7 @@ mem := memory.New()
 // Create a rate limiter using functional options
 limiter, err := ratelimit.New(
     ratelimit.WithBackend(mem),
-    ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
-        Key:    "user:123",
-        Limit:  100,
-        Window: time.Hour,
-    }),
+    ratelimit.WithPrimaryStrategy(strategies.NewFixedWindowConfig("user:123", 100, time.Hour)),
     ratelimit.WithBaseKey("api"),
 )
 if err != nil {
@@ -78,6 +75,81 @@ for strategy, result := range results {
 }
 ```
 
+### Multi-Tier Fixed Window Rate Limiting
+
+The fixed window strategy now supports multi-tier configurations, allowing you to define multiple rate limits that all must be satisfied for a request to be accepted:
+
+```go
+import (
+    "github.com/ajiwo/ratelimit"
+    "github.com/ajiwo/ratelimit/backends/memory"
+    "github.com/ajiwo/ratelimit/strategies"
+)
+
+// Create a backend instance
+mem := memory.New()
+
+// Create a multi-tier fixed window rate limiter
+limiter, err := ratelimit.New(
+    ratelimit.WithBackend(mem),
+    ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
+        Key: "api:user123",
+        Tiers: map[string]strategies.FixedWindowTier{
+            "burst": {
+                Limit:  10,  // Allow 10 requests per minute
+                Window: time.Minute,
+            },
+            "sustained": {
+                Limit:  100, // Allow 100 requests per hour
+                Window: time.Hour,
+            },
+            "daily": {
+                Limit:  1000, // Allow 1000 requests per day
+                Window: 24 * time.Hour,
+            },
+        },
+    }),
+    ratelimit.WithBaseKey("api"),
+)
+if err != nil {
+    panic(err)
+}
+defer limiter.Close()
+
+// Check if request is allowed (simple version)
+allowed, err := limiter.Allow(ratelimit.WithContext(ctx))
+if err != nil {
+    // handle error
+}
+
+// Or get detailed results for all tiers
+var results map[string]strategies.Result
+allowed, err = limiter.Allow(
+    ratelimit.WithContext(ctx),
+    ratelimit.WithResult(&results),
+)
+if err != nil {
+    // handle error
+}
+
+// Results include detailed information for each tier
+for tier, result := range results {
+    fmt.Printf("Tier %s: allowed=%v, remaining=%d, reset=%v\n",
+        tier, result.Allowed, result.Remaining, result.Reset)
+}
+```
+
+**Multi-Tier Logic:**
+1. **All Tiers Must Allow:** A request is only accepted if all tiers have available quota
+2. **Independent Windows:** Each tier operates with its own time window and limit
+3. **Atomic Consumption:** When a request is allowed, quota is consumed from all tiers
+4. **No Consumption on Denial:** If any tier denies, no quota is consumed from any tier
+
+**Use Cases:**
+- **Burst + Sustained:** Allow short bursts while maintaining long-term limits
+- **Multiple Time Windows:** Enforce per-minute, per-hour, and per-day limits simultaneously
+- **Progressive Limits:** Create graduated rate limiting policies
+
 ### Dual Strategy Rate Limiting
 
 The library supports combining a primary strategy with an optional secondary bucket strategy for request smoothing:
@@ -96,11 +168,7 @@ mem := memory.New()
 limiter, err := ratelimit.New(
     ratelimit.WithBackend(mem),
     // Primary: strict rate limiting
-    ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
-        Key:    "api:user",
-        Limit:  100,
-        Window: time.Hour,
-    }),
+    ratelimit.WithPrimaryStrategy(strategies.NewFixedWindowConfig("api:user", 100, time.Hour)),
     // Secondary: burst smoother (5 burst, 0.1 req/sec refill)
     ratelimit.WithSecondaryStrategy(strategies.TokenBucketConfig{
         BurstSize:  5,
@@ -142,13 +210,19 @@ for strategy, result := range results {
 4. **Final Decision:** Both strategies must allow the request
 
 **Supported primary strategies:**
-- `strategies.FixedWindowConfig`
+- `strategies.FixedWindowConfig` (supports multi-tier configurations)
 - `strategies.TokenBucketConfig`
 - `strategies.LeakyBucketConfig`
 
 **Supported secondary strategies (smoothers):**
 - `strategies.TokenBucketConfig`
 - `strategies.LeakyBucketConfig`
+
+**Multi-tier support:**
+- Fixed Window strategy supports multiple tiers with independent limits and windows
+- All tiers must allow for a request to be accepted
+- Use `strategies.NewFixedWindowConfig()` for single-tier backward compatibility
+- Existing single-tier FixedWindowConfig usage will continue to work unchanged
 
 **Available functional options:**
 - `WithBackend(backend)` - Use a custom backend instance
@@ -180,9 +254,13 @@ for strategy, result := range results {
 **Strategy Configuration Structures:**
 
 ```go
-// Fixed Window Strategy
+// Fixed Window Strategy (Multi-tier Support)
 type FixedWindowConfig struct {
-    Key    string        // Unique identifier for the rate limit
+    Key   string                             // Unique identifier for the rate limit
+    Tiers map[string]FixedWindowTier         // Multiple rate limit tiers
+}
+
+type FixedWindowTier struct {
     Limit  int           // Number of requests allowed in the window
     Window time.Duration // Time window (1 minute, 1 hour, 1 day, etc.)
 }
@@ -200,6 +278,9 @@ type LeakyBucketConfig struct {
     Capacity int     // Maximum requests the bucket can hold
     LeakRate float64 // Requests to process per second
 }
+
+// Helper function for backward compatibility (single-tier)
+func NewFixedWindowConfig(key string, limit int, window time.Duration) FixedWindowConfig
 ```
 
 **Result Structure:**
@@ -340,18 +421,32 @@ storage := memory.New()
 // Create a fixed window strategy
 strategy := fixedwindow.New(storage)
 
-// Configure rate limiting
-config := strategies.FixedWindowConfig{
-    Key:    "user:123",
-    Limit:  100,
-    Window: time.Minute, // Time window
+// Configure rate limiting (single-tier)
+config := strategies.NewFixedWindowConfig("user:123", 100, time.Minute)
+
+// Or configure multi-tier rate limiting
+multiTierConfig := strategies.FixedWindowConfig{
+    Key: "user:123",
+    Tiers: map[string]strategies.FixedWindowTier{
+        "burst": {
+            Limit:  10,
+            Window: time.Minute,
+        },
+        "sustained": {
+            Limit:  100,
+            Window: time.Hour,
+        },
+    },
 }
 
 // Check if request is allowed and get detailed results
-result, err := strategy.Allow(ctx, config)
+results, err := strategy.Allow(ctx, config) // Returns map[string]strategies.Result for multi-tier
 if err != nil {
     // Handle error
 }
+
+// For single-tier, access the "default" result
+result := results["default"]
 if result.Allowed {
     fmt.Printf("Request allowed, %d remaining, resets at %v\n",
         result.Remaining, result.Reset)
@@ -360,6 +455,12 @@ if result.Allowed {
     fmt.Printf("Request blocked, %d remaining, resets at %v\n",
         result.Remaining, result.Reset)
     // Reject request
+}
+
+// For multi-tier, iterate through all tier results
+for tierName, tierResult := range results {
+    fmt.Printf("Tier %s: allowed=%v, remaining=%d, reset=%v\n",
+        tierName, tierResult.Allowed, tierResult.Remaining, tierResult.Reset)
 }
 ```
 

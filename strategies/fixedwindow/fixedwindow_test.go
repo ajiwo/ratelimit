@@ -17,11 +17,7 @@ func TestFixedWindow_Allow(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := strategies.FixedWindowConfig{
-			Key:    "test-key",
-			Limit:  5,
-			Window: time.Minute,
-		}
+		config := strategies.NewFixedWindowConfig("test-key", 5, time.Minute)
 
 		ctx := t.Context()
 
@@ -44,11 +40,7 @@ func TestFixedWindow_WindowReset(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := strategies.FixedWindowConfig{
-			Key:    "test-key",
-			Limit:  2,
-			Window: time.Second, // Window duration
-		}
+		config := strategies.NewFixedWindowConfig("test-key", 2, time.Second)
 
 		ctx := t.Context()
 
@@ -80,17 +72,9 @@ func TestFixedWindow_MultipleKeys(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config1 := strategies.FixedWindowConfig{
-			Key:    "user1",
-			Limit:  1,
-			Window: time.Minute,
-		}
+		config1 := strategies.NewFixedWindowConfig("user1", 1, time.Minute)
 
-		config2 := strategies.FixedWindowConfig{
-			Key:    "user2",
-			Limit:  1,
-			Window: time.Minute,
-		}
+		config2 := strategies.NewFixedWindowConfig("user2", 1, time.Minute)
 
 		ctx := t.Context()
 
@@ -129,11 +113,7 @@ func TestFixedWindow_ZeroLimit(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := strategies.FixedWindowConfig{
-			Key:    "test-key",
-			Limit:  0,
-			Window: time.Minute,
-		}
+		config := strategies.NewFixedWindowConfig("test-key", 0, time.Minute)
 
 		ctx := t.Context()
 
@@ -149,11 +129,7 @@ func TestFixedWindow_GetResult(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := strategies.FixedWindowConfig{
-			Key:    "result-test-key",
-			Limit:  5,
-			Window: time.Minute,
-		}
+		config := strategies.NewFixedWindowConfig("result-test-key", 5, time.Minute)
 
 		ctx := t.Context()
 
@@ -207,11 +183,7 @@ func TestFixedWindow_Reset(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := strategies.FixedWindowConfig{
-			Key:    "reset-test-key",
-			Limit:  2,
-			Window: time.Minute,
-		}
+		config := strategies.NewFixedWindowConfig("reset-test-key", 2, time.Minute)
 
 		ctx := t.Context()
 
@@ -248,11 +220,7 @@ func TestFixedWindow_ConcurrentAccess(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := strategies.FixedWindowConfig{
-			Key:    "concurrent-key",
-			Limit:  5,
-			Window: time.Minute,
-		}
+		config := strategies.NewFixedWindowConfig("concurrent-key", 5, time.Minute)
 
 		ctx := t.Context()
 
@@ -299,11 +267,7 @@ func TestFixedWindow_PreciseTiming(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := strategies.FixedWindowConfig{
-			Key:    "timing-key",
-			Limit:  3,
-			Window: 5 * time.Second,
-		}
+		config := strategies.NewFixedWindowConfig("timing-key", 3, 5*time.Second)
 
 		ctx := t.Context()
 

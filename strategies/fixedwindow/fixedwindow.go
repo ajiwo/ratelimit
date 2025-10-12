@@ -39,56 +39,60 @@ func (f *Strategy) GetResult(ctx context.Context, config any) (map[string]strate
 	}
 
 	now := time.Now()
+	results := make(map[string]strategies.Result)
 
-	// Get current window state
-	data, err := f.storage.Get(ctx, fixedConfig.Key)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get window state: %w", err)
-	}
+	// Process each tier
+	for tierName, tier := range fixedConfig.Tiers {
+		// Create tier-specific key
+		tierKey := fixedConfig.Key + ":" + tierName
 
-	var window FixedWindow
-	if data == "" {
-		// No existing window, return default state
-		return map[string]strategies.Result{
-			"default": {
+		// Get current window state for this tier
+		data, err := f.storage.Get(ctx, tierKey)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get window state for tier '%s': %w", tierName, err)
+		}
+
+		var window FixedWindow
+		if data == "" {
+			// No existing window, return default state
+			results[tierName] = strategies.Result{
 				Allowed:   true,
-				Remaining: fixedConfig.Limit,
-				Reset:     now.Add(fixedConfig.Window),
-			},
-		}, nil
-	}
+				Remaining: tier.Limit,
+				Reset:     now.Add(tier.Window),
+			}
+			continue
+		}
 
-	// Parse existing window state (compact format only)
-	if w, ok := decodeFixedWindow(data); ok {
-		window = w
-	} else {
-		return nil, fmt.Errorf("failed to parse window state: invalid encoding")
-	}
+		// Parse existing window state (compact format only)
+		if w, ok := decodeFixedWindow(data); ok {
+			window = w
+		} else {
+			return nil, fmt.Errorf("failed to parse window state for tier '%s': invalid encoding", tierName)
+		}
 
-	// Check if current window has expired
-	if now.Sub(window.Start) >= window.Duration {
-		// Window has expired, return fresh state
-		return map[string]strategies.Result{
-			"default": {
+		// Check if current window has expired
+		if now.Sub(window.Start) >= window.Duration {
+			// Window has expired, return fresh state
+			results[tierName] = strategies.Result{
 				Allowed:   true,
-				Remaining: fixedConfig.Limit,
-				Reset:     now.Add(fixedConfig.Window),
-			},
-		}, nil
-	}
+				Remaining: tier.Limit,
+				Reset:     now.Add(tier.Window),
+			}
+			continue
+		}
 
-	// Calculate remaining requests and reset time
-	remaining := max(fixedConfig.Limit-window.Count, 0)
+		// Calculate remaining requests and reset time
+		remaining := max(tier.Limit-window.Count, 0)
+		resetTime := window.Start.Add(window.Duration)
 
-	resetTime := window.Start.Add(window.Duration)
-
-	return map[string]strategies.Result{
-		"default": {
+		results[tierName] = strategies.Result{
 			Allowed:   remaining > 0,
 			Remaining: remaining,
 			Reset:     resetTime,
-		},
-	}, nil
+		}
+	}
+
+	return results, nil
 }
 
 // Reset resets the rate limit counter for the given key
@@ -99,8 +103,15 @@ func (f *Strategy) Reset(ctx context.Context, config any) error {
 		return fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
 	}
 
-	// Delete the key from storage to reset the counter
-	return f.storage.Delete(ctx, fixedConfig.Key)
+	// Delete all tier keys from storage
+	var lastErr error
+	for tierName := range fixedConfig.Tiers {
+		tierKey := fixedConfig.Key + ":" + tierName
+		if err := f.storage.Delete(ctx, tierKey); err != nil {
+			lastErr = err
+		}
+	}
+	return lastErr
 }
 
 // encodeFixedWindow serializes FixedWindow into a compact ASCII format:
@@ -185,115 +196,165 @@ func (f *Strategy) Allow(ctx context.Context, config any) (map[string]strategies
 	}
 
 	now := time.Now()
+	results := make(map[string]strategies.Result)
 
-	// Try atomic CheckAndSet operations first
-	for attempt := range strategies.CheckAndSetRetries {
-		// Check if context is cancelled or timed out
-		if ctx.Err() != nil {
-			return nil, fmt.Errorf("context cancelled or timed out: %w", ctx.Err())
-		}
+	// Process each tier - all tiers must allow for the request to be allowed
+	for tierName, tier := range fixedConfig.Tiers {
+		// Create tier-specific key
+		tierKey := fixedConfig.Key + ":" + tierName
 
-		// Get current window state
-		data, err := f.storage.Get(ctx, fixedConfig.Key)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get window state: %w", err)
-		}
+		// Try atomic CheckAndSet operations first
+		var allowed bool
+		var remaining int
+		var resetTime time.Time
 
-		var window FixedWindow
-		var oldValue any
-		if data == "" {
-			// Initialize new window
-			window = FixedWindow{
-				Count:    0,
-				Start:    now,
-				Duration: fixedConfig.Window,
-			}
-			oldValue = nil // Key doesn't exist
-		} else {
-			// Parse existing window state (compact format only)
-			if w, ok := decodeFixedWindow(data); ok {
-				window = w
-			} else {
-				return nil, fmt.Errorf("failed to parse window state: invalid encoding")
+		for attempt := range strategies.CheckAndSetRetries {
+			// Check if context is cancelled or timed out
+			if ctx.Err() != nil {
+				return nil, fmt.Errorf("context cancelled or timed out: %w", ctx.Err())
 			}
 
-			// Check if current window has expired
-			if now.Sub(window.Start) >= window.Duration {
-				// Start new window - reset count but keep same start time structure
-				window.Count = 0
-				window.Start = now
-				window.Duration = fixedConfig.Window
-			}
-			oldValue = data
-		}
-
-		// Determine if request is allowed based on current count
-		allowed := window.Count < fixedConfig.Limit
-
-		// Calculate reset time
-		resetTime := window.Start.Add(window.Duration)
-
-		if allowed {
-			// Increment request count
-			window.Count += 1
-
-			// Calculate remaining after increment (subtract 1 for the request we just processed)
-			remaining := max(fixedConfig.Limit-window.Count, 0)
-
-			// Save updated window state in compact format
-			newValue := encodeFixedWindow(window)
-
-			// Use CheckAndSet for atomic update
-			success, err := f.storage.CheckAndSet(ctx, fixedConfig.Key, oldValue, newValue, window.Duration)
+			// Get current window state for this tier
+			data, err := f.storage.Get(ctx, tierKey)
 			if err != nil {
-				return nil, fmt.Errorf("failed to save window state: %w", err)
+				return nil, fmt.Errorf("failed to get window state for tier '%s': %w", tierName, err)
 			}
 
-			if success {
-				// Atomic update succeeded
-				return map[string]strategies.Result{
-					"default": {
-						Allowed:   true,
-						Remaining: remaining,
-						Reset:     resetTime,
-					},
-				}, nil
-			}
-			// If CheckAndSet failed, retry if we haven't exhausted attempts
-			if attempt < strategies.CheckAndSetRetries-1 {
-				time.Sleep(time.Duration(3*(attempt+1)) * time.Microsecond)
-				continue
-			}
-			break
-		} else {
-			// Request was denied, return original remaining count
-			remaining := max(fixedConfig.Limit-window.Count, 0)
+			var window FixedWindow
+			var oldValue any
+			if data == "" {
+				// Initialize new window
+				window = FixedWindow{
+					Count:    0,
+					Start:    now,
+					Duration: tier.Window,
+				}
+				oldValue = nil // Key doesn't exist
+			} else {
+				// Parse existing window state (compact format only)
+				if w, ok := decodeFixedWindow(data); ok {
+					window = w
+				} else {
+					return nil, fmt.Errorf("failed to parse window state for tier '%s': invalid encoding", tierName)
+				}
 
-			// For denied requests, we don't need to update the count
-			// Only update if window expired to ensure proper reset handling
-			if now.Sub(window.Start) >= window.Duration {
-				// Window expired, reset it
-				window.Count = 0
-				window.Start = now
-				window.Duration = fixedConfig.Window
+				// Check if current window has expired
+				if now.Sub(window.Start) >= window.Duration {
+					// Start new window - reset count but keep same start time structure
+					window.Count = 0
+					window.Start = now
+					window.Duration = tier.Window
+				}
+				oldValue = data
+			}
 
+			// Determine if request is allowed based on current count
+			allowed = window.Count < tier.Limit
+			resetTime = window.Start.Add(window.Duration)
+
+			if allowed {
+				// Increment request count
+				window.Count += 1
+
+				// Calculate remaining after increment (subtract 1 for the request we just processed)
+				remaining = max(tier.Limit-window.Count, 0)
+
+				// Save updated window state in compact format
 				newValue := encodeFixedWindow(window)
-				_, err := f.storage.CheckAndSet(ctx, fixedConfig.Key, oldValue, newValue, window.Duration)
+
+				// Use CheckAndSet for atomic update
+				success, err := f.storage.CheckAndSet(ctx, tierKey, oldValue, newValue, window.Duration)
 				if err != nil {
-					return nil, fmt.Errorf("failed to reset expired window: %w", err)
+					return nil, fmt.Errorf("failed to save window state for tier '%s': %w", tierName, err)
+				}
+
+				if success {
+					// Atomic update succeeded
+					break
+				}
+				// If CheckAndSet failed, retry if we haven't exhausted attempts
+				if attempt < strategies.CheckAndSetRetries-1 {
+					time.Sleep(time.Duration(3*(attempt+1)) * time.Microsecond)
+					continue
+				}
+				return nil, fmt.Errorf("failed to update window state for tier '%s' after %d attempts due to concurrent access", tierName, strategies.CheckAndSetRetries)
+			} else {
+				// Request was denied, return original remaining count
+				remaining = max(tier.Limit-window.Count, 0)
+
+				// For denied requests, we don't need to update the count
+				// Only update if window expired to ensure proper reset handling
+				if now.Sub(window.Start) >= window.Duration {
+					// Window expired, reset it
+					window.Count = 0
+					window.Start = now
+					window.Duration = tier.Window
+
+					newValue := encodeFixedWindow(window)
+					_, err := f.storage.CheckAndSet(ctx, tierKey, oldValue, newValue, window.Duration)
+					if err != nil {
+						return nil, fmt.Errorf("failed to reset expired window for tier '%s': %w", tierName, err)
+					}
+				}
+				break
+			}
+		}
+
+		// Store result for this tier
+		results[tierName] = strategies.Result{
+			Allowed:   allowed,
+			Remaining: remaining,
+			Reset:     resetTime,
+		}
+
+		// If this tier denied the request, we can stop processing further tiers
+		if !allowed {
+			// We still need to ensure other tiers are properly initialized/handled
+			// but we don't consume quota from them
+			for otherTierName, otherTier := range fixedConfig.Tiers {
+				if otherTierName == tierName {
+					continue // Already processed this tier
+				}
+
+				otherTierKey := fixedConfig.Key + ":" + otherTierName
+				data, err := f.storage.Get(ctx, otherTierKey)
+				if err != nil {
+					return nil, fmt.Errorf("failed to get window state for tier '%s': %w", otherTierName, err)
+				}
+
+				if data == "" {
+					// Initialize this tier without consuming quota
+					results[otherTierName] = strategies.Result{
+						Allowed:   true,
+						Remaining: otherTier.Limit,
+						Reset:     now.Add(otherTier.Window),
+					}
+				} else {
+					// Get current state without modifying
+					if w, ok := decodeFixedWindow(data); ok {
+						if now.Sub(w.Start) >= w.Duration {
+							// Window expired
+							results[otherTierName] = strategies.Result{
+								Allowed:   true,
+								Remaining: otherTier.Limit,
+								Reset:     now.Add(otherTier.Window),
+							}
+						} else {
+							remaining := max(otherTier.Limit-w.Count, 0)
+							results[otherTierName] = strategies.Result{
+								Allowed:   remaining > 0,
+								Remaining: remaining,
+								Reset:     w.Start.Add(w.Duration),
+							}
+						}
+					} else {
+						return nil, fmt.Errorf("failed to parse window state for tier '%s': invalid encoding", otherTierName)
+					}
 				}
 			}
-
-			return map[string]strategies.Result{
-				"default": {
-					Allowed:   false,
-					Remaining: remaining,
-					Reset:     resetTime,
-				},
-			}, nil
+			return results, nil
 		}
 	}
 
-	// CheckAndSet failed after checkAndSetRetries attempts
-	return nil, fmt.Errorf("failed to update window state after %d attempts due to concurrent access", strategies.CheckAndSetRetries)
+	return results, nil
 }

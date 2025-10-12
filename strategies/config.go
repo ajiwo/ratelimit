@@ -48,21 +48,30 @@ type StrategyConfig interface {
 	Capabilities() CapabilityFlags
 }
 
-type FixedWindowConfig struct {
-	Key    string
+type FixedWindowTier struct {
 	Limit  int
 	Window time.Duration
+}
+
+type FixedWindowConfig struct {
+	Key   string
+	Tiers map[string]FixedWindowTier
 }
 
 func (c FixedWindowConfig) Validate() error {
 	if c.Key == "" {
 		return fmt.Errorf("fixed window key cannot be empty")
 	}
-	if c.Limit <= 0 {
-		return fmt.Errorf("fixed window limit must be positive, got %d", c.Limit)
+	if len(c.Tiers) == 0 {
+		return fmt.Errorf("fixed window must have at least one tier")
 	}
-	if c.Window <= 0 {
-		return fmt.Errorf("fixed window window must be positive, got %v", c.Window)
+	for name, tier := range c.Tiers {
+		if tier.Limit <= 0 {
+			return fmt.Errorf("fixed window tier '%s' limit must be positive, got %d", name, tier.Limit)
+		}
+		if tier.Window <= 0 {
+			return fmt.Errorf("fixed window tier '%s' window must be positive, got %v", name, tier.Window)
+		}
 	}
 	return nil
 }
@@ -73,6 +82,19 @@ func (c FixedWindowConfig) Name() string {
 
 func (c FixedWindowConfig) Capabilities() CapabilityFlags {
 	return CapPrimary | CapTiers
+}
+
+// NewFixedWindowConfig creates a single-tier FixedWindowConfig for backward compatibility
+func NewFixedWindowConfig(key string, limit int, window time.Duration) FixedWindowConfig {
+	return FixedWindowConfig{
+		Key: key,
+		Tiers: map[string]FixedWindowTier{
+			"default": {
+				Limit:  limit,
+				Window: window,
+			},
+		},
+	}
 }
 
 type LeakyBucketConfig struct {

@@ -214,7 +214,7 @@ func TestRedisStorage_Close(t *testing.T) {
 
 	storage, err := New(RedisConfig{
 		Addr:     redisAddr,
-		Password: "",
+		Password: os.Getenv("REDIS_PASSWORD"),
 		DB:       0,
 	})
 
