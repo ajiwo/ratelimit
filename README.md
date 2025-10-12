@@ -294,9 +294,9 @@ type TierConfig struct {
 }
 
 // Helper functions for configuration
-func NewFixedWindowConfig(key string) *FixedWindowConfigBuilder  // Returns a builder for creating configurations
-func (b *FixedWindowConfigBuilder) AddTier(name string, limit int, window time.Duration) *FixedWindowConfigBuilder  // Add a tier to the configuration
-func (b *FixedWindowConfigBuilder) Build() FixedWindowConfig  // Build the final configuration
+func NewFixedWindowConfig(key string) *fixedWindowConfigBuilder  // Returns a builder for creating configurations
+func (b *fixedWindowConfigBuilder) AddTier(name string, limit int, window time.Duration) *fixedWindowConfigBuilder  // Add a tier to the configuration
+func (b *fixedWindowConfigBuilder) Build() FixedWindowConfig  // Build the final configuration
 ```
 
 **Result Structure:**
