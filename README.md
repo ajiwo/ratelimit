@@ -42,11 +42,11 @@ mem := memory.New()
 // Create a rate limiter using functional options
 limiter, err := ratelimit.New(
     ratelimit.WithBackend(mem),
-    ratelimit.WithPrimaryStrategy(ratelimit.FixedWindowConfig{Tiers: []ratelimit.TierConfig{
-        {Interval: time.Minute, Limit: 5, Name: "requests_per_minute"},    // 5 requests per minute
-        {Interval: time.Hour, Limit: 100, Name: "requests_per_hour"},   // 100 requests per hour
-        {Interval: 24 * time.Hour, Limit: 1000, Name: "requests_per_day"}, // 1000 requests per day
-    }}),
+    ratelimit.WithFixedWindowStrategy(
+        ratelimit.TierConfig{Interval: time.Minute, Limit: 5, Name: "requests_per_minute"},    // 5 requests per minute
+        ratelimit.TierConfig{Interval: time.Hour, Limit: 100, Name: "requests_per_hour"},   // 100 requests per hour
+        ratelimit.TierConfig{Interval: 24 * time.Hour, Limit: 1000, Name: "requests_per_day"}, // 1000 requests per day
+    ),
     ratelimit.WithBaseKey("user:123"),
 )
 if err != nil {
@@ -97,13 +97,11 @@ mem := memory.New()
 // Create a dual-strategy rate limiter
 limiter, err := ratelimit.New(
     ratelimit.WithBackend(mem),
-    // Primary: strict rate limiting
-    ratelimit.WithPrimaryStrategy(ratelimit.FixedWindowConfig{Tiers: []ratelimit.TierConfig{
-        {Interval: time.Minute, Limit: 10, Name: "api_minute"},   // 10 requests per minute
-        {Interval: time.Hour, Limit: 100, Name: "api_hour"},    // 100 requests per hour
-    }}),
-    // Secondary: burst smoother (5 burst, 0.1 req/sec refill)
-    ratelimit.WithSecondaryStrategy(strategies.TokenBucketConfig{BurstSize: 5, RefillRate: 0.1}),
+    ratelimit.WithFixedWindowStrategy(                    // Primary: strict rate limiting
+        ratelimit.TierConfig{Interval: time.Minute, Limit: 10, Name: "api_minute"},   // 10 requests per minute
+        ratelimit.TierConfig{Interval: time.Hour, Limit: 100, Name: "api_hour"},    // 100 requests per hour
+    ),
+    ratelimit.WithTokenBucketStrategy(5, 0.1),             // Secondary: burst smoother (5 burst, 0.1 req/sec refill)
     ratelimit.WithBaseKey("user"),
 )
 if err != nil {
@@ -148,7 +146,9 @@ for strategy, result := range results {
 
 **Available functional options:**
 - `WithBackend(backend)` - Use a custom backend instance
-
+- `WithFixedWindowStrategy(tiers...)` - Fixed window algorithm (can be primary or standalone)
+- `WithTokenBucketStrategy(burstSize, refillRate)` - Token bucket algorithm (can be primary, secondary smoother, or standalone)
+- `WithLeakyBucketStrategy(capacity, leakRate)` - Leaky bucket algorithm (can be primary, secondary smoother, or standalone)
 - `WithPrimaryStrategy(strategyConfig)` - Explicitly set primary strategy with custom configuration
 - `WithSecondaryStrategy(strategyConfig)` - Explicitly set secondary smoother strategy
 - `WithBaseKey(key)` - Set the base key for rate limiting

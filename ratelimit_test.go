@@ -37,7 +37,7 @@ func TestNew_WithOptions(t *testing.T) {
 
 		limiter, err := New(
 			WithBaseKey("test-key"),
-			WithPrimaryStrategy(FixedWindowConfig{Tiers: customTiers}),
+			WithFixedWindowStrategy(customTiers...),
 			WithBackend(mem),
 		)
 		require.NoError(t, err)
@@ -69,7 +69,7 @@ func TestMultiTierLimiter_Allow_FixedWindow(t *testing.T) {
 
 		limiter, err := New(
 			WithBaseKey("multi-tier-test"),
-			WithPrimaryStrategy(FixedWindowConfig{Tiers: tiers}),
+			WithFixedWindowStrategy(tiers...),
 			WithBackend(mem),
 		)
 		require.NoError(t, err)
@@ -107,7 +107,7 @@ func TestMultiTierLimiter_Allow_TokenBucket(t *testing.T) {
 	mem := memory.New()
 	limiter, err := New(
 		WithBaseKey("token-bucket-test"),
-		WithPrimaryStrategy(strategies.TokenBucketConfig{BurstSize: 10, RefillRate: 5.0}),
+		WithTokenBucketStrategy(10, 5.0), // burst 10, refill 5/sec
 		WithBackend(mem),
 	)
 	require.NoError(t, err)
@@ -143,7 +143,7 @@ func TestMultiTierLimiter_Allow_LeakyBucket(t *testing.T) {
 
 	_, err := New(
 		WithBaseKey("leaky-bucket-test"),
-		WithPrimaryStrategy(strategies.LeakyBucketConfig{Capacity: 5, LeakRate: 2.0}),
+		WithLeakyBucketStrategy(5, 2.0), // capacity 5, leak 2/sec
 		WithBackend(mem),
 	)
 
@@ -159,7 +159,7 @@ func TestMultiTierLimiter_GetStats(t *testing.T) {
 
 	limiter, err := New(
 		WithBaseKey("stats-test"),
-		WithPrimaryStrategy(FixedWindowConfig{Tiers: tiers}),
+		WithFixedWindowStrategy(tiers...),
 		WithBackend(mem),
 	)
 	require.NoError(t, err)
@@ -219,7 +219,7 @@ func TestMultiTierLimiter_Reset(t *testing.T) {
 
 	limiter, err := New(
 		WithBaseKey("reset-test"),
-		WithPrimaryStrategy(FixedWindowConfig{Tiers: tiers}),
+		WithFixedWindowStrategy(tiers...),
 		WithBackend(mem),
 	)
 	require.NoError(t, err)
@@ -260,7 +260,7 @@ func TestMultiTierLimiter_ConcurrentAccess(t *testing.T) {
 
 	limiter, err := New(
 		WithBaseKey("concurrent-test"),
-		WithPrimaryStrategy(FixedWindowConfig{Tiers: tiers}),
+		WithFixedWindowStrategy(tiers...),
 		WithBackend(mem),
 	)
 	require.NoError(t, err)
@@ -320,14 +320,14 @@ func TestMultiTierLimiter_MultipleKeys(t *testing.T) {
 	// Create two limiters with different keys
 	limiter1, err := New(
 		WithBaseKey("user1"),
-		WithPrimaryStrategy(FixedWindowConfig{Tiers: tiers}),
+		WithFixedWindowStrategy(tiers...),
 		WithBackend(mem),
 	)
 	require.NoError(t, err)
 
 	limiter2, err := New(
 		WithBaseKey("user2"),
-		WithPrimaryStrategy(FixedWindowConfig{Tiers: tiers}),
+		WithFixedWindowStrategy(tiers...),
 		WithBackend(mem),
 	)
 	require.NoError(t, err)
@@ -368,7 +368,7 @@ func TestMultiTierLimiter_TimeBehavior(t *testing.T) {
 
 		limiter, err := New(
 			WithBaseKey("time-test"),
-			WithPrimaryStrategy(FixedWindowConfig{Tiers: tiers}),
+			WithFixedWindowStrategy(tiers...),
 			WithBackend(mem),
 		)
 		require.NoError(t, err)
@@ -421,10 +421,10 @@ func TestMultiTierLimiter_InvalidConfiguration(t *testing.T) {
 	// Test no tiers (empty fixed window config)
 	_, err = New(
 		WithBaseKey("test"),
-		WithPrimaryStrategy(FixedWindowConfig{Tiers: []TierConfig{}}), // Empty tiers
+		WithFixedWindowStrategy(), // Empty tiers
 		WithBackend(mem),
 	)
-	require.Error(t, err) // Empty tiers should now fail validation
+	require.NoError(t, err) // Should work now because WithFixedWindowStrategy provides a default tier
 
 	// Test too many tiers
 	var tooManyTiers []TierConfig
@@ -437,7 +437,7 @@ func TestMultiTierLimiter_InvalidConfiguration(t *testing.T) {
 
 	_, err = New(
 		WithBaseKey("test"),
-		WithPrimaryStrategy(FixedWindowConfig{Tiers: tooManyTiers}),
+		WithFixedWindowStrategy(tooManyTiers...),
 		WithBackend(mem),
 	)
 	require.Error(t, err)
@@ -446,12 +446,10 @@ func TestMultiTierLimiter_InvalidConfiguration(t *testing.T) {
 	// Test invalid interval
 	_, err = New(
 		WithBaseKey("test"),
-		WithPrimaryStrategy(FixedWindowConfig{Tiers: []TierConfig{
-			{
-				Interval: time.Second, // Less than MinInterval
-				Limit:    100,
-			},
-		}}),
+		WithFixedWindowStrategy(TierConfig{
+			Interval: time.Second, // Less than MinInterval
+			Limit:    100,
+		}),
 		WithBackend(mem),
 	)
 	require.Error(t, err)
@@ -460,12 +458,10 @@ func TestMultiTierLimiter_InvalidConfiguration(t *testing.T) {
 	// Test invalid limit
 	_, err = New(
 		WithBaseKey("test"),
-		WithPrimaryStrategy(FixedWindowConfig{Tiers: []TierConfig{
-			{
-				Interval: time.Minute,
-				Limit:    0, // Invalid limit
-			},
-		}}),
+		WithFixedWindowStrategy(TierConfig{
+			Interval: time.Minute,
+			Limit:    0, // Invalid limit
+		}),
 		WithBackend(mem),
 	)
 	require.Error(t, err)
@@ -474,7 +470,7 @@ func TestMultiTierLimiter_InvalidConfiguration(t *testing.T) {
 	// Test invalid token bucket config
 	_, err = New(
 		WithBaseKey("test"),
-		WithPrimaryStrategy(strategies.TokenBucketConfig{BurstSize: 0, RefillRate: 1.0}), // Invalid burst size
+		WithTokenBucketStrategy(0, 1.0), // Invalid burst size
 		WithBackend(mem),
 	)
 	require.Error(t, err)
@@ -482,7 +478,7 @@ func TestMultiTierLimiter_InvalidConfiguration(t *testing.T) {
 
 	_, err = New(
 		WithBaseKey("test"),
-		WithPrimaryStrategy(strategies.TokenBucketConfig{BurstSize: 10, RefillRate: 0}), // Invalid refill rate
+		WithTokenBucketStrategy(10, 0), // Invalid refill rate
 		WithBackend(mem),
 	)
 	require.Error(t, err)
@@ -491,7 +487,7 @@ func TestMultiTierLimiter_InvalidConfiguration(t *testing.T) {
 	// Test invalid leaky bucket config
 	_, err = New(
 		WithBaseKey("test"),
-		WithPrimaryStrategy(strategies.LeakyBucketConfig{Capacity: 0, LeakRate: 1.0}), // Invalid capacity
+		WithLeakyBucketStrategy(0, 1.0), // Invalid capacity
 		WithBackend(mem),
 	)
 	require.Error(t, err)
@@ -499,7 +495,7 @@ func TestMultiTierLimiter_InvalidConfiguration(t *testing.T) {
 
 	_, err = New(
 		WithBaseKey("test"),
-		WithPrimaryStrategy(strategies.LeakyBucketConfig{Capacity: 10, LeakRate: 0}), // Invalid leak rate
+		WithLeakyBucketStrategy(10, 0), // Invalid leak rate
 		WithBackend(mem),
 	)
 	require.Error(t, err)
@@ -510,12 +506,10 @@ func TestMultiTierLimiter_BackendOperations(t *testing.T) {
 	mem := memory.New()
 	limiter, err := New(
 		WithBaseKey("backend-test"),
-		WithPrimaryStrategy(FixedWindowConfig{Tiers: []TierConfig{
-			{
-				Interval: time.Minute,
-				Limit:    5,
-			},
-		}}),
+		WithFixedWindowStrategy(TierConfig{
+			Interval: time.Minute,
+			Limit:    5,
+		}),
 		WithBackend(mem),
 	)
 	require.NoError(t, err)
@@ -550,17 +544,17 @@ func TestMultiTierLimiter_MixedStrategyTypes(t *testing.T) {
 	}{
 		{
 			name:       "Fixed Window",
-			option:     WithPrimaryStrategy(FixedWindowConfig{Tiers: []TierConfig{{Interval: time.Minute, Limit: 10}}}),
+			option:     WithFixedWindowStrategy(TierConfig{Interval: time.Minute, Limit: 10}),
 			shouldFail: false,
 		},
 		{
 			name:       "Token Bucket",
-			option:     WithPrimaryStrategy(strategies.TokenBucketConfig{BurstSize: 5, RefillRate: 2.0}),
+			option:     WithTokenBucketStrategy(5, 2.0),
 			shouldFail: false,
 		},
 		{
 			name:       "Leaky Bucket",
-			option:     WithPrimaryStrategy(strategies.LeakyBucketConfig{Capacity: 5, LeakRate: 2.0}),
+			option:     WithLeakyBucketStrategy(5, 2.0),
 			shouldFail: false,
 		},
 	}
@@ -605,7 +599,7 @@ func TestAccessOptions_SingleLimiterMultipleKeys(t *testing.T) {
 	// Create a single limiter with a base key prefix
 	limiter, err := New(
 		WithBaseKey("user"), // This is now a prefix, not a complete key
-		WithPrimaryStrategy(FixedWindowConfig{Tiers: tiers}),
+		WithFixedWindowStrategy(tiers...),
 		WithBackend(mem),
 	)
 	require.NoError(t, err)
@@ -654,7 +648,7 @@ func TestAccessOptions_GetStats(t *testing.T) {
 
 	limiter, err := New(
 		WithBaseKey("api"), // Prefix
-		WithPrimaryStrategy(FixedWindowConfig{Tiers: tiers}),
+		WithFixedWindowStrategy(tiers...),
 		WithBackend(mem),
 	)
 	require.NoError(t, err)
@@ -699,7 +693,7 @@ func TestAccessOptions_AllowWithResult(t *testing.T) {
 
 	limiter, err := New(
 		WithBaseKey("api"), // Prefix
-		WithPrimaryStrategy(FixedWindowConfig{Tiers: tiers}),
+		WithFixedWindowStrategy(tiers...),
 		WithBackend(mem),
 	)
 	require.NoError(t, err)
@@ -746,7 +740,7 @@ func TestAccessOptions_Reset(t *testing.T) {
 
 	limiter, err := New(
 		WithBaseKey("test"),
-		WithPrimaryStrategy(FixedWindowConfig{Tiers: tiers}),
+		WithFixedWindowStrategy(tiers...),
 		WithBackend(mem),
 	)
 	require.NoError(t, err)
@@ -792,7 +786,7 @@ func TestAccessOptions_DefaultBehavior(t *testing.T) {
 
 	limiter, err := New(
 		WithBaseKey("test"),
-		WithPrimaryStrategy(FixedWindowConfig{Tiers: tiers}),
+		WithFixedWindowStrategy(tiers...),
 		WithBackend(mem),
 	)
 	require.NoError(t, err)
@@ -840,7 +834,7 @@ func TestAccessOptions_MiddlewareExample(t *testing.T) {
 	// Create ONE limiter instance for the entire app
 	rateLimiter, err := New(
 		WithBaseKey("user"), // Prefix
-		WithPrimaryStrategy(FixedWindowConfig{Tiers: tiers}),
+		WithFixedWindowStrategy(tiers...),
 		WithBackend(mem),
 	)
 	require.NoError(t, err)
@@ -881,7 +875,7 @@ func TestAccessOptions_ValidationErrors(t *testing.T) {
 
 	limiter, err := New(
 		WithBaseKey("test"),
-		WithPrimaryStrategy(FixedWindowConfig{Tiers: tiers}),
+		WithFixedWindowStrategy(tiers...),
 		WithBackend(mem),
 	)
 	require.NoError(t, err)
@@ -908,10 +902,10 @@ func TestDualStrategy_QuotaConsumption(t *testing.T) {
 		// Create dual strategy limiter: Fixed Window (primary) + Token Bucket (secondary)
 		limiter, err := New(
 			WithBaseKey("quota-test"),
-			WithPrimaryStrategy(FixedWindowConfig{Tiers: []TierConfig{
-				{Interval: time.Minute, Limit: 3}, // 3 requests per minute (smaller for easier testing)
-			}}),
-			WithSecondaryStrategy(strategies.TokenBucketConfig{BurstSize: 1, RefillRate: 1.0}), // Very small burst (1), refill 1/sec
+			WithFixedWindowStrategy(
+				TierConfig{Interval: time.Minute, Limit: 3}, // 3 requests per minute (smaller for easier testing)
+			),
+			WithTokenBucketStrategy(1, 1.0), // Very small burst (1), refill 1/sec
 			WithBackend(mem),
 		)
 		require.NoError(t, err)

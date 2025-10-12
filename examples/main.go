@@ -8,7 +8,6 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit"
-	"github.com/ajiwo/ratelimit/strategies"
 
 	"github.com/ajiwo/ratelimit/backends/memory"
 	"github.com/ajiwo/ratelimit/backends/postgres"
@@ -17,6 +16,8 @@ import (
 	"github.com/ajiwo/ratelimit/strategies/tokenbucket"
 
 	"github.com/ajiwo/ratelimit/backends"
+
+	"github.com/ajiwo/ratelimit/strategies"
 )
 
 func main() {
@@ -311,11 +312,11 @@ func dualStrategyExample() error {
 	// - Secondary: Token Bucket (smoother: 5 burst, 0.5 req/sec refill)
 	limiter, err := ratelimit.New(
 		ratelimit.WithBackend(memory.New()),
-		ratelimit.WithPrimaryStrategy(ratelimit.FixedWindowConfig{Tiers: []ratelimit.TierConfig{
-			{Interval: time.Minute, Limit: 10, Name: "minute_limit"}, // 10 requests per minute
-			{Interval: time.Hour, Limit: 50, Name: "hour_limit"},     // 50 requests per hour
-		}}), // Primary: Hard limits
-		ratelimit.WithSecondaryStrategy(strategies.TokenBucketConfig{BurstSize: 5, RefillRate: 0.5}), // Secondary: 5 burst, 0.5 req/sec refill
+		ratelimit.WithFixedWindowStrategy( // Primary: Hard limits
+			ratelimit.TierConfig{Interval: time.Minute, Limit: 10, Name: "minute_limit"}, // 10 requests per minute
+			ratelimit.TierConfig{Interval: time.Hour, Limit: 50, Name: "hour_limit"},     // 50 requests per hour
+		),
+		ratelimit.WithTokenBucketStrategy(5, 0.5), // Secondary: 5 burst, 0.5 req/sec refill
 		ratelimit.WithBaseKey("api:user:dual"),
 	)
 	if err != nil {

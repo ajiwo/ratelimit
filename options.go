@@ -3,6 +3,7 @@ package ratelimit
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
 	"github.com/ajiwo/ratelimit/strategies"
@@ -10,6 +11,71 @@ import (
 
 // Option is a functional option for configuring the rate limiter
 type Option func(*MultiTierConfig) error
+
+// WithFixedWindowStrategy configures the rate limiter to use fixed window strategy
+func WithFixedWindowStrategy(tiers ...TierConfig) Option {
+	return func(config *MultiTierConfig) error {
+		// Default tier if none provided
+		if len(tiers) == 0 {
+			config.PrimaryConfig = FixedWindowConfig{
+				Tiers: []TierConfig{
+					{
+						Interval: time.Minute,
+						Limit:    100,
+					},
+				},
+			}
+		} else {
+			config.PrimaryConfig = FixedWindowConfig{
+				Tiers: tiers,
+			}
+		}
+
+		return nil
+	}
+}
+
+// WithTokenBucketStrategy configures the rate limiter to use token bucket strategy
+// If used with another strategy (like Fixed Window), it becomes the secondary smoother strategy
+func WithTokenBucketStrategy(burstSize int, refillRate float64) Option {
+	return func(config *MultiTierConfig) error {
+		tokenConfig := strategies.TokenBucketConfig{
+			BurstSize:  burstSize,
+			RefillRate: refillRate,
+		}
+
+		// If no primary strategy is set yet, set this as primary
+		if config.PrimaryConfig == nil {
+			config.PrimaryConfig = tokenConfig
+		} else {
+			// Set as secondary strategy
+			config.SecondaryConfig = tokenConfig
+		}
+
+		return nil
+	}
+}
+
+// WithLeakyBucketStrategy configures the rate limiter to use leaky bucket strategy
+// If used with another strategy (like Fixed Window), it becomes the secondary smoother strategy
+func WithLeakyBucketStrategy(capacity int, leakRate float64) Option {
+	return func(config *MultiTierConfig) error {
+		leakyConfig := strategies.LeakyBucketConfig{
+			Capacity: capacity,
+			LeakRate: leakRate,
+		}
+
+		// If no primary strategy is set yet, set this as primary
+		if config.PrimaryConfig == nil {
+			config.PrimaryConfig = leakyConfig
+		} else {
+			// Set as secondary strategy
+			config.SecondaryConfig = leakyConfig
+		}
+
+		return nil
+	}
+}
 
 // WithPrimaryStrategy configures the primary rate limiting strategy with custom configuration
 func WithPrimaryStrategy(strategyConfig strategies.StrategyConfig) Option {
