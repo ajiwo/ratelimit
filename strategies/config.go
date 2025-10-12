@@ -84,19 +84,6 @@ func (c FixedWindowConfig) Capabilities() CapabilityFlags {
 	return CapPrimary | CapTiers
 }
 
-// NewFixedWindowConfig creates a single-tier FixedWindowConfig for backward compatibility
-func NewFixedWindowConfig(key string, limit int, window time.Duration) FixedWindowConfig {
-	return FixedWindowConfig{
-		Key: key,
-		Tiers: map[string]FixedWindowTier{
-			"default": {
-				Limit:  limit,
-				Window: window,
-			},
-		},
-	}
-}
-
 type LeakyBucketConfig struct {
 	Key      string
 	Capacity int     // Maximum requests the bucket can hold
@@ -143,4 +130,41 @@ func (c TokenBucketConfig) Name() string {
 
 func (c TokenBucketConfig) Capabilities() CapabilityFlags {
 	return CapPrimary | CapSecondary
+}
+
+// fixedWindoConfigBuilder provides a fluent interface for building multi-tier configurations
+type fixedWindoConfigBuilder struct {
+	key   string
+	tiers map[string]FixedWindowTier
+}
+
+// NewFixedWindowConfig creates a multi-tier FixedWindowConfig with a builder pattern
+func NewFixedWindowConfig(key string) *fixedWindoConfigBuilder {
+	return &fixedWindoConfigBuilder{
+		key:   key,
+		tiers: make(map[string]FixedWindowTier),
+	}
+}
+
+// AddTier adds a new tier to the configuration
+func (b *fixedWindoConfigBuilder) AddTier(name string, limit int, window time.Duration) *fixedWindoConfigBuilder {
+	b.tiers[name] = FixedWindowTier{
+		Limit:  limit,
+		Window: window,
+	}
+	return b
+}
+
+// Build creates the FixedWindowConfig from the builder
+func (b *fixedWindoConfigBuilder) Build() FixedWindowConfig {
+	return FixedWindowConfig{
+		Key:   b.key,
+		Tiers: b.tiers,
+	}
+}
+
+// TierConfig represents a tier configuration for the custom multi-tier builder
+type TierConfig struct {
+	Limit  int
+	Window time.Duration
 }

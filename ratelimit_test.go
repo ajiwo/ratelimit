@@ -15,11 +15,13 @@ import (
 
 func TestRateLimiter_Allow_FixedWindow(t *testing.T) {
 	backend := memory.New()
-
 	limiter, err := New(
 		WithBackend(backend),
-		WithPrimaryStrategy(strategies.NewFixedWindowConfig("test:user:123", 5, time.Minute)),
-		WithBaseKey("test"),
+		WithPrimaryStrategy(
+			strategies.NewFixedWindowConfig("test:user:123").
+				AddTier("default", 5, time.Minute).
+				Build(),
+		),
 	)
 	require.NoError(t, err)
 	defer limiter.Close()
@@ -47,7 +49,6 @@ func TestRateLimiter_Allow_TokenBucket(t *testing.T) {
 			BurstSize:  10,
 			RefillRate: 1.0,
 		}),
-		WithBaseKey("test"),
 	)
 	require.NoError(t, err)
 	defer limiter.Close()
@@ -75,7 +76,6 @@ func TestRateLimiter_Allow_LeakyBucket(t *testing.T) {
 			Capacity: 5,
 			LeakRate: 1.0,
 		}),
-		WithBaseKey("test"),
 	)
 	require.NoError(t, err)
 	defer limiter.Close()
@@ -103,7 +103,6 @@ func TestRateLimiter_GetStats(t *testing.T) {
 			BurstSize:  10,
 			RefillRate: 2.0,
 		}),
-		WithBaseKey("test"),
 	)
 	require.NoError(t, err)
 	defer limiter.Close()
@@ -138,7 +137,6 @@ func TestRateLimiter_Reset(t *testing.T) {
 			BurstSize:  5,
 			RefillRate: 1.0,
 		}),
-		WithBaseKey("test"),
 	)
 	require.NoError(t, err)
 	defer limiter.Close()
@@ -170,9 +168,13 @@ func TestRateLimiter_ConcurrentAccess(t *testing.T) {
 
 	limiter, err := New(
 		WithBackend(backend),
-		WithPrimaryStrategy(strategies.NewFixedWindowConfig("test:concurrent:user", 100, time.Minute)),
-		WithBaseKey("test"),
+		WithPrimaryStrategy(
+			strategies.NewFixedWindowConfig("test:concurrent:user").
+				AddTier("default", 100, time.Minute).
+				Build(),
+		),
 	)
+
 	require.NoError(t, err)
 	defer limiter.Close()
 
@@ -209,8 +211,11 @@ func TestRateLimiter_MultipleKeys(t *testing.T) {
 
 	limiter, err := New(
 		WithBackend(backend),
-		WithPrimaryStrategy(strategies.NewFixedWindowConfig("test:multikey", 3, time.Minute)),
-		WithBaseKey("test"),
+		WithPrimaryStrategy(
+			strategies.NewFixedWindowConfig("test:multikey").
+				AddTier("default", 3, time.Minute).
+				Build(),
+		),
 	)
 	require.NoError(t, err)
 	defer limiter.Close()
@@ -243,13 +248,70 @@ func TestRateLimiter_MultipleKeys(t *testing.T) {
 	assert.True(t, allowed)
 }
 
+func TestRateLimiter_FixedWindow_MultiTier(t *testing.T) {
+	backend := memory.New()
+
+	// Create a multi-tier fixed window configuration
+	config := strategies.FixedWindowConfig{
+		Key: "multitier:test",
+		Tiers: map[string]strategies.FixedWindowTier{
+			"minute": {
+				Limit:  10, // Allow 10 requests per minute
+				Window: time.Minute,
+			},
+			"hour": {
+				Limit:  100, // Allow 100 requests per hour
+				Window: time.Hour,
+			},
+		},
+	}
+
+	ctx := t.Context()
+	limiter, err := New(
+		WithBackend(backend),
+		WithPrimaryStrategy(config),
+	)
+	require.NoError(t, err)
+	defer limiter.Close()
+
+	// Should allow first 10 requests (burst tier limit)
+	for i := range 10 {
+		allowed, err := limiter.Allow(WithContext(ctx))
+		require.NoError(t, err)
+		assert.True(t, allowed, "Request %d should be allowed", i+1)
+	}
+
+	// 11th request should be denied by burst tier
+	allowed, err := limiter.Allow(WithContext(ctx))
+	require.NoError(t, err)
+	assert.False(t, allowed, "Request 11 should be denied by the first tier")
+
+	// Get stats to verify both tiers are working
+	stats, err := limiter.GetStats(WithContext(ctx))
+	require.NoError(t, err)
+	require.Len(t, stats, 2) // Both tiers should return results
+
+	// Check minutely tier (should be exhausted)
+	mResult := stats["primary_minute"]
+	assert.False(t, mResult.Allowed, "first tier should be exhausted")
+	assert.Equal(t, 0, mResult.Remaining, "first tier should have 0 remaining")
+
+	// Check hourly tier (should have remaining quota)
+	hResult := stats["primary_hour"]
+	assert.True(t, hResult.Allowed, "second tier should still allow")
+	assert.Equal(t, 90, hResult.Remaining, "second tier should have 90 remaining")
+}
+
 func TestRateLimiter_TimeBehavior(t *testing.T) {
 	backend := memory.New()
 
 	limiter, err := New(
 		WithBackend(backend),
-		WithPrimaryStrategy(strategies.NewFixedWindowConfig("test:time:user", 3, 2*time.Second)),
-		WithBaseKey("test"),
+		WithPrimaryStrategy(
+			strategies.NewFixedWindowConfig("test:time:user").
+				AddTier("default", 3, 2*time.Second).
+				Build(),
+		),
 	)
 	require.NoError(t, err)
 	defer limiter.Close()
@@ -279,10 +341,7 @@ func TestRateLimiter_InvalidConfiguration(t *testing.T) {
 	t.Run("No primary strategy", func(t *testing.T) {
 		backend := memory.New()
 
-		_, err := New(
-			WithBackend(backend),
-			WithBaseKey("test"),
-		)
+		_, err := New(WithBackend(backend))
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "primary strategy config cannot be nil")
 	})
@@ -324,7 +383,11 @@ func TestRateLimiter_BackendOperations(t *testing.T) {
 
 	limiter, err := New(
 		WithBackend(backend),
-		WithPrimaryStrategy(strategies.NewFixedWindowConfig("test:backend", 10, time.Minute)),
+		WithPrimaryStrategy(
+			strategies.NewFixedWindowConfig("test:backend").
+				AddTier("default", 10, time.Minute).
+				Build(),
+		),
 		WithBaseKey("test"),
 	)
 	require.NoError(t, err)
@@ -353,8 +416,8 @@ func TestRateLimiter_MixedStrategyTypes(t *testing.T) {
 	}{
 		{
 			name:    "Fixed Window only",
-			primary: strategies.NewFixedWindowConfig("test", 10, time.Minute),
-			option:  WithPrimaryStrategy(strategies.NewFixedWindowConfig("test", 10, time.Minute)),
+			primary: strategies.NewFixedWindowConfig("test").AddTier("default", 10, time.Minute).Build(),
+			option:  WithPrimaryStrategy(strategies.NewFixedWindowConfig("test").AddTier("default", 10, time.Minute).Build()),
 		},
 		{
 			name:    "Token Bucket only",
@@ -375,7 +438,6 @@ func TestRateLimiter_MixedStrategyTypes(t *testing.T) {
 			limiter, err := New(
 				WithBackend(backend),
 				tt.option,
-				WithBaseKey("test:mixed"),
 			)
 			require.NoError(t, err)
 			defer limiter.Close()
@@ -394,12 +456,15 @@ func TestRateLimiter_DualStrategy(t *testing.T) {
 	// Test dual strategy: Fixed Window (primary) + Token Bucket (secondary)
 	limiter, err := New(
 		WithBackend(backend),
-		WithPrimaryStrategy(strategies.NewFixedWindowConfig("test:dual", 10, time.Minute)),
+		WithPrimaryStrategy(
+			strategies.NewFixedWindowConfig("test:dual").
+				AddTier("default", 10, time.Minute).
+				Build(),
+		),
 		WithSecondaryStrategy(strategies.TokenBucketConfig{
 			BurstSize:  5,
 			RefillRate: 0.5,
 		}),
-		WithBaseKey("test"),
 	)
 	require.NoError(t, err)
 	defer limiter.Close()
@@ -429,12 +494,15 @@ func TestRateLimiter_DualStrategy_WithResults(t *testing.T) {
 
 	limiter, err := New(
 		WithBackend(backend),
-		WithPrimaryStrategy(strategies.NewFixedWindowConfig("test:dual:results", 20, time.Minute)),
+		WithPrimaryStrategy(
+			strategies.NewFixedWindowConfig("test:dual:results").
+				AddTier("default", 20, time.Minute).
+				Build(),
+		),
 		WithSecondaryStrategy(strategies.TokenBucketConfig{
 			BurstSize:  3,
 			RefillRate: 1.0,
 		}),
-		WithBaseKey("test"),
 	)
 	require.NoError(t, err)
 	defer limiter.Close()
@@ -461,7 +529,11 @@ func TestDualStrategy_QuotaConsumption(t *testing.T) {
 
 		// Create dual strategy limiter: Fixed Window (primary) + Token Bucket (secondary)
 		limiter, err := New(
-			WithPrimaryStrategy(strategies.NewFixedWindowConfig("api:test", 3, time.Minute)),
+			WithPrimaryStrategy(
+				strategies.NewFixedWindowConfig("api:test").
+					AddTier("default", 3, time.Minute).
+					Build(),
+			),
 			WithSecondaryStrategy(strategies.TokenBucketConfig{BurstSize: 1, RefillRate: 1.0}), // Very small burst (1), refill 1/sec
 			WithBackend(mem),
 		)

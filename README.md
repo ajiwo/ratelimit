@@ -44,7 +44,11 @@ mem := memory.New()
 // Create a rate limiter using functional options
 limiter, err := ratelimit.New(
     ratelimit.WithBackend(mem),
-    ratelimit.WithPrimaryStrategy(strategies.NewFixedWindowConfig("user:123", 100, time.Hour)),
+    ratelimit.WithPrimaryStrategy(
+        strategies.NewFixedWindowConfig("user:123").
+            AddTier("default", 100, time.Hour).
+            Build(),
+    ),
     ratelimit.WithBaseKey("api"),
 )
 if err != nil {
@@ -168,7 +172,11 @@ mem := memory.New()
 limiter, err := ratelimit.New(
     ratelimit.WithBackend(mem),
     // Primary: strict rate limiting
-    ratelimit.WithPrimaryStrategy(strategies.NewFixedWindowConfig("api:user", 100, time.Hour)),
+    ratelimit.WithPrimaryStrategy(
+        strategies.NewFixedWindowConfig("api:user").
+            AddTier("default", 100, time.Hour).
+            Build(),
+    ),
     // Secondary: burst smoother (5 burst, 0.1 req/sec refill)
     ratelimit.WithSecondaryStrategy(strategies.TokenBucketConfig{
         BurstSize:  5,
@@ -221,8 +229,8 @@ for strategy, result := range results {
 **Multi-tier support:**
 - Fixed Window strategy supports multiple tiers with independent limits and windows
 - All tiers must allow for a request to be accepted
-- Use `strategies.NewFixedWindowConfig()` for single-tier backward compatibility
-- Existing single-tier FixedWindowConfig usage will continue to work unchanged
+- Use the builder pattern with `strategies.NewFixedWindowConfig(key).AddTier(name, limit, window).Build()` for both single and multi-tier configurations
+- For single-tier configurations, add a single tier named "default"
 
 **Available functional options:**
 - `WithBackend(backend)` - Use a custom backend instance
@@ -279,8 +287,16 @@ type LeakyBucketConfig struct {
     LeakRate float64 // Requests to process per second
 }
 
-// Helper function for backward compatibility (single-tier)
-func NewFixedWindowConfig(key string, limit int, window time.Duration) FixedWindowConfig
+// Tier configuration for multi-tier rate limiting
+type TierConfig struct {
+    Limit  int           // Number of requests allowed in the window
+    Window time.Duration // Time window (1 minute, 1 hour, 1 day, etc.)
+}
+
+// Helper functions for configuration
+func NewFixedWindowConfig(key string) *FixedWindowConfigBuilder  // Returns a builder for creating configurations
+func (b *FixedWindowConfigBuilder) AddTier(name string, limit int, window time.Duration) *FixedWindowConfigBuilder  // Add a tier to the configuration
+func (b *FixedWindowConfigBuilder) Build() FixedWindowConfig  // Build the final configuration
 ```
 
 **Result Structure:**
@@ -422,7 +438,9 @@ storage := memory.New()
 strategy := fixedwindow.New(storage)
 
 // Configure rate limiting (single-tier)
-config := strategies.NewFixedWindowConfig("user:123", 100, time.Minute)
+config := strategies.NewFixedWindowConfig("user:123").
+    AddTier("default", 100, time.Minute).
+    Build()
 
 // Or configure multi-tier rate limiting
 multiTierConfig := strategies.FixedWindowConfig{
