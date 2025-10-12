@@ -2,22 +2,50 @@ package strategies
 
 import (
 	"fmt"
+	"strings"
 	"time"
 )
 
-// StrategyType defines the rate limiting strategy to use
-type StrategyType string
+// CapabilityFlags defines the capabilities and roles a strategy can fulfill
+type CapabilityFlags uint8
 
 const (
-	StrategyFixedWindow StrategyType = "fixed_window"
-	StrategyTokenBucket StrategyType = "token_bucket"
-	StrategyLeakyBucket StrategyType = "leaky_bucket"
+	// CapPrimary indicates the strategy can be used as a primary strategy
+	CapPrimary CapabilityFlags = 1 << iota
+	// CapSecondary indicates the strategy can be used as a secondary (smoother) strategy
+	CapSecondary
+	// CapTiers indicates the strategy supports multi-tier configurations
+	CapTiers
 )
+
+// Has checks if the flags contain a specific capability
+func (flags CapabilityFlags) Has(cap CapabilityFlags) bool {
+	return flags&cap != 0
+}
+
+// String returns a human-readable representation of capabilities
+func (flags CapabilityFlags) String() string {
+	var caps []string
+	if flags.Has(CapPrimary) {
+		caps = append(caps, "Primary")
+	}
+	if flags.Has(CapSecondary) {
+		caps = append(caps, "Secondary")
+	}
+	if flags.Has(CapTiers) {
+		caps = append(caps, "Tiers")
+	}
+	if len(caps) == 0 {
+		return "None"
+	}
+	return strings.Join(caps, "|")
+}
 
 // StrategyConfig defines the interface for all strategy configurations
 type StrategyConfig interface {
 	Validate() error
-	Type() StrategyType
+	Name() string
+	Capabilities() CapabilityFlags
 }
 
 type FixedWindowConfig struct {
@@ -39,8 +67,12 @@ func (c FixedWindowConfig) Validate() error {
 	return nil
 }
 
-func (c FixedWindowConfig) Type() StrategyType {
-	return StrategyFixedWindow
+func (c FixedWindowConfig) Name() string {
+	return "fixed_window"
+}
+
+func (c FixedWindowConfig) Capabilities() CapabilityFlags {
+	return CapPrimary | CapTiers
 }
 
 type LeakyBucketConfig struct {
@@ -59,8 +91,12 @@ func (c LeakyBucketConfig) Validate() error {
 	return nil
 }
 
-func (c LeakyBucketConfig) Type() StrategyType {
-	return StrategyLeakyBucket
+func (c LeakyBucketConfig) Name() string {
+	return "leaky_bucket"
+}
+
+func (c LeakyBucketConfig) Capabilities() CapabilityFlags {
+	return CapPrimary | CapSecondary
 }
 
 type TokenBucketConfig struct {
@@ -79,6 +115,10 @@ func (c TokenBucketConfig) Validate() error {
 	return nil
 }
 
-func (c TokenBucketConfig) Type() StrategyType {
-	return StrategyTokenBucket
+func (c TokenBucketConfig) Name() string {
+	return "token_bucket"
+}
+
+func (c TokenBucketConfig) Capabilities() CapabilityFlags {
+	return CapPrimary | CapSecondary
 }

@@ -18,34 +18,6 @@ type FixedWindow struct {
 	Duration time.Duration `json:"duration"` // Window duration
 }
 
-// TierConfig defines a single tier in multi-tier rate limiting
-type TierConfig struct {
-	Interval time.Duration // Time window (1 minute, 1 hour, 1 day, etc.)
-	Limit    int           // Number of requests allowed in this interval
-	Name     string        // Optional custom name for the tier (e.g., "login_attempts")
-}
-
-// MultiTierConfig defines configuration for multi-tier fixed window rate limiting
-type MultiTierConfig struct {
-	BaseKey    string       // Base key for rate limiting
-	DynamicKey string       // Dynamic key (e.g., user ID)
-	Tiers      []TierConfig // Rate limit tiers
-}
-
-// TierResult represents the result for a single tier
-type TierResult struct {
-	Allowed   bool      // Whether this tier allowed the request
-	Remaining int       // Remaining requests in this tier
-	Reset     time.Time // When this tier resets
-	Total     int       // Total limit for this tier
-}
-
-// MultiTierResult represents the result for all tiers
-type MultiTierResult struct {
-	Results map[string]TierResult // Results for each tier by name
-	Allowed bool                  // Overall decision (all tiers must allow)
-}
-
 // Strategy implements the fixed window rate limiting algorithm
 type Strategy struct {
 	storage backends.Backend
@@ -59,11 +31,11 @@ func New(storage backends.Backend) *Strategy {
 }
 
 // GetResult returns detailed statistics for the current window state
-func (f *Strategy) GetResult(ctx context.Context, config any) (strategies.Result, error) {
+func (f *Strategy) GetResult(ctx context.Context, config any) (map[string]strategies.Result, error) {
 	// Type assert to FixedWindowConfig
 	fixedConfig, ok := config.(strategies.FixedWindowConfig)
 	if !ok {
-		return strategies.Result{}, fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
+		return nil, fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
 	}
 
 	now := time.Now()
@@ -71,16 +43,18 @@ func (f *Strategy) GetResult(ctx context.Context, config any) (strategies.Result
 	// Get current window state
 	data, err := f.storage.Get(ctx, fixedConfig.Key)
 	if err != nil {
-		return strategies.Result{}, fmt.Errorf("failed to get window state: %w", err)
+		return nil, fmt.Errorf("failed to get window state: %w", err)
 	}
 
 	var window FixedWindow
 	if data == "" {
 		// No existing window, return default state
-		return strategies.Result{
-			Allowed:   true,
-			Remaining: fixedConfig.Limit,
-			Reset:     now.Add(fixedConfig.Window),
+		return map[string]strategies.Result{
+			"default": {
+				Allowed:   true,
+				Remaining: fixedConfig.Limit,
+				Reset:     now.Add(fixedConfig.Window),
+			},
 		}, nil
 	}
 
@@ -88,16 +62,18 @@ func (f *Strategy) GetResult(ctx context.Context, config any) (strategies.Result
 	if w, ok := decodeFixedWindow(data); ok {
 		window = w
 	} else {
-		return strategies.Result{}, fmt.Errorf("failed to parse window state: invalid encoding")
+		return nil, fmt.Errorf("failed to parse window state: invalid encoding")
 	}
 
 	// Check if current window has expired
 	if now.Sub(window.Start) >= window.Duration {
 		// Window has expired, return fresh state
-		return strategies.Result{
-			Allowed:   true,
-			Remaining: fixedConfig.Limit,
-			Reset:     now.Add(fixedConfig.Window),
+		return map[string]strategies.Result{
+			"default": {
+				Allowed:   true,
+				Remaining: fixedConfig.Limit,
+				Reset:     now.Add(fixedConfig.Window),
+			},
 		}, nil
 	}
 
@@ -106,10 +82,12 @@ func (f *Strategy) GetResult(ctx context.Context, config any) (strategies.Result
 
 	resetTime := window.Start.Add(window.Duration)
 
-	return strategies.Result{
-		Allowed:   remaining > 0,
-		Remaining: remaining,
-		Reset:     resetTime,
+	return map[string]strategies.Result{
+		"default": {
+			Allowed:   remaining > 0,
+			Remaining: remaining,
+			Reset:     resetTime,
+		},
 	}, nil
 }
 
@@ -199,11 +177,11 @@ func decodeFixedWindow(s string) (FixedWindow, bool) {
 }
 
 // Allow checks if a request is allowed and returns detailed statistics
-func (f *Strategy) Allow(ctx context.Context, config any) (strategies.Result, error) {
+func (f *Strategy) Allow(ctx context.Context, config any) (map[string]strategies.Result, error) {
 	// Type assert to FixedWindowConfig
 	fixedConfig, ok := config.(strategies.FixedWindowConfig)
 	if !ok {
-		return strategies.Result{}, fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
+		return nil, fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
 	}
 
 	now := time.Now()
@@ -212,13 +190,13 @@ func (f *Strategy) Allow(ctx context.Context, config any) (strategies.Result, er
 	for attempt := range strategies.CheckAndSetRetries {
 		// Check if context is cancelled or timed out
 		if ctx.Err() != nil {
-			return strategies.Result{}, fmt.Errorf("context cancelled or timed out: %w", ctx.Err())
+			return nil, fmt.Errorf("context cancelled or timed out: %w", ctx.Err())
 		}
 
 		// Get current window state
 		data, err := f.storage.Get(ctx, fixedConfig.Key)
 		if err != nil {
-			return strategies.Result{}, fmt.Errorf("failed to get window state: %w", err)
+			return nil, fmt.Errorf("failed to get window state: %w", err)
 		}
 
 		var window FixedWindow
@@ -236,7 +214,7 @@ func (f *Strategy) Allow(ctx context.Context, config any) (strategies.Result, er
 			if w, ok := decodeFixedWindow(data); ok {
 				window = w
 			} else {
-				return strategies.Result{}, fmt.Errorf("failed to parse window state: invalid encoding")
+				return nil, fmt.Errorf("failed to parse window state: invalid encoding")
 			}
 
 			// Check if current window has expired
@@ -268,15 +246,17 @@ func (f *Strategy) Allow(ctx context.Context, config any) (strategies.Result, er
 			// Use CheckAndSet for atomic update
 			success, err := f.storage.CheckAndSet(ctx, fixedConfig.Key, oldValue, newValue, window.Duration)
 			if err != nil {
-				return strategies.Result{}, fmt.Errorf("failed to save window state: %w", err)
+				return nil, fmt.Errorf("failed to save window state: %w", err)
 			}
 
 			if success {
 				// Atomic update succeeded
-				return strategies.Result{
-					Allowed:   true,
-					Remaining: remaining,
-					Reset:     resetTime,
+				return map[string]strategies.Result{
+					"default": {
+						Allowed:   true,
+						Remaining: remaining,
+						Reset:     resetTime,
+					},
 				}, nil
 			}
 			// If CheckAndSet failed, retry if we haven't exhausted attempts
@@ -300,167 +280,20 @@ func (f *Strategy) Allow(ctx context.Context, config any) (strategies.Result, er
 				newValue := encodeFixedWindow(window)
 				_, err := f.storage.CheckAndSet(ctx, fixedConfig.Key, oldValue, newValue, window.Duration)
 				if err != nil {
-					return strategies.Result{}, fmt.Errorf("failed to reset expired window: %w", err)
+					return nil, fmt.Errorf("failed to reset expired window: %w", err)
 				}
 			}
 
-			return strategies.Result{
-				Allowed:   false,
-				Remaining: remaining,
-				Reset:     resetTime,
+			return map[string]strategies.Result{
+				"default": {
+					Allowed:   false,
+					Remaining: remaining,
+					Reset:     resetTime,
+				},
 			}, nil
 		}
 	}
 
 	// CheckAndSet failed after checkAndSetRetries attempts
-	return strategies.Result{}, fmt.Errorf("failed to update window state after %d attempts due to concurrent access", strategies.CheckAndSetRetries)
-}
-
-// getTierName generates a tier name based on interval or uses custom name
-func getTierName(tier TierConfig) string {
-	if tier.Name != "" {
-		return tier.Name
-	}
-
-	// Generate name based on interval - match the original ratelimit package behavior
-	switch tier.Interval {
-	case time.Minute:
-		return "minute"
-	case time.Hour:
-		return "hour"
-	case 24 * time.Hour:
-		return "day"
-	case 7 * 24 * time.Hour:
-		return "week"
-	case 30 * 24 * time.Hour:
-		return "month"
-	default:
-		// For custom intervals, use duration string
-		return tier.Interval.String()
-	}
-}
-
-// buildTierKey builds the storage key for a specific tier
-func buildTierKey(baseKey, dynamicKey, tierName string) string {
-	var keyBuilder strings.Builder
-	keyBuilder.Grow(len(baseKey) + len(dynamicKey) + len(tierName) + 2) // +2 for the colons
-	keyBuilder.WriteString(baseKey)
-	keyBuilder.WriteByte(':')
-	keyBuilder.WriteString(dynamicKey)
-	keyBuilder.WriteByte(':')
-	keyBuilder.WriteString(tierName)
-	return keyBuilder.String()
-}
-
-// AllowMulti checks if a request is allowed across all configured tiers
-func (f *Strategy) AllowMulti(ctx context.Context, config MultiTierConfig) (MultiTierResult, error) {
-	results := make(map[string]TierResult)
-	overallAllowed := true
-
-	// Process each tier
-	for _, tier := range config.Tiers {
-		tierName := getTierName(tier)
-		key := buildTierKey(config.BaseKey, config.DynamicKey, tierName)
-
-		// Create single-tier config
-		singleConfig := strategies.FixedWindowConfig{
-			Key:    key,
-			Limit:  tier.Limit,
-			Window: tier.Interval,
-		}
-
-		// Check this tier
-		result, err := f.Allow(ctx, singleConfig)
-		if err != nil {
-			return MultiTierResult{}, fmt.Errorf("tier %s failed: %w", tierName, err)
-		}
-
-		// Convert to tier result
-		tierResult := TierResult{
-			Allowed:   result.Allowed,
-			Remaining: result.Remaining,
-			Reset:     result.Reset,
-			Total:     tier.Limit,
-		}
-		results[tierName] = tierResult
-
-		// Overall decision: all tiers must allow
-		if !result.Allowed {
-			overallAllowed = false
-		}
-	}
-
-	return MultiTierResult{
-		Results: results,
-		Allowed: overallAllowed,
-	}, nil
-}
-
-// GetResultMulti returns detailed statistics for all tiers without consuming quota
-func (f *Strategy) GetResultMulti(ctx context.Context, config MultiTierConfig) (MultiTierResult, error) {
-	results := make(map[string]TierResult)
-	overallAllowed := true
-
-	// Process each tier
-	for _, tier := range config.Tiers {
-		tierName := getTierName(tier)
-		key := buildTierKey(config.BaseKey, config.DynamicKey, tierName)
-
-		// Create single-tier config
-		singleConfig := strategies.FixedWindowConfig{
-			Key:    key,
-			Limit:  tier.Limit,
-			Window: tier.Interval,
-		}
-
-		// Get stats for this tier
-		result, err := f.GetResult(ctx, singleConfig)
-		if err != nil {
-			return MultiTierResult{}, fmt.Errorf("tier %s failed: %w", tierName, err)
-		}
-
-		// Convert to tier result
-		tierResult := TierResult{
-			Allowed:   result.Allowed,
-			Remaining: result.Remaining,
-			Reset:     result.Reset,
-			Total:     tier.Limit,
-		}
-		results[tierName] = tierResult
-
-		// Overall decision: all tiers must allow
-		if !result.Allowed {
-			overallAllowed = false
-		}
-	}
-
-	return MultiTierResult{
-		Results: results,
-		Allowed: overallAllowed,
-	}, nil
-}
-
-// ResetMulti resets rate limit counters for all tiers
-func (f *Strategy) ResetMulti(ctx context.Context, config MultiTierConfig) error {
-	var lastErr error
-
-	// Reset each tier
-	for _, tier := range config.Tiers {
-		tierName := getTierName(tier)
-		key := buildTierKey(config.BaseKey, config.DynamicKey, tierName)
-
-		// Create single-tier config
-		singleConfig := strategies.FixedWindowConfig{
-			Key:    key,
-			Limit:  tier.Limit,
-			Window: tier.Interval,
-		}
-
-		// Reset this tier
-		if err := f.Reset(ctx, singleConfig); err != nil {
-			lastErr = fmt.Errorf("tier %s reset failed: %w", tierName, err)
-		}
-	}
-
-	return lastErr
+	return nil, fmt.Errorf("failed to update window state after %d attempts due to concurrent access", strategies.CheckAndSetRetries)
 }

@@ -600,7 +600,7 @@ func TestFixedWindow_ConcurrentAccessMemoryWithResult(t *testing.T) {
 				errors <- err
 				return
 			}
-			results <- res["primary"]
+			results <- res["primary_default"]
 		}()
 	}
 
@@ -668,7 +668,7 @@ func TestFixedWindow_ConcurrentAccessPostgresWithResult(t *testing.T) {
 				errors <- err
 				return
 			}
-			results <- res["primary"]
+			results <- res["primary_default"]
 		}()
 	}
 
@@ -736,7 +736,7 @@ func TestFixedWindow_ConcurrentAccessRedisWithResult(t *testing.T) {
 				errors <- err
 				return
 			}
-			results <- res["primary"]
+			results <- res["primary_default"]
 		}()
 	}
 
@@ -800,7 +800,7 @@ func TestLeakyBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
 				errors <- err
 				return
 			}
-			results <- res["primary"]
+			results <- res["primary_default"]
 		}()
 	}
 
@@ -864,7 +864,7 @@ func TestLeakyBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
 				errors <- err
 				return
 			}
-			results <- res["primary"]
+			results <- res["primary_default"]
 		}()
 	}
 
@@ -928,7 +928,7 @@ func TestLeakyBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
 				errors <- err
 				return
 			}
-			results <- res["primary"]
+			results <- res["primary_default"]
 		}()
 	}
 
@@ -992,7 +992,7 @@ func TestTokenBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
 				errors <- err
 				return
 			}
-			results <- res["primary"]
+			results <- res["primary_default"]
 		}()
 	}
 
@@ -1056,7 +1056,7 @@ func TestTokenBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
 				errors <- err
 				return
 			}
-			results <- res["primary"]
+			results <- res["primary_default"]
 		}()
 	}
 
@@ -1120,7 +1120,7 @@ func TestTokenBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
 				errors <- err
 				return
 			}
-			results <- res["primary"]
+			results <- res["primary_default"]
 		}()
 	}
 

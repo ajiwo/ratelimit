@@ -82,14 +82,14 @@ func (c Config) Validate() error {
 			return fmt.Errorf("secondary strategy config validation failed: %w", err)
 		}
 
-		// Secondary strategy must be a bucket-based strategy (for smoothing)
-		if c.SecondaryConfig.Type() != strategies.StrategyTokenBucket && c.SecondaryConfig.Type() != strategies.StrategyLeakyBucket {
-			return fmt.Errorf("secondary strategy must be token bucket or leaky bucket, got %s", c.SecondaryConfig.Type())
+		// Secondary strategy must have CapSecondary capability (for smoothing)
+		if !c.SecondaryConfig.Capabilities().Has(strategies.CapSecondary) {
+			return fmt.Errorf("secondary strategy must support secondary capability, got %s", c.SecondaryConfig.Name())
 		}
 
-		// Primary strategy cannot be bucket-based if secondary is also bucket-based
-		if c.PrimaryConfig.Type() == strategies.StrategyTokenBucket || c.PrimaryConfig.Type() == strategies.StrategyLeakyBucket {
-			return fmt.Errorf("cannot use bucket strategy as primary when secondary strategy is also specified")
+		// Primary strategy cannot have CapSecondary if secondary is also specified
+		if c.PrimaryConfig.Capabilities().Has(strategies.CapSecondary) {
+			return fmt.Errorf("cannot use strategy with secondary capability as primary when secondary strategy is also specified")
 		}
 	}
 

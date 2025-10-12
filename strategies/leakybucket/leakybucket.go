@@ -32,11 +32,11 @@ func New(storage backends.Backend) *Strategy {
 }
 
 // GetResult returns detailed statistics for the current bucket state
-func (l *Strategy) GetResult(ctx context.Context, config any) (strategies.Result, error) {
+func (l *Strategy) GetResult(ctx context.Context, config any) (map[string]strategies.Result, error) {
 	// Type assert to LeakyBucketConfig
 	leakyConfig, ok := config.(strategies.LeakyBucketConfig)
 	if !ok {
-		return strategies.Result{}, fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
+		return nil, fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
 	}
 
 	now := time.Now()
@@ -44,16 +44,18 @@ func (l *Strategy) GetResult(ctx context.Context, config any) (strategies.Result
 	// Get current bucket state
 	data, err := l.storage.Get(ctx, leakyConfig.Key)
 	if err != nil {
-		return strategies.Result{}, fmt.Errorf("failed to get bucket state: %w", err)
+		return nil, fmt.Errorf("failed to get bucket state: %w", err)
 	}
 
 	var bucket LeakyBucket
 	if data == "" {
 		// No existing bucket, return default state
-		return strategies.Result{
-			Allowed:   true,
-			Remaining: leakyConfig.Capacity,
-			Reset:     now, // Leaky buckets don't have a reset time, they continuously leak
+		return map[string]strategies.Result{
+			"default": {
+				Allowed:   true,
+				Remaining: leakyConfig.Capacity,
+				Reset:     now, // Leaky buckets don't have a reset time, they continuously leak
+			},
 		}, nil
 	}
 
@@ -61,7 +63,7 @@ func (l *Strategy) GetResult(ctx context.Context, config any) (strategies.Result
 	if b, ok := decodeLeakyBucket(data); ok {
 		bucket = b
 	} else {
-		return strategies.Result{}, fmt.Errorf("failed to parse bucket state: invalid encoding")
+		return nil, fmt.Errorf("failed to parse bucket state: invalid encoding")
 	}
 
 	// Leak requests based on time elapsed
@@ -73,10 +75,12 @@ func (l *Strategy) GetResult(ctx context.Context, config any) (strategies.Result
 	// Calculate remaining capacity
 	remaining := max(leakyConfig.Capacity-int(bucket.Requests), 0)
 
-	return strategies.Result{
-		Allowed:   remaining > 0,
-		Remaining: remaining,
-		Reset:     now, // Leaky buckets don't have a reset time
+	return map[string]strategies.Result{
+		"default": {
+			Allowed:   remaining > 0,
+			Remaining: remaining,
+			Reset:     now, // Leaky buckets don't have a reset time
+		},
 	}, nil
 }
 
@@ -201,11 +205,11 @@ func calculateLBResetTime(now time.Time, bucket LeakyBucket, capacity int) time.
 }
 
 // Allow checks if a request is allowed and returns detailed statistics
-func (l *Strategy) Allow(ctx context.Context, config any) (strategies.Result, error) {
+func (l *Strategy) Allow(ctx context.Context, config any) (map[string]strategies.Result, error) {
 	// Type assert to LeakyBucketConfig
 	leakyConfig, ok := config.(strategies.LeakyBucketConfig)
 	if !ok {
-		return strategies.Result{}, fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
+		return nil, fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
 	}
 
 	capacity := float64(leakyConfig.Capacity)
@@ -217,13 +221,13 @@ func (l *Strategy) Allow(ctx context.Context, config any) (strategies.Result, er
 	for attempt := range strategies.CheckAndSetRetries {
 		// Check if context is cancelled or timed out
 		if ctx.Err() != nil {
-			return strategies.Result{}, fmt.Errorf("context cancelled or timed out: %w", ctx.Err())
+			return nil, fmt.Errorf("context cancelled or timed out: %w", ctx.Err())
 		}
 
 		// Get current bucket state
 		data, err := l.storage.Get(ctx, leakyConfig.Key)
 		if err != nil {
-			return strategies.Result{}, fmt.Errorf("failed to get bucket state: %w", err)
+			return nil, fmt.Errorf("failed to get bucket state: %w", err)
 		}
 
 		var bucket LeakyBucket
@@ -242,7 +246,7 @@ func (l *Strategy) Allow(ctx context.Context, config any) (strategies.Result, er
 			if b, ok := decodeLeakyBucket(data); ok {
 				bucket = b
 			} else {
-				return strategies.Result{}, fmt.Errorf("failed to parse bucket state: invalid encoding")
+				return nil, fmt.Errorf("failed to parse bucket state: invalid encoding")
 			}
 			oldValue = data // Current value for CheckAndSet
 
@@ -272,15 +276,17 @@ func (l *Strategy) Allow(ctx context.Context, config any) (strategies.Result, er
 			// Use CheckAndSet for atomic update
 			success, err := l.storage.CheckAndSet(ctx, leakyConfig.Key, oldValue, newValue, expiration)
 			if err != nil {
-				return strategies.Result{}, fmt.Errorf("failed to save bucket state: %w", err)
+				return nil, fmt.Errorf("failed to save bucket state: %w", err)
 			}
 
 			if success {
 				// Atomic update succeeded
-				return strategies.Result{
-					Allowed:   true,
-					Remaining: remaining,
-					Reset:     now, // When allowed, no specific reset needed
+				return map[string]strategies.Result{
+					"default": {
+						Allowed:   true,
+						Remaining: remaining,
+						Reset:     now, // When allowed, no specific reset needed
+					},
 				}, nil
 			}
 			// If CheckAndSet failed, retry if we haven't exhausted attempts
@@ -301,18 +307,20 @@ func (l *Strategy) Allow(ctx context.Context, config any) (strategies.Result, er
 			if oldValue == nil {
 				_, err := l.storage.CheckAndSet(ctx, leakyConfig.Key, oldValue, bucketData, expiration)
 				if err != nil {
-					return strategies.Result{}, fmt.Errorf("failed to initialize bucket state: %w", err)
+					return nil, fmt.Errorf("failed to initialize bucket state: %w", err)
 				}
 			}
 
-			return strategies.Result{
-				Allowed:   false,
-				Remaining: remaining,
-				Reset:     calculateLBResetTime(now, bucket, leakyConfig.Capacity),
+			return map[string]strategies.Result{
+				"default": {
+					Allowed:   false,
+					Remaining: remaining,
+					Reset:     calculateLBResetTime(now, bucket, leakyConfig.Capacity),
+				},
 			}, nil
 		}
 	}
 
 	// CheckAndSet failed after checkAndSetRetries attempts
-	return strategies.Result{}, fmt.Errorf("failed to update bucket state after %d attempts due to concurrent access", strategies.CheckAndSetRetries)
+	return nil, fmt.Errorf("failed to update bucket state after %d attempts due to concurrent access", strategies.CheckAndSetRetries)
 }

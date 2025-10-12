@@ -116,7 +116,7 @@ func TestRateLimiter_GetStats(t *testing.T) {
 	stats, err := limiter.GetStats(WithContext(context.Background()))
 	require.NoError(t, err)
 	require.Len(t, stats, 1)
-	assert.Equal(t, 10, stats["primary"].Remaining)
+	assert.Equal(t, 10, stats["primary_default"].Remaining)
 
 	// Make some requests
 	for i := range 5 {
@@ -129,7 +129,7 @@ func TestRateLimiter_GetStats(t *testing.T) {
 	stats, err = limiter.GetStats(WithContext(context.Background()))
 	require.NoError(t, err)
 	require.Len(t, stats, 1)
-	assert.Equal(t, 5, stats["primary"].Remaining)
+	assert.Equal(t, 5, stats["primary_default"].Remaining)
 }
 
 func TestRateLimiter_Reset(t *testing.T) {
@@ -331,7 +331,7 @@ func TestRateLimiter_InvalidConfiguration(t *testing.T) {
 			}),
 		)
 		assert.Error(t, err)
-		assert.Contains(t, err.Error(), "cannot use bucket strategy as primary when secondary strategy is also specified")
+		assert.Contains(t, err.Error(), "cannot use strategy with secondary capability as primary when secondary strategy is also specified")
 	})
 }
 
@@ -357,7 +357,7 @@ func TestRateLimiter_BackendOperations(t *testing.T) {
 	config := limiter.GetConfig()
 	assert.Equal(t, "test", config.BaseKey)
 	assert.Equal(t, backend, config.Storage)
-	assert.Equal(t, strategies.StrategyFixedWindow, config.PrimaryConfig.Type())
+	assert.Equal(t, "fixed_window", config.PrimaryConfig.Name())
 
 	// Test closing
 	err = limiter.Close()
@@ -444,8 +444,8 @@ func TestRateLimiter_DualStrategy(t *testing.T) {
 	stats, err := limiter.GetStats(WithContext(context.Background()))
 	require.NoError(t, err)
 	require.Len(t, stats, 2)
-	assert.Contains(t, stats, "primary")
-	assert.Contains(t, stats, "secondary")
+	assert.Contains(t, stats, "primary_default")
+	assert.Contains(t, stats, "secondary_default")
 }
 
 func TestRateLimiter_DualStrategy_WithResults(t *testing.T) {
@@ -473,8 +473,8 @@ func TestRateLimiter_DualStrategy_WithResults(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, allowed)
 	require.Len(t, stats1, 2)
-	assert.Contains(t, stats1, "primary")
-	assert.Contains(t, stats1, "secondary")
+	assert.Contains(t, stats1, "primary_default")
+	assert.Contains(t, stats1, "secondary_default")
 
 	var stats2 map[string]strategies.Result
 	allowed, err = limiter.Allow(WithResult(&stats2))
@@ -501,7 +501,7 @@ func TestDualStrategy_QuotaConsumption(t *testing.T) {
 		// Get initial stats
 		stats, err := limiter.GetStats(WithContext(ctx))
 		require.NoError(t, err)
-		assert.Equal(t, 3, stats["primary"].Remaining)
+		assert.Equal(t, 3, stats["primary_default"].Remaining)
 
 		// Phase 1: Use up the token bucket burst capacity (1 request)
 		allowed, err := limiter.Allow(WithContext(ctx))
@@ -511,7 +511,7 @@ func TestDualStrategy_QuotaConsumption(t *testing.T) {
 		// Get initial stats
 		stats, err = limiter.GetStats(WithContext(ctx))
 		require.NoError(t, err)
-		assert.Equal(t, 2, stats["primary"].Remaining, "Should have 2 remaining quota")
+		assert.Equal(t, 2, stats["primary_default"].Remaining, "Should have 2 remaining quota")
 
 		// Phase 2: Request should be denied by secondary strategy, but primary quota preserved
 		allowed, err = limiter.Allow(WithContext(ctx))
@@ -521,10 +521,10 @@ func TestDualStrategy_QuotaConsumption(t *testing.T) {
 		// Phase 3: Verify primary quota was NOT consumed
 		stats, err = limiter.GetStats(WithContext(ctx))
 		require.NoError(t, err)
-		assert.True(t, stats["primary"].Allowed, "Primary strategy should still allow")
-		assert.Equal(t, 2, stats["primary"].Remaining, "Should have 2 remaining quota")
+		assert.True(t, stats["primary_default"].Allowed, "Primary strategy should still allow")
+		assert.Equal(t, 2, stats["primary_default"].Remaining, "Should have 2 remaining quota")
 
 		// The last `Allow` was denied by secondary
-		assert.False(t, stats["secondary"].Allowed, "Secondary strategy should deny")
+		assert.False(t, stats["secondary_default"].Allowed, "Secondary strategy should deny")
 	})
 }

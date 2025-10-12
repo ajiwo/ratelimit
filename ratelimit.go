@@ -79,11 +79,14 @@ func (r *RateLimiter) GetStats(opts ...AccessOption) (map[string]strategies.Resu
 		return nil, fmt.Errorf("failed to create primary config: %w", err)
 	}
 
-	primaryResult, err := r.primaryStrategy.GetResult(accessOpts.ctx, primaryConfig)
+	primaryResults, err := r.primaryStrategy.GetResult(accessOpts.ctx, primaryConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get stats from primary strategy: %w", err)
 	}
-	stats["primary"] = primaryResult
+	// Merge strategy results into our stats map
+	for key, result := range primaryResults {
+		stats["primary_"+key] = result
+	}
 
 	// Get stats from secondary strategy if configured
 	if r.secondaryStrategy != nil {
@@ -92,11 +95,14 @@ func (r *RateLimiter) GetStats(opts ...AccessOption) (map[string]strategies.Resu
 			return nil, fmt.Errorf("failed to create secondary config: %w", err)
 		}
 
-		secondaryResult, err := r.secondaryStrategy.GetResult(accessOpts.ctx, secondaryConfig)
+		secondaryResults, err := r.secondaryStrategy.GetResult(accessOpts.ctx, secondaryConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get stats from secondary strategy: %w", err)
 		}
-		stats["secondary"] = secondaryResult
+		// Merge strategy results into our stats map
+		for key, result := range secondaryResults {
+			stats["secondary_"+key] = result
+		}
 	}
 
 	return stats, nil
@@ -181,11 +187,15 @@ func (r *RateLimiter) handleDualStrategy(accessOpts *accessOptions, results map[
 		return false, nil, fmt.Errorf("failed to create primary config: %w", err)
 	}
 
-	primaryResult, err := r.primaryStrategy.GetResult(accessOpts.ctx, primaryConfig)
+	primaryResults, err := r.primaryStrategy.GetResult(accessOpts.ctx, primaryConfig)
 	if err != nil {
 		return false, nil, fmt.Errorf("primary strategy check failed: %w", err)
 	}
-	results["primary"] = primaryResult
+	primaryResult := primaryResults["default"]
+	// Merge all strategy results
+	for key, result := range primaryResults {
+		results["primary_"+key] = result
+	}
 
 	// If primary strategy doesn't allow, don't check secondary
 	if !primaryResult.Allowed {
@@ -198,11 +208,15 @@ func (r *RateLimiter) handleDualStrategy(accessOpts *accessOptions, results map[
 		return false, nil, fmt.Errorf("failed to create secondary config: %w", err)
 	}
 
-	secondaryResult, err := r.secondaryStrategy.GetResult(accessOpts.ctx, secondaryConfig)
+	secondaryResults, err := r.secondaryStrategy.GetResult(accessOpts.ctx, secondaryConfig)
 	if err != nil {
 		return false, nil, fmt.Errorf("secondary strategy check failed: %w", err)
 	}
-	results["secondary"] = secondaryResult
+	secondaryResult := secondaryResults["default"]
+	// Merge all strategy results
+	for key, result := range secondaryResults {
+		results["secondary_"+key] = result
+	}
 
 	// If secondary strategy doesn't allow, don't consume from either strategy
 	if !secondaryResult.Allowed {
@@ -229,12 +243,15 @@ func (r *RateLimiter) handleSingleStrategy(accessOpts *accessOptions, results ma
 	}
 
 	// Check if request is allowed using the primary strategy
-	result, err := r.primaryStrategy.Allow(accessOpts.ctx, primaryConfig)
+	strategyResults, err := r.primaryStrategy.Allow(accessOpts.ctx, primaryConfig)
 	if err != nil {
 		return false, nil, fmt.Errorf("primary strategy check failed: %w", err)
 	}
-
-	results["primary"] = result
+	result := strategyResults["default"]
+	// Merge all strategy results
+	for key, res := range strategyResults {
+		results["primary_"+key] = res
+	}
 	return result.Allowed, results, nil
 }
 
@@ -264,8 +281,8 @@ func (r *RateLimiter) createPrimaryConfig(dynamicKey string) (any, error) {
 	key := keyBuilder.String()
 
 	primaryConfig := r.config.PrimaryConfig
-	switch primaryConfig.Type() {
-	case strategies.StrategyFixedWindow:
+	switch primaryConfig.Name() {
+	case "fixed_window":
 		fixedConfig := primaryConfig.(strategies.FixedWindowConfig)
 		return strategies.FixedWindowConfig{
 			Key:    key,
@@ -273,7 +290,7 @@ func (r *RateLimiter) createPrimaryConfig(dynamicKey string) (any, error) {
 			Window: fixedConfig.Window,
 		}, nil
 
-	case strategies.StrategyTokenBucket:
+	case "token_bucket":
 		tokenConfig := primaryConfig.(strategies.TokenBucketConfig)
 		return strategies.TokenBucketConfig{
 			Key:        key,
@@ -281,7 +298,7 @@ func (r *RateLimiter) createPrimaryConfig(dynamicKey string) (any, error) {
 			RefillRate: tokenConfig.RefillRate,
 		}, nil
 
-	case strategies.StrategyLeakyBucket:
+	case "leaky_bucket":
 		leakyConfig := primaryConfig.(strategies.LeakyBucketConfig)
 		return strategies.LeakyBucketConfig{
 			Key:      key,
@@ -290,7 +307,7 @@ func (r *RateLimiter) createPrimaryConfig(dynamicKey string) (any, error) {
 		}, nil
 
 	default:
-		return nil, fmt.Errorf("unknown primary strategy: %s", primaryConfig.Type())
+		return nil, fmt.Errorf("unknown primary strategy: %s", primaryConfig.Name())
 	}
 }
 
@@ -309,8 +326,8 @@ func (r *RateLimiter) createSecondaryConfig(dynamicKey string) (any, error) {
 	key := keyBuilder.String()
 
 	secondaryConfig := r.config.SecondaryConfig
-	switch secondaryConfig.Type() {
-	case strategies.StrategyTokenBucket:
+	switch secondaryConfig.Name() {
+	case "token_bucket":
 		tokenConfig := secondaryConfig.(strategies.TokenBucketConfig)
 		return strategies.TokenBucketConfig{
 			Key:        key,
@@ -318,7 +335,7 @@ func (r *RateLimiter) createSecondaryConfig(dynamicKey string) (any, error) {
 			RefillRate: tokenConfig.RefillRate,
 		}, nil
 
-	case strategies.StrategyLeakyBucket:
+	case "leaky_bucket":
 		leakyConfig := secondaryConfig.(strategies.LeakyBucketConfig)
 		return strategies.LeakyBucketConfig{
 			Key:      key,
@@ -327,7 +344,7 @@ func (r *RateLimiter) createSecondaryConfig(dynamicKey string) (any, error) {
 		}, nil
 
 	default:
-		return nil, fmt.Errorf("unknown secondary strategy: %s", secondaryConfig.Type())
+		return nil, fmt.Errorf("unknown secondary strategy: %s", secondaryConfig.Name())
 	}
 }
 
@@ -343,8 +360,8 @@ func newRateLimiter(config Config) (*RateLimiter, error) {
 	}
 
 	// Create primary strategy
-	primaryStrategyType := config.PrimaryConfig.Type()
-	primaryStrategy, err := createStrategy(primaryStrategyType, config.Storage)
+	primaryStrategyName := config.PrimaryConfig.Name()
+	primaryStrategy, err := createStrategy(primaryStrategyName, config.Storage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create primary strategy: %w", err)
 	}
@@ -352,8 +369,8 @@ func newRateLimiter(config Config) (*RateLimiter, error) {
 
 	// Create secondary strategy if configured
 	if config.SecondaryConfig != nil {
-		secondaryStrategyType := config.SecondaryConfig.Type()
-		secondaryStrategy, err := createStrategy(secondaryStrategyType, config.Storage)
+		secondaryStrategyName := config.SecondaryConfig.Name()
+		secondaryStrategy, err := createStrategy(secondaryStrategyName, config.Storage)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create secondary strategy: %w", err)
 		}
@@ -363,16 +380,16 @@ func newRateLimiter(config Config) (*RateLimiter, error) {
 	return limiter, nil
 }
 
-// createStrategy creates a strategy instance based on the type
-func createStrategy(strategyType strategies.StrategyType, storage backends.Backend) (strategies.Strategy, error) {
-	switch strategyType {
-	case strategies.StrategyFixedWindow:
+// createStrategy creates a strategy instance based on the name
+func createStrategy(strategyName string, storage backends.Backend) (strategies.Strategy, error) {
+	switch strategyName {
+	case "fixed_window":
 		return fixedwindow.New(storage), nil
-	case strategies.StrategyTokenBucket:
+	case "token_bucket":
 		return tokenbucket.New(storage), nil
-	case strategies.StrategyLeakyBucket:
+	case "leaky_bucket":
 		return leakybucket.New(storage), nil
 	default:
-		return nil, fmt.Errorf("unknown strategy type: %s", strategyType)
+		return nil, fmt.Errorf("unknown strategy: %s", strategyName)
 	}
 }

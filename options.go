@@ -29,9 +29,9 @@ func WithSecondaryStrategy(strategyConfig strategies.StrategyConfig) Option {
 			return fmt.Errorf("secondary strategy config cannot be nil")
 		}
 
-		// Secondary strategy must be a bucket-based strategy
-		if strategyConfig.Type() != strategies.StrategyTokenBucket && strategyConfig.Type() != strategies.StrategyLeakyBucket {
-			return fmt.Errorf("secondary strategy must be token bucket or leaky bucket, got %s", strategyConfig.Type())
+		// Secondary strategy must have CapSecondary capability
+		if !strategyConfig.Capabilities().Has(strategies.CapSecondary) {
+			return fmt.Errorf("strategy '%s' doesn't have secondary capability", strategyConfig.Name())
 		}
 
 		config.SecondaryConfig = strategyConfig

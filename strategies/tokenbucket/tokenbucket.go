@@ -32,11 +32,11 @@ func New(storage backends.Backend) *Strategy {
 }
 
 // GetResult returns detailed statistics for the current bucket state
-func (t *Strategy) GetResult(ctx context.Context, config any) (strategies.Result, error) {
+func (t *Strategy) GetResult(ctx context.Context, config any) (map[string]strategies.Result, error) {
 	// Type assert to TokenBucketConfig
 	tokenConfig, ok := config.(strategies.TokenBucketConfig)
 	if !ok {
-		return strategies.Result{}, fmt.Errorf("TokenBucket strategy requires TokenBucketConfig")
+		return nil, fmt.Errorf("TokenBucket strategy requires TokenBucketConfig")
 	}
 
 	now := time.Now()
@@ -44,16 +44,18 @@ func (t *Strategy) GetResult(ctx context.Context, config any) (strategies.Result
 	// Get current bucket state
 	data, err := t.storage.Get(ctx, tokenConfig.Key)
 	if err != nil {
-		return strategies.Result{}, fmt.Errorf("failed to get bucket state: %w", err)
+		return nil, fmt.Errorf("failed to get bucket state: %w", err)
 	}
 
 	var bucket TokenBucket
 	if data == "" {
 		// No existing bucket, return default state
-		return strategies.Result{
-			Allowed:   true,
-			Remaining: tokenConfig.BurstSize,
-			Reset:     now, // Token buckets don't have a reset time, they continuously refill
+		return map[string]strategies.Result{
+			"default": {
+				Allowed:   true,
+				Remaining: tokenConfig.BurstSize,
+				Reset:     now, // Token buckets don't have a reset time, they continuously refill
+			},
 		}, nil
 	}
 
@@ -61,7 +63,7 @@ func (t *Strategy) GetResult(ctx context.Context, config any) (strategies.Result
 	if b, ok := decodeTokenBucket(data); ok {
 		bucket = b
 	} else {
-		return strategies.Result{}, fmt.Errorf("failed to parse bucket state: invalid encoding")
+		return nil, fmt.Errorf("failed to parse bucket state: invalid encoding")
 	}
 
 	// Refill tokens based on time elapsed
@@ -73,10 +75,12 @@ func (t *Strategy) GetResult(ctx context.Context, config any) (strategies.Result
 	// Calculate remaining requests (floor of available tokens)
 	remaining := max(int(bucket.Tokens), 0)
 
-	return strategies.Result{
-		Allowed:   remaining > 0,
-		Remaining: remaining,
-		Reset:     now, // Token buckets don't have a reset time
+	return map[string]strategies.Result{
+		"default": {
+			Allowed:   remaining > 0,
+			Remaining: remaining,
+			Reset:     now, // Token buckets don't have a reset time
+		},
 	}, nil
 }
 
@@ -202,11 +206,11 @@ func calculateTBResetTime(now time.Time, bucket TokenBucket) time.Time {
 }
 
 // Allow checks if a request is allowed and returns detailed statistics
-func (t *Strategy) Allow(ctx context.Context, config any) (strategies.Result, error) {
+func (t *Strategy) Allow(ctx context.Context, config any) (map[string]strategies.Result, error) {
 	// Type assert to TokenBucketConfig
 	tokenConfig, ok := config.(strategies.TokenBucketConfig)
 	if !ok {
-		return strategies.Result{}, fmt.Errorf("TokenBucket strategy requires TokenBucketConfig")
+		return nil, fmt.Errorf("TokenBucket strategy requires TokenBucketConfig")
 	}
 
 	capacity := float64(tokenConfig.BurstSize)
@@ -218,13 +222,13 @@ func (t *Strategy) Allow(ctx context.Context, config any) (strategies.Result, er
 	for attempt := range strategies.CheckAndSetRetries {
 		// Check if context is cancelled or timed out
 		if ctx.Err() != nil {
-			return strategies.Result{}, fmt.Errorf("context cancelled or timed out: %w", ctx.Err())
+			return nil, fmt.Errorf("context cancelled or timed out: %w", ctx.Err())
 		}
 
 		// Get current bucket state
 		data, err := t.storage.Get(ctx, tokenConfig.Key)
 		if err != nil {
-			return strategies.Result{}, fmt.Errorf("failed to get bucket state: %w", err)
+			return nil, fmt.Errorf("failed to get bucket state: %w", err)
 		}
 
 		var bucket TokenBucket
@@ -243,7 +247,7 @@ func (t *Strategy) Allow(ctx context.Context, config any) (strategies.Result, er
 			if b, ok := decodeTokenBucket(data); ok {
 				bucket = b
 			} else {
-				return strategies.Result{}, fmt.Errorf("failed to parse bucket state: invalid encoding")
+				return nil, fmt.Errorf("failed to parse bucket state: invalid encoding")
 			}
 			oldValue = data // Current value for CheckAndSet
 
@@ -273,15 +277,17 @@ func (t *Strategy) Allow(ctx context.Context, config any) (strategies.Result, er
 			// Use CheckAndSet for atomic update
 			success, err := t.storage.CheckAndSet(ctx, tokenConfig.Key, oldValue, newValue, expiration)
 			if err != nil {
-				return strategies.Result{}, fmt.Errorf("failed to save bucket state: %w", err)
+				return nil, fmt.Errorf("failed to save bucket state: %w", err)
 			}
 
 			if success {
 				// Atomic update succeeded
-				return strategies.Result{
-					Allowed:   true,
-					Remaining: remaining,
-					Reset:     now, // When allowed, no specific reset needed
+				return map[string]strategies.Result{
+					"default": {
+						Allowed:   true,
+						Remaining: remaining,
+						Reset:     now, // When allowed, no specific reset needed
+					},
 				}, nil
 			}
 			// If CheckAndSet failed, retry if we haven't exhausted attempts
@@ -302,18 +308,20 @@ func (t *Strategy) Allow(ctx context.Context, config any) (strategies.Result, er
 			if oldValue == nil {
 				_, err := t.storage.CheckAndSet(ctx, tokenConfig.Key, oldValue, bucketData, expiration)
 				if err != nil {
-					return strategies.Result{}, fmt.Errorf("failed to initialize bucket state: %w", err)
+					return nil, fmt.Errorf("failed to initialize bucket state: %w", err)
 				}
 			}
 
-			return strategies.Result{
-				Allowed:   false,
-				Remaining: remaining,
-				Reset:     calculateTBResetTime(now, bucket),
+			return map[string]strategies.Result{
+				"default": {
+					Allowed:   false,
+					Remaining: remaining,
+					Reset:     calculateTBResetTime(now, bucket),
+				},
 			}, nil
 		}
 	}
 
 	// CheckAndSet failed after checkAndSetRetries attempts
-	return strategies.Result{}, fmt.Errorf("failed to update bucket state after %d attempts due to concurrent access", strategies.CheckAndSetRetries)
+	return nil, fmt.Errorf("failed to update bucket state after %d attempts due to concurrent access", strategies.CheckAndSetRetries)
 }
