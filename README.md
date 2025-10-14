@@ -39,7 +39,7 @@ import (
 )
 
 // Create a backend instance
-mem := memory.New()
+backend := memory.New()
 
 // Create a rate limiter using functional options
 limiter, err := ratelimit.New(
@@ -91,7 +91,7 @@ import (
 )
 
 // Create a backend instance
-mem := memory.New()
+backend := memory.New()
 
 // Create a multi-quota fixed window rate limiter
 limiter, err := ratelimit.New(
@@ -167,7 +167,7 @@ import (
 )
 
 // Create a backend instance
-mem := memory.New()
+backend := memory.New()
 
 // Create a dual-strategy rate limiter
 limiter, err := ratelimit.New(
@@ -328,10 +328,10 @@ The library supports multiple storage backends:
 import "github.com/ajiwo/ratelimit/backends/memory"
 
 // Create memory backend instance
-mem := memory.New()
+backend := memory.New()
 
 limiter, err := ratelimit.New(
-    ratelimit.WithBackend(mem),
+    ratelimit.WithBackend(backend),
     // ... other options
 )
 ```
@@ -342,7 +342,7 @@ limiter, err := ratelimit.New(
 import "github.com/ajiwo/ratelimit/backends/redis"
 
 // Create Redis backend instance
-redisBackend, err := redis.New(redis.RedisConfig{
+backend, err := redis.New(redis.Config{
     Addr:     "localhost:6379",
     Password: "", // no password
     DB:       0,  // default DB
@@ -353,7 +353,7 @@ if err != nil {
 }
 
 limiter, err := ratelimit.New(
-    ratelimit.WithBackend(redisBackend),
+    ratelimit.WithBackend(backend),
     // ... other options
 )
 ```
@@ -364,7 +364,7 @@ limiter, err := ratelimit.New(
 import "github.com/ajiwo/ratelimit/backends/postgres"
 
 // Create PostgreSQL backend instance
-pgBackend, err := postgres.New(postgres.PostgresConfig{
+backend, err := postgres.New(postgres.Config{
     ConnString: "postgres://user:pass@localhost/db",
     MaxConns:   10,
     MinConns:   2,
@@ -374,7 +374,7 @@ if err != nil {
 }
 
 limiter, err := ratelimit.New(
-    ratelimit.WithBackend(pgBackend),
+    ratelimit.WithBackend(backend),
     // ... other options
 )
 ```
@@ -437,10 +437,10 @@ import (
 )
 
 // Create a backend instance
-storage := memory.New()
+backend := memory.New()
 
 // Create a fixed window strategy
-strategy := fixedwindow.New(storage)
+strategy := fixedwindow.New(backend)
 
 // Configure rate limiting (single-quota)
 config := fixedwindow.NewConfig("user:123").
@@ -495,10 +495,10 @@ import (
 )
 
 // Create a backend instance
-storage := memory.New()
+backend := memory.New()
 
 // Create a token bucket strategy
-strategy := tokenbucket.New(storage)
+strategy := tokenbucket.New(backend)
 
 // Configure rate limiting
 config := tokenbucket.Config{
@@ -532,10 +532,10 @@ import (
 )
 
 // Create a backend instance
-storage := memory.New()
+backend := memory.New()
 
 // Create a leaky bucket strategy
-strategy := leakybucket.New(storage)
+strategy := leakybucket.New(backend)
 
 // Configure rate limiting
 config := leakybucket.Config{
@@ -569,10 +569,10 @@ import (
 )
 
 // Create a backend instance
-storage := memory.New()
+backend := memory.New()
 
 // Create a GCRA strategy
-strategy := gcra.New(storage)
+strategy := gcra.New(backend)
 
 // Configure rate limiting
 config := gcra.Config{

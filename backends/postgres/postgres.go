@@ -10,18 +10,18 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-type PostgresConfig struct {
+type Config struct {
 	ConnString string
 	MaxConns   int32
 	MinConns   int32
 }
 
-type PostgresStorage struct {
+type Backend struct {
 	pool *pgxpool.Pool
 }
 
 // New initializes a new PostgresStorage with the given configuration.
-func New(config PostgresConfig) (*PostgresStorage, error) {
+func New(config Config) (*Backend, error) {
 	if config.MaxConns == 0 {
 		config.MaxConns = 10
 	}
@@ -50,7 +50,7 @@ func New(config PostgresConfig) (*PostgresStorage, error) {
 		return nil, fmt.Errorf("failed to create table: %w", err)
 	}
 
-	return &PostgresStorage{pool: pool}, nil
+	return &Backend{pool: pool}, nil
 }
 
 func createTable(ctx context.Context, pool *pgxpool.Pool) error {
@@ -64,11 +64,11 @@ func createTable(ctx context.Context, pool *pgxpool.Pool) error {
 	return err
 }
 
-func (p *PostgresStorage) GetPool() *pgxpool.Pool {
+func (p *Backend) GetPool() *pgxpool.Pool {
 	return p.pool
 }
 
-func (p *PostgresStorage) Get(ctx context.Context, key string) (string, error) {
+func (p *Backend) Get(ctx context.Context, key string) (string, error) {
 	var value string
 	var expiresAt *time.Time
 
@@ -92,7 +92,7 @@ func (p *PostgresStorage) Get(ctx context.Context, key string) (string, error) {
 	return value, nil
 }
 
-func (p *PostgresStorage) Set(ctx context.Context, key string, value any, expiration time.Duration) error {
+func (p *Backend) Set(ctx context.Context, key string, value any, expiration time.Duration) error {
 	var expiresAt *time.Time
 	if expiration > 0 {
 		t := time.Now().Add(expiration)
@@ -112,12 +112,12 @@ func (p *PostgresStorage) Set(ctx context.Context, key string, value any, expira
 	return err
 }
 
-func (p *PostgresStorage) Delete(ctx context.Context, key string) error {
+func (p *Backend) Delete(ctx context.Context, key string) error {
 	_, err := p.pool.Exec(ctx, `DELETE FROM ratelimit_kv WHERE key = $1`, key)
 	return err
 }
 
-func (p *PostgresStorage) Close() error {
+func (p *Backend) Close() error {
 	if p.pool != nil {
 		p.pool.Close()
 	}
@@ -127,7 +127,7 @@ func (p *PostgresStorage) Close() error {
 // CheckAndSet atomically sets key to newValue only if current value matches oldValue
 // Returns true if the set was successful, false if value didn't match or key expired
 // oldValue=nil means "only set if key doesn't exist"
-func (p *PostgresStorage) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, expiration time.Duration) (bool, error) {
+func (p *Backend) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, expiration time.Duration) (bool, error) {
 	var expiresAt *time.Time
 	if expiration > 0 {
 		t := time.Now().Add(expiration)

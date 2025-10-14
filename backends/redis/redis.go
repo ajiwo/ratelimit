@@ -8,23 +8,23 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-type RedisConfig struct {
+type Config struct {
 	Addr     string
 	Password string
 	DB       int
 	PoolSize int
 }
 
-type RedisStorage struct {
+type Backend struct {
 	client *redis.Client
 }
 
-func (r *RedisStorage) GetClient() *redis.Client {
+func (r *Backend) GetClient() *redis.Client {
 	return r.client
 }
 
 // New initializes a new RedisStorage with the given configuration.
-func New(config RedisConfig) (*RedisStorage, error) {
+func New(config Config) (*Backend, error) {
 	client := redis.NewClient(&redis.Options{
 		Addr:     config.Addr,
 		Password: config.Password,
@@ -36,10 +36,10 @@ func New(config RedisConfig) (*RedisStorage, error) {
 		return nil, err
 	}
 
-	return &RedisStorage{client: client}, nil
+	return &Backend{client: client}, nil
 }
 
-func (r *RedisStorage) Get(ctx context.Context, key string) (string, error) {
+func (r *Backend) Get(ctx context.Context, key string) (string, error) {
 	val, err := r.client.Get(ctx, key).Result()
 	if err == redis.Nil {
 		return "", nil // Key doesn't exist, return empty string with no error
@@ -47,22 +47,22 @@ func (r *RedisStorage) Get(ctx context.Context, key string) (string, error) {
 	return val, err
 }
 
-func (r *RedisStorage) Set(ctx context.Context, key string, value any, expiration time.Duration) error {
+func (r *Backend) Set(ctx context.Context, key string, value any, expiration time.Duration) error {
 	return r.client.Set(ctx, key, value, expiration).Err()
 }
 
-func (r *RedisStorage) Delete(ctx context.Context, key string) error {
+func (r *Backend) Delete(ctx context.Context, key string) error {
 	return r.client.Del(ctx, key).Err()
 }
 
-func (r *RedisStorage) Close() error {
+func (r *Backend) Close() error {
 	return r.client.Close()
 }
 
 // CheckAndSet atomically sets key to newValue only if current value matches oldValue
 // Returns true if the set was successful, false if value didn't match or key expired
 // oldValue=nil means "only set if key doesn't exist"
-func (r *RedisStorage) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, expiration time.Duration) (bool, error) {
+func (r *Backend) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, expiration time.Duration) (bool, error) {
 	// Use Lua script for atomicity
 	luaScript := `
 	local current = redis.call('GET', KEYS[1])

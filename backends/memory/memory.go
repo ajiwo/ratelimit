@@ -7,7 +7,7 @@ import (
 	"time"
 )
 
-type MemoryStorage struct {
+type Backend struct {
 	locks  sync.Map // map[string]*sync.Mutex
 	values sync.Map // map[string]memoryValue
 }
@@ -18,19 +18,19 @@ type memoryValue struct {
 }
 
 // New initializes a new in-memory storage instance.
-func New() *MemoryStorage {
-	return &MemoryStorage{
+func New() *Backend {
+	return &Backend{
 		// sync.Map doesn't need initialization with make()
 	}
 }
 
 // getLock returns a mutex for the given key
-func (m *MemoryStorage) getLock(key string) *sync.Mutex {
+func (m *Backend) getLock(key string) *sync.Mutex {
 	actual, _ := m.locks.LoadOrStore(key, &sync.Mutex{})
 	return actual.(*sync.Mutex)
 }
 
-func (m *MemoryStorage) Get(ctx context.Context, key string) (string, error) {
+func (m *Backend) Get(ctx context.Context, key string) (string, error) {
 	lock := m.getLock(key)
 	lock.Lock()
 	defer lock.Unlock()
@@ -56,7 +56,7 @@ func (m *MemoryStorage) Get(ctx context.Context, key string) (string, error) {
 	}
 }
 
-func (m *MemoryStorage) Set(ctx context.Context, key string, value any, expiration time.Duration) error {
+func (m *Backend) Set(ctx context.Context, key string, value any, expiration time.Duration) error {
 	lock := m.getLock(key)
 	lock.Lock()
 	defer lock.Unlock()
@@ -70,7 +70,7 @@ func (m *MemoryStorage) Set(ctx context.Context, key string, value any, expirati
 	return nil
 }
 
-func (m *MemoryStorage) Delete(ctx context.Context, key string) error {
+func (m *Backend) Delete(ctx context.Context, key string) error {
 	lock := m.getLock(key)
 	lock.Lock()
 	defer lock.Unlock()
@@ -79,7 +79,7 @@ func (m *MemoryStorage) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
-func (m *MemoryStorage) cleanup() {
+func (m *Backend) cleanup() {
 	now := time.Now()
 	var keysToDelete []string
 
@@ -101,7 +101,7 @@ func (m *MemoryStorage) cleanup() {
 	}
 }
 
-func (m *MemoryStorage) Close() error {
+func (m *Backend) Close() error {
 	// For in-memory storage, just clear the map and return nil
 	// Note: We don't need to acquire individual locks here since we're replacing the entire map
 	m.values = sync.Map{} // Clear the values map
@@ -112,7 +112,7 @@ func (m *MemoryStorage) Close() error {
 // CheckAndSet atomically sets key to newValue only if current value matches oldValue
 // Returns true if the set was successful, false if value didn't match or key expired
 // oldValue=nil means "only set if key doesn't exist"
-func (m *MemoryStorage) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, expiration time.Duration) (bool, error) {
+func (m *Backend) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, expiration time.Duration) (bool, error) {
 	lock := m.getLock(key)
 	lock.Lock()
 	defer lock.Unlock()

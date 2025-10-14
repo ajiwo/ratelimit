@@ -10,7 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupRedisTest(t *testing.T) (*RedisStorage, func()) {
+func setupRedisTest(t *testing.T) (*Backend, func()) {
 	t.Helper()
 	redisAddr := os.Getenv("REDIS_ADDR")
 	if redisAddr == "" {
@@ -18,7 +18,7 @@ func setupRedisTest(t *testing.T) (*RedisStorage, func()) {
 	}
 	redisPassword := os.Getenv("REDIS_PASSWORD")
 
-	storage, err := New(RedisConfig{
+	storage, err := New(Config{
 		Addr:     redisAddr,
 		Password: redisPassword,
 		DB:       0,
@@ -212,7 +212,7 @@ func TestRedisStorage_Close(t *testing.T) {
 		redisAddr = "localhost:6379"
 	}
 
-	storage, err := New(RedisConfig{
+	storage, err := New(Config{
 		Addr:     redisAddr,
 		Password: os.Getenv("REDIS_PASSWORD"),
 		DB:       0,

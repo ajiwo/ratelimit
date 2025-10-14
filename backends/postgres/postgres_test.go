@@ -11,7 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func setupPostgresTest(t *testing.T) (*PostgresStorage, func()) {
+func setupPostgresTest(t *testing.T) (*Backend, func()) {
 	t.Helper()
 
 	postgresConn := os.Getenv("TEST_POSTGRES_DSN")
@@ -19,7 +19,7 @@ func setupPostgresTest(t *testing.T) (*PostgresStorage, func()) {
 		postgresConn = "postgres://postgres:postgres@localhost:5432/ratelimit_test?sslmode=disable"
 	}
 
-	storage, err := New(PostgresConfig{
+	storage, err := New(Config{
 		ConnString: postgresConn,
 		MaxConns:   5,
 		MinConns:   1,
@@ -224,7 +224,7 @@ func TestPostgresStorage_Close(t *testing.T) {
 		postgresConn = "postgres://postgres:postgres@localhost:5432/ratelimit_test?sslmode=disable"
 	}
 
-	storage, err := New(PostgresConfig{
+	storage, err := New(Config{
 		ConnString: postgresConn,
 		MaxConns:   5,
 		MinConns:   1,

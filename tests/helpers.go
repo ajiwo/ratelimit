@@ -32,11 +32,11 @@ func UseBackend(t *testing.T, name string) backends.Backend {
 	case "memory":
 		backend = memory.New()
 	case "postgres":
-		backend, err = postgres.New(postgres.PostgresConfig{
+		backend, err = postgres.New(postgres.Config{
 			ConnString: postgresConn,
 		})
 	case "redis":
-		backend, err = redis.New(redis.RedisConfig{
+		backend, err = redis.New(redis.Config{
 			Addr:     redisAddr,
 			Password: redisPassword,
 		})
@@ -62,14 +62,14 @@ func AvailableBackends(t *testing.T) []string {
 	}
 
 	// Test postgres backend
-	if _, err := postgres.New(postgres.PostgresConfig{
+	if _, err := postgres.New(postgres.Config{
 		ConnString: os.Getenv("TEST_POSTGRES_DSN"),
 	}); err == nil {
 		available = append(available, "postgres")
 	}
 
 	// Test redis backend
-	if _, err := redis.New(redis.RedisConfig{
+	if _, err := redis.New(redis.Config{
 		Addr: os.Getenv("REDIS_ADDR"),
 	}); err == nil {
 		available = append(available, "redis")
