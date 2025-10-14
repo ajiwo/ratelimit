@@ -21,7 +21,7 @@ type FixedWindow struct {
 // tierState represents the state of a single tier during processing
 type tierState struct {
 	name     string
-	tier     strategies.FixedWindowTier
+	tier     Tier
 	key      string
 	window   FixedWindow
 	oldValue any
@@ -41,9 +41,9 @@ func New(storage backends.Backend) *Strategy {
 }
 
 // GetResult returns detailed statistics for the current window state
-func (f *Strategy) GetResult(ctx context.Context, config any) (map[string]strategies.Result, error) {
+func (f *Strategy) GetResult(ctx context.Context, config strategies.StrategyConfig) (map[string]strategies.Result, error) {
 	// Type assert to FixedWindowConfig
-	fixedConfig, ok := config.(strategies.FixedWindowConfig)
+	fixedConfig, ok := config.(Config)
 	if !ok {
 		return nil, fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
 	}
@@ -106,9 +106,9 @@ func (f *Strategy) GetResult(ctx context.Context, config any) (map[string]strate
 }
 
 // Reset resets the rate limit counter for the given key
-func (f *Strategy) Reset(ctx context.Context, config any) error {
+func (f *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) error {
 	// Type assert to FixedWindowConfig
-	fixedConfig, ok := config.(strategies.FixedWindowConfig)
+	fixedConfig, ok := config.(Config)
 	if !ok {
 		return fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
 	}
@@ -198,9 +198,9 @@ func decodeFixedWindow(s string) (FixedWindow, bool) {
 }
 
 // Allow checks if a request is allowed and returns detailed statistics
-func (f *Strategy) Allow(ctx context.Context, config any) (map[string]strategies.Result, error) {
+func (f *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) (map[string]strategies.Result, error) {
 	// Type assert to FixedWindowConfig
-	fixedConfig, ok := config.(strategies.FixedWindowConfig)
+	fixedConfig, ok := config.(Config)
 	if !ok {
 		return nil, fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
 	}
@@ -220,7 +220,7 @@ func (f *Strategy) Allow(ctx context.Context, config any) (map[string]strategies
 }
 
 // allowMultiTier handles multi-tier configurations with two-phase commit
-func (f *Strategy) allowMultiTier(ctx context.Context, fixedConfig strategies.FixedWindowConfig, now time.Time) (map[string]strategies.Result, error) {
+func (f *Strategy) allowMultiTier(ctx context.Context, fixedConfig Config, now time.Time) (map[string]strategies.Result, error) {
 	results := make(map[string]strategies.Result)
 
 	// Phase 1: Check all tiers without consuming quota
@@ -270,7 +270,7 @@ func (f *Strategy) allowMultiTier(ctx context.Context, fixedConfig strategies.Fi
 }
 
 // getTierStates gets the current state for all tiers without consuming quota
-func (f *Strategy) getTierStates(ctx context.Context, fixedConfig strategies.FixedWindowConfig, now time.Time) ([]tierState, error) {
+func (f *Strategy) getTierStates(ctx context.Context, fixedConfig Config, now time.Time) ([]tierState, error) {
 	var tierStates []tierState
 
 	for tierName, tier := range fixedConfig.Tiers {
@@ -435,7 +435,7 @@ func (f *Strategy) getDenyResult(ctx context.Context, state tierState, now time.
 }
 
 // initializeUnprocessedTiers initializes results for tiers that weren't processed
-func (f *Strategy) initializeUnprocessedTiers(ctx context.Context, fixedConfig strategies.FixedWindowConfig, now time.Time, results map[string]strategies.Result) error {
+func (f *Strategy) initializeUnprocessedTiers(ctx context.Context, fixedConfig Config, now time.Time, results map[string]strategies.Result) error {
 	for tierName, tier := range fixedConfig.Tiers {
 		if _, exists := results[tierName]; !exists {
 			// This tier wasn't processed, initialize it without consuming quota
@@ -480,12 +480,12 @@ func (f *Strategy) initializeUnprocessedTiers(ctx context.Context, fixedConfig s
 }
 
 // allowSingleTier handles single-tier configurations with the original optimized approach
-func (f *Strategy) allowSingleTier(ctx context.Context, fixedConfig strategies.FixedWindowConfig, now time.Time) (map[string]strategies.Result, error) {
+func (f *Strategy) allowSingleTier(ctx context.Context, fixedConfig Config, now time.Time) (map[string]strategies.Result, error) {
 	results := make(map[string]strategies.Result)
 
 	// Get the single tier (there should be exactly one)
 	var tierName string
-	var tier strategies.FixedWindowTier
+	var tier Tier
 	for name, t := range fixedConfig.Tiers {
 		tierName = name
 		tier = t

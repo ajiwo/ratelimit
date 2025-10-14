@@ -7,6 +7,9 @@ import (
 
 	"github.com/ajiwo/ratelimit"
 	"github.com/ajiwo/ratelimit/strategies"
+	"github.com/ajiwo/ratelimit/strategies/fixedwindow"
+	"github.com/ajiwo/ratelimit/strategies/leakybucket"
+	"github.com/ajiwo/ratelimit/strategies/tokenbucket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,9 +20,9 @@ func TestFixedWindow_ConcurrentAccessMemory(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
+		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
 			Key: "test",
-			Tiers: map[string]strategies.FixedWindowTier{
+			Tiers: map[string]fixedwindow.Tier{
 				"default": {
 					Limit:  10,
 					Window: 5 * time.Second,
@@ -85,9 +88,9 @@ func TestFixedWindow_ConcurrentAccessPostgres(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
+		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
 			Key: "test",
-			Tiers: map[string]strategies.FixedWindowTier{
+			Tiers: map[string]fixedwindow.Tier{
 				"default": {
 					Limit:  10,
 					Window: 5 * time.Second,
@@ -153,9 +156,9 @@ func TestFixedWindow_ConcurrentAccessRedis(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
+		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
 			Key: "test",
-			Tiers: map[string]strategies.FixedWindowTier{
+			Tiers: map[string]fixedwindow.Tier{
 				"default": {
 					Limit:  10,
 					Window: 5 * time.Second,
@@ -221,7 +224,7 @@ func TestLeakyBucket_ConcurrentAccessMemory(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(strategies.LeakyBucketConfig{Capacity: 10, LeakRate: 0.1}),
+		ratelimit.WithPrimaryStrategy(leakybucket.Config{Capacity: 10, LeakRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -281,7 +284,7 @@ func TestLeakyBucket_ConcurrentAccessPostgres(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(strategies.LeakyBucketConfig{Capacity: 10, LeakRate: 0.1}),
+		ratelimit.WithPrimaryStrategy(leakybucket.Config{Capacity: 10, LeakRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -341,7 +344,7 @@ func TestLeakyBucket_ConcurrentAccessRedis(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(strategies.LeakyBucketConfig{Capacity: 10, LeakRate: 0.1}),
+		ratelimit.WithPrimaryStrategy(leakybucket.Config{Capacity: 10, LeakRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -401,7 +404,7 @@ func TestTokenBucket_ConcurrentAccessMemory(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(strategies.TokenBucketConfig{BurstSize: 10, RefillRate: 0.1}),
+		ratelimit.WithPrimaryStrategy(tokenbucket.Config{BurstSize: 10, RefillRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -461,7 +464,7 @@ func TestTokenBucket_ConcurrentAccessPostgres(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(strategies.TokenBucketConfig{BurstSize: 10, RefillRate: 0.1}),
+		ratelimit.WithPrimaryStrategy(tokenbucket.Config{BurstSize: 10, RefillRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -521,7 +524,7 @@ func TestTokenBucket_ConcurrentAccessRedis(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(strategies.TokenBucketConfig{BurstSize: 10, RefillRate: 0.1}),
+		ratelimit.WithPrimaryStrategy(tokenbucket.Config{BurstSize: 10, RefillRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -581,9 +584,9 @@ func TestFixedWindow_ConcurrentAccessMemoryWithResult(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
+		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
 			Key: "test",
-			Tiers: map[string]strategies.FixedWindowTier{
+			Tiers: map[string]fixedwindow.Tier{
 				"default": {
 					Limit:  10,
 					Window: 5 * time.Second,
@@ -653,9 +656,9 @@ func TestFixedWindow_ConcurrentAccessPostgresWithResult(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
+		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
 			Key: "test",
-			Tiers: map[string]strategies.FixedWindowTier{
+			Tiers: map[string]fixedwindow.Tier{
 				"default": {
 					Limit:  10,
 					Window: 5 * time.Second,
@@ -725,9 +728,9 @@ func TestFixedWindow_ConcurrentAccessRedisWithResult(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
+		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
 			Key: "test",
-			Tiers: map[string]strategies.FixedWindowTier{
+			Tiers: map[string]fixedwindow.Tier{
 				"default": {
 					Limit:  10,
 					Window: 5 * time.Second,
@@ -797,7 +800,7 @@ func TestLeakyBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(strategies.LeakyBucketConfig{Capacity: 10, LeakRate: 0.1}),
+		ratelimit.WithPrimaryStrategy(leakybucket.Config{Capacity: 10, LeakRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -861,7 +864,7 @@ func TestLeakyBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(strategies.LeakyBucketConfig{Capacity: 10, LeakRate: 0.1}),
+		ratelimit.WithPrimaryStrategy(leakybucket.Config{Capacity: 10, LeakRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -925,7 +928,7 @@ func TestLeakyBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(strategies.LeakyBucketConfig{Capacity: 10, LeakRate: 0.1}),
+		ratelimit.WithPrimaryStrategy(leakybucket.Config{Capacity: 10, LeakRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -989,7 +992,7 @@ func TestTokenBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(strategies.TokenBucketConfig{BurstSize: 10, RefillRate: 0.1}),
+		ratelimit.WithPrimaryStrategy(tokenbucket.Config{BurstSize: 10, RefillRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -1053,7 +1056,7 @@ func TestTokenBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(strategies.TokenBucketConfig{BurstSize: 10, RefillRate: 0.1}),
+		ratelimit.WithPrimaryStrategy(tokenbucket.Config{BurstSize: 10, RefillRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)
@@ -1117,7 +1120,7 @@ func TestTokenBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(strategies.TokenBucketConfig{BurstSize: 10, RefillRate: 0.1}),
+		ratelimit.WithPrimaryStrategy(tokenbucket.Config{BurstSize: 10, RefillRate: 0.1}),
 		ratelimit.WithBackend(backend),
 	)
 	require.NoError(t, err)

@@ -6,7 +6,6 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends/memory"
-	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,7 +16,7 @@ func TestLeakyBucketAllowWithResult(t *testing.T) {
 
 	strategy := New(storage)
 
-	config := strategies.LeakyBucketConfig{
+	config := Config{
 		Key:      "test-user",
 		Capacity: 5,
 		LeakRate: 1.0, // 1 request per second
@@ -43,7 +42,7 @@ func TestLeakyBucketLeak(t *testing.T) {
 
 		strategy := New(storage)
 
-		config := strategies.LeakyBucketConfig{
+		config := Config{
 			Key:      "test-user-2",
 			Capacity: 3,
 			LeakRate: 1.0, // 1 request per second
@@ -77,7 +76,7 @@ func TestLeakyBucketGetResult(t *testing.T) {
 	storage := memory.New()
 	strategy := New(storage)
 
-	config := strategies.LeakyBucketConfig{
+	config := Config{
 		Key:      "result-test-user",
 		Capacity: 5,
 		LeakRate: 1.0, // 1 request per second
@@ -116,10 +115,6 @@ func TestLeakyBucketGetResult(t *testing.T) {
 	assert.NoError(t, err)
 	assert.False(t, result["default"].Allowed, "Request should be denied when bucket is full")
 
-	// Test invalid config type
-	_, err = strategy.GetResult(ctx, struct{}{})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "LeakyBucket strategy requires LeakyBucketConfig")
 }
 
 func TestLeakyBucketReset(t *testing.T) {
@@ -127,7 +122,7 @@ func TestLeakyBucketReset(t *testing.T) {
 	storage := memory.New()
 	strategy := New(storage)
 
-	config := strategies.LeakyBucketConfig{
+	config := Config{
 		Key:      "reset-test-user",
 		Capacity: 3,
 		LeakRate: 1.0, // 1 request per second
@@ -154,21 +149,4 @@ func TestLeakyBucketReset(t *testing.T) {
 	assert.NoError(t, err)
 	assert.True(t, result["default"].Allowed, "Request should be allowed after reset")
 
-	// Test invalid config type
-	err = strategy.Reset(ctx, struct{}{})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "LeakyBucket strategy requires LeakyBucketConfig")
-}
-
-func TestLeakyBucketInvalidConfig(t *testing.T) {
-	ctx := t.Context()
-	storage := memory.New()
-
-	strategy := New(storage)
-
-	// Try with wrong config type
-	result, err := strategy.Allow(ctx, struct{}{})
-	assert.Error(t, err)
-	assert.False(t, result["default"].Allowed)
-	assert.Contains(t, err.Error(), "LeakyBucket strategy requires LeakyBucketConfig")
 }

@@ -289,7 +289,7 @@ func (r *RateLimiter) parseAccessOptions(opts []AccessOption) (*accessOptions, e
 }
 
 // createPrimaryConfig creates strategy-specific configuration for the primary strategy
-func (r *RateLimiter) createPrimaryConfig(dynamicKey string) (any, error) {
+func (r *RateLimiter) createPrimaryConfig(dynamicKey string) (strategies.StrategyConfig, error) {
 	var keyBuilder strings.Builder
 	keyBuilder.Grow(len(r.config.BaseKey) + len(dynamicKey) + 1) // +1 for the colon
 	keyBuilder.WriteString(r.config.BaseKey)
@@ -300,26 +300,26 @@ func (r *RateLimiter) createPrimaryConfig(dynamicKey string) (any, error) {
 	primaryConfig := r.config.PrimaryConfig
 	switch primaryConfig.Name() {
 	case "fixed_window":
-		fixedConfig := primaryConfig.(strategies.FixedWindowConfig)
+		fixedConfig := primaryConfig.(fixedwindow.Config)
 		// Create new tiers map with updated key
-		newTiers := make(map[string]strategies.FixedWindowTier)
+		newTiers := make(map[string]fixedwindow.Tier)
 		maps.Copy(newTiers, fixedConfig.Tiers)
-		return strategies.FixedWindowConfig{
+		return fixedwindow.Config{
 			Key:   key,
 			Tiers: newTiers,
 		}, nil
 
 	case "token_bucket":
-		tokenConfig := primaryConfig.(strategies.TokenBucketConfig)
-		return strategies.TokenBucketConfig{
+		tokenConfig := primaryConfig.(tokenbucket.Config)
+		return tokenbucket.Config{
 			Key:        key,
 			BurstSize:  tokenConfig.BurstSize,
 			RefillRate: tokenConfig.RefillRate,
 		}, nil
 
 	case "leaky_bucket":
-		leakyConfig := primaryConfig.(strategies.LeakyBucketConfig)
-		return strategies.LeakyBucketConfig{
+		leakyConfig := primaryConfig.(leakybucket.Config)
+		return leakybucket.Config{
 			Key:      key,
 			Capacity: leakyConfig.Capacity,
 			LeakRate: leakyConfig.LeakRate,
@@ -331,7 +331,7 @@ func (r *RateLimiter) createPrimaryConfig(dynamicKey string) (any, error) {
 }
 
 // createSecondaryConfig creates strategy-specific configuration for the secondary strategy
-func (r *RateLimiter) createSecondaryConfig(dynamicKey string) (any, error) {
+func (r *RateLimiter) createSecondaryConfig(dynamicKey string) (strategies.StrategyConfig, error) {
 	if r.config.SecondaryConfig == nil {
 		return nil, fmt.Errorf("secondary strategy not configured")
 	}
@@ -347,16 +347,16 @@ func (r *RateLimiter) createSecondaryConfig(dynamicKey string) (any, error) {
 	secondaryConfig := r.config.SecondaryConfig
 	switch secondaryConfig.Name() {
 	case "token_bucket":
-		tokenConfig := secondaryConfig.(strategies.TokenBucketConfig)
-		return strategies.TokenBucketConfig{
+		tokenConfig := secondaryConfig.(tokenbucket.Config)
+		return tokenbucket.Config{
 			Key:        key,
 			BurstSize:  tokenConfig.BurstSize,
 			RefillRate: tokenConfig.RefillRate,
 		}, nil
 
 	case "leaky_bucket":
-		leakyConfig := secondaryConfig.(strategies.LeakyBucketConfig)
-		return strategies.LeakyBucketConfig{
+		leakyConfig := secondaryConfig.(leakybucket.Config)
+		return leakybucket.Config{
 			Key:      key,
 			Capacity: leakyConfig.Capacity,
 			LeakRate: leakyConfig.LeakRate,

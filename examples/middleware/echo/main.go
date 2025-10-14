@@ -8,7 +8,7 @@ import (
 
 	"github.com/ajiwo/ratelimit"
 	"github.com/ajiwo/ratelimit/backends/memory"
-	"github.com/ajiwo/ratelimit/strategies"
+	"github.com/ajiwo/ratelimit/strategies/fixedwindow"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
 )
@@ -18,7 +18,7 @@ func main() {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBackend(memory.New()),
 		ratelimit.WithPrimaryStrategy(
-			strategies.NewFixedWindowConfig("client").
+			fixedwindow.NewConfig("client").
 				AddTier("default", 10, time.Minute). // Allow 10 requests per minute
 				Build(),
 		),

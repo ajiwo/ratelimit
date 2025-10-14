@@ -9,6 +9,9 @@ import (
 
 	"github.com/ajiwo/ratelimit/backends/memory"
 	"github.com/ajiwo/ratelimit/strategies"
+	"github.com/ajiwo/ratelimit/strategies/fixedwindow"
+	"github.com/ajiwo/ratelimit/strategies/leakybucket"
+	"github.com/ajiwo/ratelimit/strategies/tokenbucket"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +21,7 @@ func TestRateLimiter_Allow_FixedWindow(t *testing.T) {
 	limiter, err := New(
 		WithBackend(backend),
 		WithPrimaryStrategy(
-			strategies.NewFixedWindowConfig("test:user:123").
+			fixedwindow.NewConfig("test:user:123").
 				AddTier("default", 5, time.Minute).
 				Build(),
 		),
@@ -44,7 +47,7 @@ func TestRateLimiter_Allow_TokenBucket(t *testing.T) {
 
 	limiter, err := New(
 		WithBackend(backend),
-		WithPrimaryStrategy(strategies.TokenBucketConfig{
+		WithPrimaryStrategy(tokenbucket.Config{
 			Key:        "test:user:456",
 			BurstSize:  10,
 			RefillRate: 1.0,
@@ -71,7 +74,7 @@ func TestRateLimiter_Allow_LeakyBucket(t *testing.T) {
 
 	limiter, err := New(
 		WithBackend(backend),
-		WithPrimaryStrategy(strategies.LeakyBucketConfig{
+		WithPrimaryStrategy(leakybucket.Config{
 			Key:      "test:user:789",
 			Capacity: 5,
 			LeakRate: 1.0,
@@ -98,7 +101,7 @@ func TestRateLimiter_GetStats(t *testing.T) {
 
 	limiter, err := New(
 		WithBackend(backend),
-		WithPrimaryStrategy(strategies.TokenBucketConfig{
+		WithPrimaryStrategy(tokenbucket.Config{
 			Key:        "test:stats:user",
 			BurstSize:  10,
 			RefillRate: 2.0,
@@ -132,7 +135,7 @@ func TestRateLimiter_Reset(t *testing.T) {
 
 	limiter, err := New(
 		WithBackend(backend),
-		WithPrimaryStrategy(strategies.TokenBucketConfig{
+		WithPrimaryStrategy(tokenbucket.Config{
 			Key:        "test:reset:user",
 			BurstSize:  5,
 			RefillRate: 1.0,
@@ -169,7 +172,7 @@ func TestRateLimiter_ConcurrentAccess(t *testing.T) {
 	limiter, err := New(
 		WithBackend(backend),
 		WithPrimaryStrategy(
-			strategies.NewFixedWindowConfig("test:concurrent:user").
+			fixedwindow.NewConfig("test:concurrent:user").
 				AddTier("default", 100, time.Minute).
 				Build(),
 		),
@@ -212,7 +215,7 @@ func TestRateLimiter_MultipleKeys(t *testing.T) {
 	limiter, err := New(
 		WithBackend(backend),
 		WithPrimaryStrategy(
-			strategies.NewFixedWindowConfig("test:multikey").
+			fixedwindow.NewConfig("test:multikey").
 				AddTier("default", 3, time.Minute).
 				Build(),
 		),
@@ -252,9 +255,9 @@ func TestRateLimiter_FixedWindow_MultiTier(t *testing.T) {
 	backend := memory.New()
 
 	// Create a multi-tier fixed window configuration
-	config := strategies.FixedWindowConfig{
+	config := fixedwindow.Config{
 		Key: "multitier:test",
-		Tiers: map[string]strategies.FixedWindowTier{
+		Tiers: map[string]fixedwindow.Tier{
 			"minute": {
 				Limit:  10, // Allow 10 requests per minute
 				Window: time.Minute,
@@ -308,7 +311,7 @@ func TestRateLimiter_TimeBehavior(t *testing.T) {
 	limiter, err := New(
 		WithBackend(backend),
 		WithPrimaryStrategy(
-			strategies.NewFixedWindowConfig("test:time:user").
+			fixedwindow.NewConfig("test:time:user").
 				AddTier("default", 3, 2*time.Second).
 				Build(),
 		),
@@ -351,7 +354,7 @@ func TestRateLimiter_InvalidConfiguration(t *testing.T) {
 
 		_, err := New(
 			WithBackend(backend),
-			WithPrimaryStrategy(strategies.TokenBucketConfig{
+			WithPrimaryStrategy(tokenbucket.Config{
 				BurstSize:  0, // Invalid
 				RefillRate: 1.0,
 			}),
@@ -364,11 +367,11 @@ func TestRateLimiter_InvalidConfiguration(t *testing.T) {
 
 		_, err := New(
 			WithBackend(backend),
-			WithPrimaryStrategy(strategies.TokenBucketConfig{
+			WithPrimaryStrategy(tokenbucket.Config{
 				BurstSize:  10,
 				RefillRate: 1.0,
 			}),
-			WithSecondaryStrategy(strategies.LeakyBucketConfig{
+			WithSecondaryStrategy(leakybucket.Config{
 				Capacity: 5,
 				LeakRate: 1.0,
 			}),
@@ -384,7 +387,7 @@ func TestRateLimiter_BackendOperations(t *testing.T) {
 	limiter, err := New(
 		WithBackend(backend),
 		WithPrimaryStrategy(
-			strategies.NewFixedWindowConfig("test:backend").
+			fixedwindow.NewConfig("test:backend").
 				AddTier("default", 10, time.Minute).
 				Build(),
 		),
@@ -416,18 +419,18 @@ func TestRateLimiter_MixedStrategyTypes(t *testing.T) {
 	}{
 		{
 			name:    "Fixed Window only",
-			primary: strategies.NewFixedWindowConfig("test").AddTier("default", 10, time.Minute).Build(),
-			option:  WithPrimaryStrategy(strategies.NewFixedWindowConfig("test").AddTier("default", 10, time.Minute).Build()),
+			primary: fixedwindow.NewConfig("test").AddTier("default", 10, time.Minute).Build(),
+			option:  WithPrimaryStrategy(fixedwindow.NewConfig("test").AddTier("default", 10, time.Minute).Build()),
 		},
 		{
 			name:    "Token Bucket only",
-			primary: strategies.TokenBucketConfig{Key: "test", BurstSize: 10, RefillRate: 1.0},
-			option:  WithPrimaryStrategy(strategies.TokenBucketConfig{Key: "test", BurstSize: 10, RefillRate: 1.0}),
+			primary: tokenbucket.Config{Key: "test", BurstSize: 10, RefillRate: 1.0},
+			option:  WithPrimaryStrategy(tokenbucket.Config{Key: "test", BurstSize: 10, RefillRate: 1.0}),
 		},
 		{
 			name:    "Leaky Bucket only",
-			primary: strategies.LeakyBucketConfig{Key: "test", Capacity: 10, LeakRate: 1.0},
-			option:  WithPrimaryStrategy(strategies.LeakyBucketConfig{Key: "test", Capacity: 10, LeakRate: 1.0}),
+			primary: leakybucket.Config{Key: "test", Capacity: 10, LeakRate: 1.0},
+			option:  WithPrimaryStrategy(leakybucket.Config{Key: "test", Capacity: 10, LeakRate: 1.0}),
 		},
 	}
 
@@ -457,11 +460,11 @@ func TestRateLimiter_DualStrategy(t *testing.T) {
 	limiter, err := New(
 		WithBackend(backend),
 		WithPrimaryStrategy(
-			strategies.NewFixedWindowConfig("test:dual").
+			fixedwindow.NewConfig("test:dual").
 				AddTier("default", 10, time.Minute).
 				Build(),
 		),
-		WithSecondaryStrategy(strategies.TokenBucketConfig{
+		WithSecondaryStrategy(tokenbucket.Config{
 			BurstSize:  5,
 			RefillRate: 0.5,
 		}),
@@ -495,11 +498,11 @@ func TestRateLimiter_DualStrategy_WithResults(t *testing.T) {
 	limiter, err := New(
 		WithBackend(backend),
 		WithPrimaryStrategy(
-			strategies.NewFixedWindowConfig("test:dual:results").
+			fixedwindow.NewConfig("test:dual:results").
 				AddTier("default", 20, time.Minute).
 				Build(),
 		),
-		WithSecondaryStrategy(strategies.TokenBucketConfig{
+		WithSecondaryStrategy(tokenbucket.Config{
 			BurstSize:  3,
 			RefillRate: 1.0,
 		}),
@@ -530,11 +533,11 @@ func TestDualStrategy_QuotaConsumption(t *testing.T) {
 		// Create dual strategy limiter: Fixed Window (primary) + Token Bucket (secondary)
 		limiter, err := New(
 			WithPrimaryStrategy(
-				strategies.NewFixedWindowConfig("api:test").
+				fixedwindow.NewConfig("api:test").
 					AddTier("default", 3, time.Minute).
 					Build(),
 			),
-			WithSecondaryStrategy(strategies.TokenBucketConfig{BurstSize: 1, RefillRate: 1.0}), // Very small burst (1), refill 1/sec
+			WithSecondaryStrategy(tokenbucket.Config{BurstSize: 1, RefillRate: 1.0}), // Very small burst (1), refill 1/sec
 			WithBackend(mem),
 		)
 		require.NoError(t, err)

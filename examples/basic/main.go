@@ -9,6 +9,7 @@ import (
 	"github.com/ajiwo/ratelimit"
 	"github.com/ajiwo/ratelimit/backends/memory"
 	"github.com/ajiwo/ratelimit/strategies"
+	"github.com/ajiwo/ratelimit/strategies/fixedwindow"
 )
 
 func main() {
@@ -23,7 +24,7 @@ func main() {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBackend(mem),
 		ratelimit.WithPrimaryStrategy(
-			strategies.NewFixedWindowConfig("user").
+			fixedwindow.NewConfig("user").
 				AddTier("default", 5, winDuration).
 				Build(),
 		),

@@ -1,0 +1,31 @@
+package leakybucket
+
+import (
+	"fmt"
+
+	"github.com/ajiwo/ratelimit/strategies"
+)
+
+type Config struct {
+	Key      string
+	Capacity int     // Maximum requests the bucket can hold
+	LeakRate float64 // Requests to process per second
+}
+
+func (c Config) Validate() error {
+	if c.Capacity <= 0 {
+		return fmt.Errorf("leaky bucket capacity must be positive, got %d", c.Capacity)
+	}
+	if c.LeakRate <= 0 {
+		return fmt.Errorf("leaky bucket leak rate must be positive, got %f", c.LeakRate)
+	}
+	return nil
+}
+
+func (c Config) Name() string {
+	return "leaky_bucket"
+}
+
+func (c Config) Capabilities() strategies.CapabilityFlags {
+	return strategies.CapPrimary | strategies.CapSecondary
+}

@@ -4,6 +4,12 @@ This is a Go library that implements rate limiting functionality with multiple a
 
 ## Features
 
+- **Core features:**
+  - Single strategy rate limiting
+  - Dual strategy support (primary + secondary smoother)
+  - Multi-tier rate limiting (fixed window with multiple tiers)
+  - Detailed statistics and result tracking
+  - Dynamic key support for multi-tenant scenarios
 - **Multiple rate limiting algorithms:**
   - Fixed Window
   - Token Bucket
@@ -12,12 +18,6 @@ This is a Go library that implements rate limiting functionality with multiple a
   - In-Memory (single instance)
   - Redis (distributed)
   - PostgreSQL (distributed)
-- **Advanced capabilities:**
-  - Single strategy rate limiting
-  - Dual strategy support (primary + secondary smoother)
-  - Multi-tier rate limiting (fixed window with multiple tiers)
-  - Detailed statistics and result tracking
-  - Dynamic key support for multi-tenant scenarios
 
 ## Installation
 
@@ -35,7 +35,7 @@ The library provides a high-level rate limiting interface that allows you to con
 import (
     "github.com/ajiwo/ratelimit"
     "github.com/ajiwo/ratelimit/backends/memory"
-    "github.com/ajiwo/ratelimit/strategies"
+    "github.com/ajiwo/ratelimit/strategies/fixedwindow"
 )
 
 // Create a backend instance
@@ -45,7 +45,7 @@ mem := memory.New()
 limiter, err := ratelimit.New(
     ratelimit.WithBackend(mem),
     ratelimit.WithPrimaryStrategy(
-        strategies.NewFixedWindowConfig("user:123").
+        fixedwindow.NewConfig("user:123").
             AddTier("default", 100, time.Hour).
             Build(),
     ),
@@ -87,7 +87,7 @@ The fixed window strategy now supports multi-tier configurations, allowing you t
 import (
     "github.com/ajiwo/ratelimit"
     "github.com/ajiwo/ratelimit/backends/memory"
-    "github.com/ajiwo/ratelimit/strategies"
+    "github.com/ajiwo/ratelimit/strategies/fixedwindow"
 )
 
 // Create a backend instance
@@ -96,9 +96,9 @@ mem := memory.New()
 // Create a multi-tier fixed window rate limiter
 limiter, err := ratelimit.New(
     ratelimit.WithBackend(mem),
-    ratelimit.WithPrimaryStrategy(strategies.FixedWindowConfig{
+    ratelimit.WithPrimaryStrategy(fixedwindow.Config{
         Key: "api:user123",
-        Tiers: map[string]strategies.FixedWindowTier{
+        Tiers: map[string]fixedwindow.Tier{
             "burst": {
                 Limit:  10,  // Allow 10 requests per minute
                 Window: time.Minute,
@@ -162,7 +162,8 @@ The library supports combining a primary strategy with an optional secondary buc
 import (
     "github.com/ajiwo/ratelimit"
     "github.com/ajiwo/ratelimit/backends/memory"
-    "github.com/ajiwo/ratelimit/strategies"
+    "github.com/ajiwo/ratelimit/strategies/fixedwindow"
+    "github.com/ajiwo/ratelimit/strategies/tokenbucket"
 )
 
 // Create a backend instance
@@ -173,12 +174,12 @@ limiter, err := ratelimit.New(
     ratelimit.WithBackend(mem),
     // Primary: strict rate limiting
     ratelimit.WithPrimaryStrategy(
-        strategies.NewFixedWindowConfig("api:user").
+        fixedwindow.NewConfig("api:user").
             AddTier("default", 100, time.Hour).
             Build(),
     ),
     // Secondary: burst smoother (5 burst, 0.1 req/sec refill)
-    ratelimit.WithSecondaryStrategy(strategies.TokenBucketConfig{
+    ratelimit.WithSecondaryStrategy(tokenbucket.Config{
         BurstSize:  5,
         RefillRate: 0.1,
     }),
@@ -218,18 +219,18 @@ for strategy, result := range results {
 4. **Final Decision:** Both strategies must allow the request
 
 **Supported primary strategies:**
-- `strategies.FixedWindowConfig` (supports multi-tier configurations)
-- `strategies.TokenBucketConfig`
-- `strategies.LeakyBucketConfig`
+- `fixedwindow.Config` (supports multi-tier configurations)
+- `tokenbucket.Config`
+- `leakybucket.Config`
 
 **Supported secondary strategies (smoothers):**
-- `strategies.TokenBucketConfig`
-- `strategies.LeakyBucketConfig`
+- `tokenbucket.Config`
+- `leakybucket.Config`
 
 **Multi-tier support:**
 - Fixed Window strategy supports multiple tiers with independent limits and windows
 - All tiers must allow for a request to be accepted
-- Use the builder pattern with `strategies.NewFixedWindowConfig(key).AddTier(name, limit, window).Build()` for both single and multi-tier configurations
+- Use the builder pattern with `fixedwindow.NewConfig(key).AddTier(name, limit, window).Build()` for both single and multi-tier configurations
 - For single-tier configurations, add a single tier named "default"
 
 **Available functional options:**
@@ -262,45 +263,41 @@ for strategy, result := range results {
 **Strategy Configuration Structures:**
 
 ```go
-// Fixed Window Strategy (Multi-tier Support)
-type FixedWindowConfig struct {
-    Key   string                             // Unique identifier for the rate limit
-    Tiers map[string]FixedWindowTier         // Multiple rate limit tiers
+// Fixed Window Strategy (Multi-tier Support) - in strategies/fixedwindow package
+type Config struct {
+    Key   string            // Unique identifier for the rate limit
+    Tiers map[string]Tier   // Multiple rate limit tiers
 }
 
-type FixedWindowTier struct {
-    Limit  int           // Number of requests allowed in the window
-    Window time.Duration // Time window (1 minute, 1 hour, 1 day, etc.)
+type Tier struct {
+    Limit  int              // Number of requests allowed in the window
+    Window time.Duration    // Time window (1 minute, 1 hour, 1 day, etc.)
 }
 
-// Token Bucket Strategy
-type TokenBucketConfig struct {
-    Key        string  // Unique identifier for the rate limit
-    BurstSize  int     // Maximum tokens the bucket can hold
-    RefillRate float64 // Tokens to add per second
+// Token Bucket Strategy - in strategies/tokenbucket package
+type Config struct {
+    Key        string       // Unique identifier for the rate limit
+    BurstSize  int          // Maximum tokens the bucket can hold
+    RefillRate float64      // Tokens to add per second
 }
 
-// Leaky Bucket Strategy
-type LeakyBucketConfig struct {
-    Key      string  // Unique identifier for the rate limit
-    Capacity int     // Maximum requests the bucket can hold
-    LeakRate float64 // Requests to process per second
+// Leaky Bucket Strategy - in strategies/leakybucket package
+type Config struct {
+    Key      string         // Unique identifier for the rate limit
+    Capacity int            // Maximum requests the bucket can hold
+    LeakRate float64        // Requests to process per second
 }
 
-// Tier configuration for multi-tier rate limiting
-type TierConfig struct {
-    Limit  int           // Number of requests allowed in the window
-    Window time.Duration // Time window (1 minute, 1 hour, 1 day, etc.)
-}
-
-// Helper functions for configuration
-func NewFixedWindowConfig(key string) *fixedWindowConfigBuilder  // Returns a builder for creating configurations
-func (b *fixedWindowConfigBuilder) AddTier(name string, limit int, window time.Duration) *fixedWindowConfigBuilder  // Add a tier to the configuration
-func (b *fixedWindowConfigBuilder) Build() FixedWindowConfig  // Build the final configuration
+// Helper functions for fixed window configuration
+func NewConfig(key string) *configBuilder  // Returns a builder for creating configurations
+func (b *configBuilder) AddTier(name string, limit int, window time.Duration) *configBuilder  // Add a tier to the configuration
+func (b *configBuilder) Build() Config  // Build the final configuration
 ```
 
 **Result Structure:**
 ```go
+package strategies
+// ...
 type Result struct {
     Allowed   bool      // Whether the request is allowed
     Remaining int       // Remaining requests in the current window
@@ -431,21 +428,21 @@ import (
     "github.com/ajiwo/ratelimit/strategies/fixedwindow"
 )
 
-// Create a memory backend instance
+// Create a backend instance
 storage := memory.New()
 
 // Create a fixed window strategy
 strategy := fixedwindow.New(storage)
 
 // Configure rate limiting (single-tier)
-config := strategies.NewFixedWindowConfig("user:123").
+config := fixedwindow.NewConfig("user:123").
     AddTier("default", 100, time.Minute).
     Build()
 
 // Or configure multi-tier rate limiting
-multiTierConfig := strategies.FixedWindowConfig{
+multiTierConfig := fixedwindow.Config{
     Key: "user:123",
-    Tiers: map[string]strategies.FixedWindowTier{
+    Tiers: map[string]fixedwindow.Tier{
         "burst": {
             Limit:  10,
             Window: time.Minute,
@@ -458,13 +455,12 @@ multiTierConfig := strategies.FixedWindowConfig{
 }
 
 // Check if request is allowed and get detailed results
-results, err := strategy.Allow(ctx, config) // Returns map[string]strategies.Result for multi-tier
+results, err := strategy.Allow(ctx, config)
 if err != nil {
     // Handle error
 }
 
-// For single-tier, access the "default" result
-result := results["default"]
+result := results["primary_default"]
 if result.Allowed {
     fmt.Printf("Request allowed, %d remaining, resets at %v\n",
         result.Remaining, result.Reset)
@@ -485,14 +481,19 @@ for tierName, tierResult := range results {
 #### Token Bucket
 
 ```go
-// Create a memory backend instance
+import (
+    "github.com/ajiwo/ratelimit/backends/memory"
+    "github.com/ajiwo/ratelimit/strategies/tokenbucket"
+)
+
+// Create a backend instance
 storage := memory.New()
 
 // Create a token bucket strategy
 strategy := tokenbucket.New(storage)
 
 // Configure rate limiting
-config := strategies.TokenBucketConfig{
+config := tokenbucket.Config{
     Key:        "user:123",
     BurstSize:  10,
     RefillRate: 1.0, // 1 token per second
@@ -517,14 +518,19 @@ if result.Allowed {
 #### Leaky Bucket
 
 ```go
-// Create a memory backend instance
+import (
+    "github.com/ajiwo/ratelimit/backends/memory"
+    "github.com/ajiwo/ratelimit/strategies/leakybucket"
+)
+
+// Create a backend instance
 storage := memory.New()
 
 // Create a leaky bucket strategy
 strategy := leakybucket.New(storage)
 
 // Configure rate limiting
-config := strategies.LeakyBucketConfig{
+config := leakybucket.Config{
     Key:      "user:123",
     Capacity: 50,  // Maximum requests the bucket can hold
     LeakRate: 2.0, // 2 requests per second leak rate

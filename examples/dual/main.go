@@ -9,6 +9,8 @@ import (
 	"github.com/ajiwo/ratelimit"
 	"github.com/ajiwo/ratelimit/backends/memory"
 	"github.com/ajiwo/ratelimit/strategies"
+	"github.com/ajiwo/ratelimit/strategies/fixedwindow"
+	"github.com/ajiwo/ratelimit/strategies/tokenbucket"
 )
 
 func main() {
@@ -22,12 +24,12 @@ func main() {
 		ratelimit.WithBackend(mem),
 		// Primary strategy: strict rate limiting
 		ratelimit.WithPrimaryStrategy(
-			strategies.NewFixedWindowConfig("user").
+			fixedwindow.NewConfig("user").
 				AddTier("default", 100, time.Hour).
 				Build(),
 		),
 		// Secondary strategy: burst smoother
-		ratelimit.WithSecondaryStrategy(strategies.TokenBucketConfig{
+		ratelimit.WithSecondaryStrategy(tokenbucket.Config{
 			BurstSize:  10,  // Allow up to 10 requests in a burst
 			RefillRate: 1.0, // Refill at 1 token per second
 		}),

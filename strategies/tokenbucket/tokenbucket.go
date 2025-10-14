@@ -32,9 +32,9 @@ func New(storage backends.Backend) *Strategy {
 }
 
 // GetResult returns detailed statistics for the current bucket state
-func (t *Strategy) GetResult(ctx context.Context, config any) (map[string]strategies.Result, error) {
-	// Type assert to TokenBucketConfig
-	tokenConfig, ok := config.(strategies.TokenBucketConfig)
+func (t *Strategy) GetResult(ctx context.Context, config strategies.StrategyConfig) (map[string]strategies.Result, error) {
+	// // Type assert to TokenBucketConfig
+	tokenConfig, ok := config.(Config)
 	if !ok {
 		return nil, fmt.Errorf("TokenBucket strategy requires TokenBucketConfig")
 	}
@@ -85,9 +85,9 @@ func (t *Strategy) GetResult(ctx context.Context, config any) (map[string]strate
 }
 
 // Reset resets the token bucket counter for the given key
-func (t *Strategy) Reset(ctx context.Context, config any) error {
+func (t *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) error {
 	// Type assert to TokenBucketConfig
-	tokenConfig, ok := config.(strategies.TokenBucketConfig)
+	tokenConfig, ok := config.(Config)
 	if !ok {
 		return fmt.Errorf("TokenBucket strategy requires TokenBucketConfig")
 	}
@@ -206,9 +206,9 @@ func calculateTBResetTime(now time.Time, bucket TokenBucket) time.Time {
 }
 
 // Allow checks if a request is allowed and returns detailed statistics
-func (t *Strategy) Allow(ctx context.Context, config any) (map[string]strategies.Result, error) {
-	// Type assert to TokenBucketConfig
-	tokenConfig, ok := config.(strategies.TokenBucketConfig)
+func (t *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) (map[string]strategies.Result, error) {
+	// // Type assert to TokenBucketConfig
+	tokenConfig, ok := config.(Config)
 	if !ok {
 		return nil, fmt.Errorf("TokenBucket strategy requires TokenBucketConfig")
 	}

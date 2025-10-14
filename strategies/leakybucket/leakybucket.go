@@ -32,9 +32,9 @@ func New(storage backends.Backend) *Strategy {
 }
 
 // GetResult returns detailed statistics for the current bucket state
-func (l *Strategy) GetResult(ctx context.Context, config any) (map[string]strategies.Result, error) {
+func (l *Strategy) GetResult(ctx context.Context, config strategies.StrategyConfig) (map[string]strategies.Result, error) {
 	// Type assert to LeakyBucketConfig
-	leakyConfig, ok := config.(strategies.LeakyBucketConfig)
+	leakyConfig, ok := config.(Config)
 	if !ok {
 		return nil, fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
 	}
@@ -85,9 +85,9 @@ func (l *Strategy) GetResult(ctx context.Context, config any) (map[string]strate
 }
 
 // Reset resets the leaky bucket counter for the given key
-func (l *Strategy) Reset(ctx context.Context, config any) error {
+func (l *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) error {
 	// Type assert to LeakyBucketConfig
-	leakyConfig, ok := config.(strategies.LeakyBucketConfig)
+	leakyConfig, ok := config.(Config)
 	if !ok {
 		return fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
 	}
@@ -205,9 +205,9 @@ func calculateLBResetTime(now time.Time, bucket LeakyBucket, capacity int) time.
 }
 
 // Allow checks if a request is allowed and returns detailed statistics
-func (l *Strategy) Allow(ctx context.Context, config any) (map[string]strategies.Result, error) {
+func (l *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) (map[string]strategies.Result, error) {
 	// Type assert to LeakyBucketConfig
-	leakyConfig, ok := config.(strategies.LeakyBucketConfig)
+	leakyConfig, ok := config.(Config)
 	if !ok {
 		return nil, fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
 	}

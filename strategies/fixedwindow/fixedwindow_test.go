@@ -7,7 +7,6 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends/memory"
-	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -17,7 +16,7 @@ func TestFixedWindow_Allow(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := strategies.NewFixedWindowConfig("test-key").
+		config := NewConfig("test-key").
 			AddTier("default", 5, time.Minute).
 			Build()
 
@@ -42,7 +41,7 @@ func TestFixedWindow_WindowReset(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := strategies.NewFixedWindowConfig("test-key").
+		config := NewConfig("test-key").
 			AddTier("default", 2, time.Second).
 			Build()
 
@@ -76,11 +75,11 @@ func TestFixedWindow_MultipleKeys(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config1 := strategies.NewFixedWindowConfig("user1").
+		config1 := NewConfig("user1").
 			AddTier("default", 1, time.Minute).
 			Build()
 
-		config2 := strategies.NewFixedWindowConfig("user2").
+		config2 := NewConfig("user2").
 			AddTier("default", 1, time.Minute).
 			Build()
 
@@ -103,25 +102,12 @@ func TestFixedWindow_MultipleKeys(t *testing.T) {
 	})
 }
 
-func TestFixedWindow_InvalidConfig(t *testing.T) {
-	storage := memory.New()
-	strategy := New(storage)
-
-	ctx := t.Context()
-
-	// Test with wrong config type
-	result, err := strategy.Allow(ctx, struct{}{})
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "requires FixedWindowConfig")
-	assert.False(t, result["default"].Allowed)
-}
-
 func TestFixedWindow_ZeroLimit(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := strategies.NewFixedWindowConfig("test-key").
+		config := NewConfig("test-key").
 			AddTier("default", 0, time.Minute).
 			Build()
 
@@ -139,7 +125,7 @@ func TestFixedWindow_GetResult(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := strategies.NewFixedWindowConfig("result-test-key").
+		config := NewConfig("result-test-key").
 			AddTier("default", 5, time.Minute).
 			Build()
 
@@ -183,10 +169,6 @@ func TestFixedWindow_GetResult(t *testing.T) {
 		assert.False(t, result["default"].Allowed, "Result should not be allowed when at limit")
 		assert.Equal(t, 0, result["default"].Remaining, "Remaining should be 0 when at limit")
 
-		// Test invalid config type
-		_, err = strategy.GetResult(ctx, struct{}{})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "requires FixedWindowConfig")
 	})
 }
 
@@ -195,7 +177,7 @@ func TestFixedWindow_Reset(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := strategies.NewFixedWindowConfig("reset-test-key").
+		config := NewConfig("reset-test-key").
 			AddTier("default", 2, time.Minute).
 			Build()
 
@@ -222,10 +204,6 @@ func TestFixedWindow_Reset(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, result["default"].Allowed, "Request after reset should be allowed")
 
-		// Test invalid config type
-		err = strategy.Reset(ctx, struct{}{})
-		require.Error(t, err)
-		assert.Contains(t, err.Error(), "requires FixedWindowConfig")
 	})
 }
 
@@ -234,7 +212,7 @@ func TestFixedWindow_ConcurrentAccess(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := strategies.NewFixedWindowConfig("concurrent-key").
+		config := NewConfig("concurrent-key").
 			AddTier("default", 5, time.Minute).
 			Build()
 
@@ -283,7 +261,7 @@ func TestFixedWindow_PreciseTiming(t *testing.T) {
 		storage := memory.New()
 		strategy := New(storage)
 
-		config := strategies.NewFixedWindowConfig("timing-key").
+		config := NewConfig("timing-key").
 			AddTier("default", 3, 5*time.Second).
 			Build()
 
