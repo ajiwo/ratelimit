@@ -7,9 +7,17 @@ import (
 	"time"
 )
 
+const (
+	// DefaultCleanupInterval is the default interval for cleaning up expired entries
+	DefaultCleanupInterval = 10 * time.Minute
+)
+
 type Backend struct {
-	locks  sync.Map // map[string]*sync.Mutex
-	values sync.Map // map[string]memoryValue
+	locks         sync.Map     // map[string]*sync.Mutex
+	values        sync.Map     // map[string]memoryValue
+	cleanupTicker *time.Ticker // Ticker for periodic cleanup
+	cleanupStop   chan bool    // Channel to stop cleanup goroutine
+	cleanupWG     sync.WaitGroup
 }
 
 type memoryValue struct {
@@ -17,11 +25,23 @@ type memoryValue struct {
 	expiration time.Time
 }
 
-// New initializes a new in-memory storage instance.
+// New initializes a new in-memory storage instance with default (10 minutes) cleanup.
 func New() *Backend {
-	return &Backend{
-		// sync.Map doesn't need initialization with make()
+	return NewWithCleanup(DefaultCleanupInterval)
+}
+
+// NewWithCleanup initializes a new in-memory storage instance with custom cleanup interval.
+// Set interval to 0 to disable automatic cleanup.
+func NewWithCleanup(interval time.Duration) *Backend {
+	m := &Backend{
+		cleanupStop: make(chan bool),
 	}
+
+	if interval > 0 {
+		m.startCleanupRoutine(interval)
+	}
+
+	return m
 }
 
 // getLock returns a mutex for the given key
@@ -79,6 +99,25 @@ func (m *Backend) Delete(ctx context.Context, key string) error {
 	return nil
 }
 
+// startCleanupRoutine starts the cleanup goroutine with the given interval
+func (m *Backend) startCleanupRoutine(interval time.Duration) {
+	m.cleanupTicker = time.NewTicker(interval)
+	m.cleanupWG.Go(m.runCleanupRoutine)
+}
+
+// runCleanupRoutine runs the cleanup goroutine
+func (m *Backend) runCleanupRoutine() {
+	for {
+		select {
+		case <-m.cleanupTicker.C:
+			m.cleanup()
+		case <-m.cleanupStop:
+			return
+		}
+	}
+}
+
+// cleanup removes expired entries from storage
 func (m *Backend) cleanup() {
 	now := time.Now()
 	var keysToDelete []string
@@ -101,9 +140,28 @@ func (m *Backend) cleanup() {
 	}
 }
 
+// Cleanup triggers an immediate cleanup of expired entries
+// This method is exported for manual cleanup when needed
+func (m *Backend) Cleanup() {
+	m.cleanup()
+}
+
 func (m *Backend) Close() error {
-	// For in-memory storage, just clear the map and return nil
-	// Note: We don't need to acquire individual locks here since we're replacing the entire map
+	// Stop the cleanup ticker if it's running
+	if m.cleanupTicker != nil {
+		m.cleanupTicker.Stop()
+		if m.cleanupStop != nil {
+			select {
+			case <-m.cleanupStop:
+				// Channel already closed
+			default:
+				close(m.cleanupStop)
+			}
+		}
+	}
+
+	m.cleanupWG.Wait()
+
 	m.values = sync.Map{} // Clear the values map
 	m.locks = sync.Map{}  // Clear the locks map
 	return nil

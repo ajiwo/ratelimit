@@ -15,6 +15,7 @@ func TestTokenBucket_GetResult(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
 		storage := memory.New()
+		defer storage.Close()
 		strategy := New(storage)
 
 		config := Config{
@@ -61,6 +62,7 @@ func TestTokenBucket_Reset(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
 		storage := memory.New()
+		defer storage.Close()
 		strategy := New(storage)
 
 		config := Config{
@@ -98,6 +100,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
 			storage := memory.New()
+			defer storage.Close()
 			strategy := New(storage)
 
 			config := Config{
@@ -117,6 +120,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
 			storage := memory.New()
+			defer storage.Close()
 			strategy := New(storage)
 
 			config := Config{
@@ -144,6 +148,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
 			storage := memory.New()
+			defer storage.Close()
 			strategy := New(storage)
 
 			config := Config{
@@ -180,6 +185,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
 			storage := memory.New()
+			defer storage.Close()
 			strategy := New(storage)
 
 			config1 := Config{
@@ -224,6 +230,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
 			storage := memory.New()
+			defer storage.Close()
 			strategy := New(storage)
 
 			config := Config{
@@ -259,6 +266,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 func TestTokenBucket_ConcurrentAccess(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := memory.New()
+		defer storage.Close()
 		strategy := New(storage)
 
 		config := Config{

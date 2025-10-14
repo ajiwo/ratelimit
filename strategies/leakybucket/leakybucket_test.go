@@ -13,6 +13,7 @@ import (
 func TestLeakyBucketAllowWithResult(t *testing.T) {
 	ctx := t.Context()
 	storage := memory.New()
+	defer storage.Close()
 
 	strategy := New(storage)
 
@@ -39,6 +40,7 @@ func TestLeakyBucketLeak(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
 		storage := memory.New()
+		defer storage.Close()
 
 		strategy := New(storage)
 
@@ -74,6 +76,7 @@ func TestLeakyBucketLeak(t *testing.T) {
 func TestLeakyBucketGetResult(t *testing.T) {
 	ctx := t.Context()
 	storage := memory.New()
+	defer storage.Close()
 	strategy := New(storage)
 
 	config := Config{
@@ -120,6 +123,7 @@ func TestLeakyBucketGetResult(t *testing.T) {
 func TestLeakyBucketReset(t *testing.T) {
 	ctx := t.Context()
 	storage := memory.New()
+	defer storage.Close()
 	strategy := New(storage)
 
 	config := Config{

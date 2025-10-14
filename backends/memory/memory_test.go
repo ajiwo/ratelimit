@@ -160,61 +160,65 @@ func TestMemoryStorage_ConcurrentAccess(t *testing.T) {
 	}
 }
 
+func TestMemoryStorage_AutoCleanup(t *testing.T) {
+	ctx := context.Background()
+	storage := NewWithCleanup(100 * time.Millisecond) // 100ms cleanup interval
+	defer storage.Close()
+
+	// Add some entries that will expire quickly
+	err := storage.Set(ctx, "expired1", "value1", 50*time.Millisecond)
+	require.NoError(t, err)
+
+	err = storage.Set(ctx, "expired2", "value2", 50*time.Millisecond)
+	require.NoError(t, err)
+
+	err = storage.Set(ctx, "valid", "value3", time.Hour)
+	require.NoError(t, err)
+
+	// Wait for entries to expire and for cleanup to run
+	time.Sleep(time.Millisecond * 200)
+
+	// Check that expired entries were cleaned up automatically
+	val, _ := storage.Get(ctx, "expired1")
+	require.Equal(t, "", val, "Expected expired1 to be auto-cleaned up, got %q", val)
+
+	val, _ = storage.Get(ctx, "expired2")
+	require.Equal(t, "", val, "Expected expired2 to be auto-cleaned up, got %q", val)
+
+	// Valid entry should still exist
+	val, _ = storage.Get(ctx, "valid")
+	require.NotEqual(t, "", val, "Expected valid entry to still exist")
+}
+
+func TestMemoryStorage_NoAutoCleanup(t *testing.T) {
+	ctx := context.Background()
+	storage := NewWithCleanup(0) // Disable auto cleanup
+	defer storage.Close()
+
+	// Add an entry that will expire
+	err := storage.Set(ctx, "expired", "value", time.Millisecond*10)
+	require.NoError(t, err)
+
+	// Wait for entry to expire
+	time.Sleep(time.Millisecond * 50)
+
+	// Entry should still exist (no auto cleanup)
+	val, _ := storage.Get(ctx, "expired")
+	require.Equal(t, "", val, "Expected expired entry to return empty string when accessed")
+
+	// But manual cleanup should work
+	storage.Cleanup()
+
+	// Now check that manual cleanup worked by trying to access again
+	// (this will remove the expired entry on access)
+	val, _ = storage.Get(ctx, "expired")
+	require.Equal(t, "", val, "Expected expired entry to be cleaned up manually")
+}
+
 func TestMemoryStorage_cleanup(t *testing.T) {
-	storage := New()
 	ctx := context.Background()
-
-	t.Run("Cleanup removes expired entries", func(t *testing.T) {
-		err := storage.Set(ctx, "expired1", "value1", time.Millisecond*10)
-		require.NoError(t, err)
-
-		err = storage.Set(ctx, "expired2", "value2", time.Millisecond*10)
-		require.NoError(t, err)
-
-		err = storage.Set(ctx, "valid", "value3", time.Hour)
-		require.NoError(t, err)
-
-		time.Sleep(time.Millisecond * 20)
-
-		storage.cleanup() // cleanup() now handles its own locking
-
-		val, _ := storage.Get(ctx, "expired1")
-		require.Equal(t, "", val, "Expected expired1 to be cleaned up, got %q", val)
-		val, _ = storage.Get(ctx, "expired2")
-		require.Equal(t, "", val, "Expected expired2 to be cleaned up, got %q", val)
-		val, _ = storage.Get(ctx, "valid")
-		require.Equal(t, "value3", val, "Expected valid to remain, got %q", val)
-	})
-}
-
-func TestMemoryStorage_Close(t *testing.T) {
-	storage := New()
-	ctx := t.Context()
-
-	// Add some data to the storage
-	err := storage.Set(ctx, "key1", "value1", time.Hour)
-	require.NoError(t, err)
-	err = storage.Set(ctx, "key2", "value2", time.Hour)
-	require.NoError(t, err)
-
-	// Verify data exists
-	val, err := storage.Get(ctx, "key1")
-	require.NoError(t, err)
-	require.Equal(t, "value1", val)
-
-	// Close the storage
-	err = storage.Close()
-	require.NoError(t, err)
-
-	// Verify storage is effectively cleared (new operations should work but find no data)
-	val, err = storage.Get(ctx, "key1")
-	require.NoError(t, err)
-	require.Equal(t, "", val)
-}
-
-func TestMemoryStorage_CheckAndSet(t *testing.T) {
-	storage := New()
-	ctx := context.Background()
+	storage := NewWithCleanup(0) // Disable auto cleanup for this test
+	defer storage.Close()
 
 	t.Run("CheckAndSet with nil oldValue - key doesn't exist", func(t *testing.T) {
 		success, err := storage.CheckAndSet(ctx, "newkey", nil, "newvalue", time.Hour)

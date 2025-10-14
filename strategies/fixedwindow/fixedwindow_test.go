@@ -14,6 +14,7 @@ import (
 func TestFixedWindow_Allow(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := memory.New()
+		defer storage.Close()
 		strategy := New(storage)
 
 		config := NewConfig("test-key").
@@ -39,6 +40,7 @@ func TestFixedWindow_Allow(t *testing.T) {
 func TestFixedWindow_WindowReset(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := memory.New()
+		defer storage.Close()
 		strategy := New(storage)
 
 		config := NewConfig("test-key").
@@ -73,6 +75,7 @@ func TestFixedWindow_WindowReset(t *testing.T) {
 func TestFixedWindow_MultipleKeys(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := memory.New()
+		defer storage.Close()
 		strategy := New(storage)
 
 		config1 := NewConfig("user1").
@@ -105,6 +108,7 @@ func TestFixedWindow_MultipleKeys(t *testing.T) {
 func TestFixedWindow_ZeroLimit(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := memory.New()
+		defer storage.Close()
 		strategy := New(storage)
 
 		config := NewConfig("test-key").
@@ -123,6 +127,7 @@ func TestFixedWindow_ZeroLimit(t *testing.T) {
 func TestFixedWindow_GetResult(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := memory.New()
+		defer storage.Close()
 		strategy := New(storage)
 
 		config := NewConfig("result-test-key").
@@ -175,6 +180,7 @@ func TestFixedWindow_GetResult(t *testing.T) {
 func TestFixedWindow_Reset(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := memory.New()
+		defer storage.Close()
 		strategy := New(storage)
 
 		config := NewConfig("reset-test-key").
@@ -210,6 +216,7 @@ func TestFixedWindow_Reset(t *testing.T) {
 func TestFixedWindow_ConcurrentAccess(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := memory.New()
+		defer storage.Close()
 		strategy := New(storage)
 
 		config := NewConfig("concurrent-key").
@@ -259,6 +266,7 @@ func TestFixedWindow_ConcurrentAccess(t *testing.T) {
 func TestFixedWindow_PreciseTiming(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := memory.New()
+		defer storage.Close()
 		strategy := New(storage)
 
 		config := NewConfig("timing-key").

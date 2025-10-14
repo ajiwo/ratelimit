@@ -18,6 +18,7 @@ func TestGCRA_Allow(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
 			storage := memory.New()
+			defer storage.Close()
 			strategy := New(storage)
 
 			config := Config{
@@ -37,6 +38,7 @@ func TestGCRA_Allow(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
 			storage := memory.New()
+			defer storage.Close()
 			strategy := New(storage)
 
 			config := Config{
@@ -64,6 +66,7 @@ func TestGCRA_Allow(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
 			storage := memory.New()
+			defer storage.Close()
 			strategy := New(storage)
 
 			config1 := Config{
@@ -108,6 +111,7 @@ func TestGCRA_Allow(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
 			storage := memory.New()
+			defer storage.Close()
 			strategy := New(storage)
 
 			config := Config{
@@ -149,6 +153,7 @@ func TestGCRA_Allow(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
 			storage := memory.New()
+			defer storage.Close()
 			strategy := New(storage)
 
 			config := Config{
@@ -185,6 +190,7 @@ func TestGCRA_Allow(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
 			storage := memory.New()
+			defer storage.Close()
 			strategy := New(storage)
 
 			config := Config{
@@ -221,6 +227,7 @@ func TestGCRA_GetResult(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
 		storage := memory.New()
+		defer storage.Close()
 		strategy := New(storage)
 
 		config := Config{
@@ -266,6 +273,7 @@ func TestGCRA_Reset(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
 		storage := memory.New()
+		defer storage.Close()
 		strategy := New(storage)
 
 		config := Config{
@@ -300,6 +308,7 @@ func TestGCRA_Reset(t *testing.T) {
 func TestGCRA_ConcurrentAccess(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := memory.New()
+		defer storage.Close()
 		strategy := New(storage)
 
 		config := Config{
@@ -367,6 +376,7 @@ func TestGCRA_EmissionIntervalCalculation(t *testing.T) {
 			synctest.Test(t, func(t *testing.T) {
 				ctx := t.Context()
 				storage := memory.New()
+				defer storage.Close()
 				strategy := New(storage)
 
 				config := Config{
