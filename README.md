@@ -460,7 +460,7 @@ if err != nil {
     // Handle error
 }
 
-result := results["primary_default"]
+result := results["default"]
 if result.Allowed {
     fmt.Printf("Request allowed, %d remaining, resets at %v\n",
         result.Remaining, result.Reset)

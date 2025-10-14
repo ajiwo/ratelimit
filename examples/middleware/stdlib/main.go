@@ -71,7 +71,7 @@ func middleware(limiter *ratelimit.RateLimiter, next http.Handler) http.Handler 
 				ratelimit.WithKey(clientID),
 			)
 			if err == nil && len(stats) > 0 {
-				result := stats["primary_default"]
+				result := stats["default"]
 				w.Header().Set("X-RateLimit-Limit", "10")
 				w.Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", result.Remaining))
 				w.Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", result.Reset.Unix()))

@@ -1,0 +1,228 @@
+package strategies
+
+import (
+	"context"
+	"fmt"
+
+	"github.com/ajiwo/ratelimit/backends"
+)
+
+// CompositeConfig represents a dual-strategy configuration
+type CompositeConfig struct {
+	BaseKey   string
+	Primary   StrategyConfig
+	Secondary StrategyConfig
+}
+
+func (c CompositeConfig) Validate() error {
+	if c.BaseKey == "" {
+		return fmt.Errorf("composite config base key cannot be empty")
+	}
+	if c.Primary == nil {
+		return fmt.Errorf("composite config primary strategy cannot be nil")
+	}
+	if c.Secondary == nil {
+		return fmt.Errorf("composite config secondary strategy cannot be nil")
+	}
+
+	// Validate individual configs
+	if err := c.Primary.Validate(); err != nil {
+		return fmt.Errorf("primary config validation failed: %w", err)
+	}
+	if err := c.Secondary.Validate(); err != nil {
+		return fmt.Errorf("secondary config validation failed: %w", err)
+	}
+
+	// Check capabilities
+	if !c.Primary.Capabilities().Has(CapPrimary) {
+		return fmt.Errorf("primary strategy must support primary capability")
+	}
+	if !c.Secondary.Capabilities().Has(CapSecondary) {
+		return fmt.Errorf("secondary strategy must support secondary capability")
+	}
+
+	return nil
+}
+
+func (c CompositeConfig) Name() string {
+	return fmt.Sprintf("composite(%s+%s)", c.Primary.Name(), c.Secondary.Name())
+}
+
+func (c CompositeConfig) Capabilities() CapabilityFlags {
+	return CapPrimary | CapSecondary
+}
+
+func (c CompositeConfig) GetRole() StrategyRole {
+	return RolePrimary // Composite always acts as primary
+}
+
+func (c CompositeConfig) WithRole(role StrategyRole) StrategyConfig {
+	// Composite strategies don't change roles
+	return c
+}
+
+// compositeStrategy implements dual-strategy behavior
+type compositeStrategy struct {
+	storage   backends.Backend
+	primary   Strategy
+	secondary Strategy
+}
+
+// NewComposite creates a new composite strategy
+func NewComposite(storage backends.Backend) Strategy {
+	return &compositeStrategy{
+		storage: storage,
+	}
+}
+
+// SetPrimaryStrategy sets the primary strategy instance
+func (cs *compositeStrategy) SetPrimaryStrategy(strategy Strategy) {
+	cs.primary = strategy
+}
+
+// SetSecondaryStrategy sets the secondary strategy instance
+func (cs *compositeStrategy) SetSecondaryStrategy(strategy Strategy) {
+	cs.secondary = strategy
+}
+
+// Allow implements the dual-strategy logic
+func (cs *compositeStrategy) Allow(ctx context.Context, config StrategyConfig) (map[string]Result, error) {
+	compositeConfig, ok := config.(CompositeConfig)
+	if !ok {
+		return nil, fmt.Errorf("composite strategy requires CompositeConfig")
+	}
+
+	// Ensure strategies are set
+	if cs.primary == nil || cs.secondary == nil {
+		return nil, fmt.Errorf("composite strategy requires both primary and secondary strategies to be set")
+	}
+
+	results := make(map[string]Result)
+
+	// Step 1: Check primary strategy (no consumption yet)
+	primaryConfig := cs.createPrimaryConfig(compositeConfig)
+	primaryResults, err := cs.primary.GetResult(ctx, primaryConfig)
+	if err != nil {
+		return nil, fmt.Errorf("primary strategy check failed: %w", err)
+	}
+
+	// Check if all primary tiers allow the request
+	allAllowed := true
+	for tierName, result := range primaryResults {
+		results["primary_"+tierName] = result
+		if !result.Allowed {
+			allAllowed = false
+		}
+	}
+
+	// If primary denies, don't check secondary
+	if !allAllowed {
+		return results, nil
+	}
+
+	// Step 2: Check secondary strategy (no consumption yet)
+	secondaryConfig := cs.createSecondaryConfig(compositeConfig)
+	secondaryResults, err := cs.secondary.GetResult(ctx, secondaryConfig)
+	if err != nil {
+		return nil, fmt.Errorf("secondary strategy check failed: %w", err)
+	}
+
+	// Check if all secondary tiers allow the request
+	secondaryAllAllowed := true
+	for tierName, result := range secondaryResults {
+		results["secondary_"+tierName] = result
+		if !result.Allowed {
+			secondaryAllAllowed = false
+		}
+	}
+
+	// If secondary denies, don't consume from either strategy
+	if !secondaryAllAllowed {
+		return results, nil
+	}
+
+	// Step 3: Both strategies allow, now consume quota from both
+	_, err = cs.primary.Allow(ctx, primaryConfig)
+	if err != nil {
+		return nil, fmt.Errorf("primary strategy quota consumption failed: %w", err)
+	}
+
+	_, err = cs.secondary.Allow(ctx, secondaryConfig)
+	if err != nil {
+		return nil, fmt.Errorf("secondary strategy quota consumption failed: %w", err)
+	}
+
+	return results, nil
+}
+
+// GetResult returns current state without consuming quota
+func (cs *compositeStrategy) GetResult(ctx context.Context, config StrategyConfig) (map[string]Result, error) {
+	compositeConfig, ok := config.(CompositeConfig)
+	if !ok {
+		return nil, fmt.Errorf("composite strategy requires CompositeConfig")
+	}
+
+	if cs.primary == nil || cs.secondary == nil {
+		return nil, fmt.Errorf("composite strategy requires both primary and secondary strategies to be set")
+	}
+
+	results := make(map[string]Result)
+
+	// Get primary results
+	primaryConfig := cs.createPrimaryConfig(compositeConfig)
+	primaryResults, err := cs.primary.GetResult(ctx, primaryConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get primary results: %w", err)
+	}
+	for key, result := range primaryResults {
+		results["primary_"+key] = result
+	}
+
+	// Get secondary results
+	secondaryConfig := cs.createSecondaryConfig(compositeConfig)
+	secondaryResults, err := cs.secondary.GetResult(ctx, secondaryConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get secondary results: %w", err)
+	}
+	for key, result := range secondaryResults {
+		results["secondary_"+key] = result
+	}
+
+	return results, nil
+}
+
+// Reset resets both strategies
+func (cs *compositeStrategy) Reset(ctx context.Context, config StrategyConfig) error {
+	compositeConfig, ok := config.(CompositeConfig)
+	if !ok {
+		return fmt.Errorf("composite strategy requires CompositeConfig")
+	}
+
+	if cs.primary == nil || cs.secondary == nil {
+		return fmt.Errorf("composite strategy requires both primary and secondary strategies to be set")
+	}
+
+	// Reset primary strategy
+	primaryConfig := cs.createPrimaryConfig(compositeConfig)
+	if err := cs.primary.Reset(ctx, primaryConfig); err != nil {
+		return fmt.Errorf("failed to reset primary strategy: %w", err)
+	}
+
+	// Reset secondary strategy
+	secondaryConfig := cs.createSecondaryConfig(compositeConfig)
+	if err := cs.secondary.Reset(ctx, secondaryConfig); err != nil {
+		return fmt.Errorf("failed to reset secondary strategy: %w", err)
+	}
+
+	return nil
+}
+
+// createPrimaryConfig creates a role-aware config for the primary strategy
+func (cs *compositeStrategy) createPrimaryConfig(compositeConfig CompositeConfig) StrategyConfig {
+	return compositeConfig.Primary.WithRole(RolePrimary)
+}
+
+// createSecondaryConfig creates a role-aware config for the secondary strategy
+func (cs *compositeStrategy) createSecondaryConfig(compositeConfig CompositeConfig) StrategyConfig {
+	return compositeConfig.Secondary.WithRole(RoleSecondary)
+}

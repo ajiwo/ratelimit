@@ -10,6 +10,7 @@ type Config struct {
 	Key        string
 	BurstSize  int     // Maximum tokens the bucket can hold
 	RefillRate float64 // Tokens to add per second
+	role       strategies.StrategyRole
 }
 
 func (c Config) Validate() error {
@@ -28,4 +29,13 @@ func (c Config) Name() string {
 
 func (c Config) Capabilities() strategies.CapabilityFlags {
 	return strategies.CapPrimary | strategies.CapSecondary
+}
+
+func (c Config) GetRole() strategies.StrategyRole {
+	return c.role
+}
+
+func (c Config) WithRole(role strategies.StrategyRole) strategies.StrategyConfig {
+	c.role = role
+	return c
 }

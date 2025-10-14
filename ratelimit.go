@@ -17,9 +17,8 @@ type Limiter = RateLimiter
 
 // RateLimiter implements single or dual strategy rate limiting
 type RateLimiter struct {
-	config            Config
-	primaryStrategy   strategies.Strategy
-	secondaryStrategy strategies.Strategy
+	config          Config
+	primaryStrategy strategies.Strategy
 }
 
 // New creates a new rate limiter with functional options
@@ -72,41 +71,31 @@ func (r *RateLimiter) GetStats(opts ...AccessOption) (map[string]strategies.Resu
 		return nil, fmt.Errorf("failed to parse access options: %w", err)
 	}
 
-	stats := make(map[string]strategies.Result)
-
-	// Get stats from primary strategy
-	primaryConfig, err := r.createPrimaryConfig(accessOpts.key)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create primary config: %w", err)
-	}
-
-	primaryResults, err := r.primaryStrategy.GetResult(accessOpts.ctx, primaryConfig)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get stats from primary strategy: %w", err)
-	}
-	// Merge strategy results into our stats map
-	for key, result := range primaryResults {
-		stats["primary_"+key] = result
-	}
-
-	// Get stats from secondary strategy if configured
-	if r.secondaryStrategy != nil {
-		secondaryConfig, err := r.createSecondaryConfig(accessOpts.key)
+	// Create the appropriate strategy config
+	var strategyConfig strategies.StrategyConfig
+	if r.config.SecondaryConfig != nil {
+		// Composite strategy case - create composite config
+		strategyConfig = strategies.CompositeConfig{
+			BaseKey:   r.config.BaseKey,
+			Primary:   r.config.PrimaryConfig,
+			Secondary: r.config.SecondaryConfig,
+		}
+	} else {
+		// Single strategy case - create role-aware config
+		var err error
+		strategyConfig, err = r.createPrimaryConfig(accessOpts.key)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create secondary config: %w", err)
-		}
-
-		secondaryResults, err := r.secondaryStrategy.GetResult(accessOpts.ctx, secondaryConfig)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get stats from secondary strategy: %w", err)
-		}
-		// Merge strategy results into our stats map
-		for key, result := range secondaryResults {
-			stats["secondary_"+key] = result
+			return nil, fmt.Errorf("failed to create primary config: %w", err)
 		}
 	}
 
-	return stats, nil
+	// Get stats from the strategy (composite or single)
+	results, err := r.primaryStrategy.GetResult(accessOpts.ctx, strategyConfig)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get stats: %w", err)
+	}
+
+	return results, nil
 }
 
 // GetBackend returns the storage backend used by this rate limiter
@@ -127,26 +116,27 @@ func (r *RateLimiter) Reset(opts ...AccessOption) error {
 		return fmt.Errorf("failed to parse access options: %w", err)
 	}
 
-	// Reset primary strategy
-	primaryConfig, err := r.createPrimaryConfig(accessOpts.key)
-	if err != nil {
-		return fmt.Errorf("failed to create primary config: %w", err)
-	}
-
-	if err := r.primaryStrategy.Reset(accessOpts.ctx, primaryConfig); err != nil {
-		return fmt.Errorf("failed to reset primary strategy: %w", err)
-	}
-
-	// Reset secondary strategy if configured
-	if r.secondaryStrategy != nil {
-		secondaryConfig, err := r.createSecondaryConfig(accessOpts.key)
+	// Create the appropriate strategy config
+	var strategyConfig strategies.StrategyConfig
+	if r.config.SecondaryConfig != nil {
+		// Composite strategy case - create composite config
+		strategyConfig = strategies.CompositeConfig{
+			BaseKey:   r.config.BaseKey,
+			Primary:   r.config.PrimaryConfig,
+			Secondary: r.config.SecondaryConfig,
+		}
+	} else {
+		// Single strategy case - create role-aware config
+		var err error
+		strategyConfig, err = r.createPrimaryConfig(accessOpts.key)
 		if err != nil {
-			return fmt.Errorf("failed to create secondary config: %w", err)
+			return fmt.Errorf("failed to create primary config: %w", err)
 		}
+	}
 
-		if err := r.secondaryStrategy.Reset(accessOpts.ctx, secondaryConfig); err != nil {
-			return fmt.Errorf("failed to reset secondary strategy: %w", err)
-		}
+	// Reset the strategy (composite or single)
+	if err := r.primaryStrategy.Reset(accessOpts.ctx, strategyConfig); err != nil {
+		return fmt.Errorf("failed to reset strategy: %w", err)
 	}
 
 	return nil
@@ -169,103 +159,36 @@ func (r *RateLimiter) allowWithResult(opts ...AccessOption) (bool, map[string]st
 		return false, nil, fmt.Errorf("failed to parse access options: %w", err)
 	}
 
-	results := make(map[string]strategies.Result)
-
-	// Handle dual strategy case
-	if r.secondaryStrategy != nil {
-		return r.handleDualStrategy(accessOpts, results)
-	}
-
-	// Handle single strategy case
-	return r.handleSingleStrategy(accessOpts, results)
-}
-
-// handleDualStrategy handles dual strategy (primary + secondary)
-func (r *RateLimiter) handleDualStrategy(accessOpts *accessOptions, results map[string]strategies.Result) (bool, map[string]strategies.Result, error) {
-	// First check primary strategy using GetResult (no quota consumption)
-	primaryConfig, err := r.createPrimaryConfig(accessOpts.key)
-	if err != nil {
-		return false, nil, fmt.Errorf("failed to create primary config: %w", err)
-	}
-
-	primaryResults, err := r.primaryStrategy.GetResult(accessOpts.ctx, primaryConfig)
-	if err != nil {
-		return false, nil, fmt.Errorf("primary strategy check failed: %w", err)
-	}
-
-	// Check if all tiers allow the request
-	allAllowed := true
-	for tierName, result := range primaryResults {
-		// Merge all strategy results
-		results["primary_"+tierName] = result
-		if !result.Allowed {
-			allAllowed = false
+	// Create the appropriate strategy config
+	var strategyConfig strategies.StrategyConfig
+	if r.config.SecondaryConfig != nil {
+		// Composite strategy case - create composite config
+		strategyConfig = strategies.CompositeConfig{
+			BaseKey:   r.config.BaseKey,
+			Primary:   r.config.PrimaryConfig,
+			Secondary: r.config.SecondaryConfig,
+		}
+	} else {
+		// Single strategy case - create role-aware config
+		var err error
+		strategyConfig, err = r.createPrimaryConfig(accessOpts.key)
+		if err != nil {
+			return false, nil, fmt.Errorf("failed to create primary config: %w", err)
 		}
 	}
 
-	// If any tier doesn't allow, don't check secondary
-	if !allAllowed {
-		return false, results, nil
-	}
-
-	// Primary allowed, now check secondary strategy using GetResult
-	secondaryConfig, err := r.createSecondaryConfig(accessOpts.key)
+	// Use the strategy (composite or single)
+	results, err := r.primaryStrategy.Allow(accessOpts.ctx, strategyConfig)
 	if err != nil {
-		return false, nil, fmt.Errorf("failed to create secondary config: %w", err)
+		return false, nil, fmt.Errorf("strategy check failed: %w", err)
 	}
 
-	secondaryResults, err := r.secondaryStrategy.GetResult(accessOpts.ctx, secondaryConfig)
-	if err != nil {
-		return false, nil, fmt.Errorf("secondary strategy check failed: %w", err)
-	}
-
-	// Check if all secondary tiers allow the request
-	secondaryAllAllowed := true
-	for tierName, result := range secondaryResults {
-		// Merge all strategy results
-		results["secondary_"+tierName] = result
-		if !result.Allowed {
-			secondaryAllAllowed = false
-		}
-	}
-
-	// If any secondary tier doesn't allow, don't consume from either strategy
-	if !secondaryAllAllowed {
-		return false, results, nil
-	}
-
-	// Both strategies allow, now consume quota from both
-	if _, err := r.primaryStrategy.Allow(accessOpts.ctx, primaryConfig); err != nil {
-		return false, nil, fmt.Errorf("primary strategy quota consumption failed: %w", err)
-	}
-
-	if _, err := r.secondaryStrategy.Allow(accessOpts.ctx, secondaryConfig); err != nil {
-		return false, nil, fmt.Errorf("secondary strategy quota consumption failed: %w", err)
-	}
-
-	return true, results, nil
-}
-
-// handleSingleStrategy handles single strategy case
-func (r *RateLimiter) handleSingleStrategy(accessOpts *accessOptions, results map[string]strategies.Result) (bool, map[string]strategies.Result, error) {
-	primaryConfig, err := r.createPrimaryConfig(accessOpts.key)
-	if err != nil {
-		return false, nil, fmt.Errorf("failed to create primary config: %w", err)
-	}
-
-	// Check if request is allowed using the primary strategy
-	strategyResults, err := r.primaryStrategy.Allow(accessOpts.ctx, primaryConfig)
-	if err != nil {
-		return false, nil, fmt.Errorf("primary strategy check failed: %w", err)
-	}
-
-	// Check if all tiers allow the request
+	// Determine if the request was allowed by checking if all results allow it
 	allAllowed := true
-	for tierName, result := range strategyResults {
-		// Merge all strategy results
-		results["primary_"+tierName] = result
+	for _, result := range results {
 		if !result.Allowed {
 			allAllowed = false
+			break
 		}
 	}
 
@@ -330,43 +253,6 @@ func (r *RateLimiter) createPrimaryConfig(dynamicKey string) (strategies.Strateg
 	}
 }
 
-// createSecondaryConfig creates strategy-specific configuration for the secondary strategy
-func (r *RateLimiter) createSecondaryConfig(dynamicKey string) (strategies.StrategyConfig, error) {
-	if r.config.SecondaryConfig == nil {
-		return nil, fmt.Errorf("secondary strategy not configured")
-	}
-
-	var keyBuilder strings.Builder
-	keyBuilder.Grow(len(r.config.BaseKey) + len(dynamicKey) + 10) // +10 for ":secondary" suffix
-	keyBuilder.WriteString(r.config.BaseKey)
-	keyBuilder.WriteByte(':')
-	keyBuilder.WriteString(dynamicKey)
-	keyBuilder.WriteString(":secondary")
-	key := keyBuilder.String()
-
-	secondaryConfig := r.config.SecondaryConfig
-	switch secondaryConfig.Name() {
-	case "token_bucket":
-		tokenConfig := secondaryConfig.(tokenbucket.Config)
-		return tokenbucket.Config{
-			Key:        key,
-			BurstSize:  tokenConfig.BurstSize,
-			RefillRate: tokenConfig.RefillRate,
-		}, nil
-
-	case "leaky_bucket":
-		leakyConfig := secondaryConfig.(leakybucket.Config)
-		return leakybucket.Config{
-			Key:      key,
-			Capacity: leakyConfig.Capacity,
-			LeakRate: leakyConfig.LeakRate,
-		}, nil
-
-	default:
-		return nil, fmt.Errorf("unknown secondary strategy: %s", secondaryConfig.Name())
-	}
-}
-
 // newRateLimiter creates a new rate limiter
 func newRateLimiter(config Config) (*RateLimiter, error) {
 	// Validate configuration
@@ -378,23 +264,44 @@ func newRateLimiter(config Config) (*RateLimiter, error) {
 		config: config,
 	}
 
-	// Create primary strategy
+	// Check if we have a dual-strategy configuration
+	if config.SecondaryConfig != nil {
+		// Use composite strategy for dual-strategy behavior
+		compositeStrategy := strategies.NewComposite(config.Storage)
+		limiter.primaryStrategy = compositeStrategy
+
+		// Create and configure the individual strategies
+		primaryStrategy, err := createStrategy(config.PrimaryConfig.Name(), config.Storage)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create primary strategy: %w", err)
+		}
+
+		secondaryStrategy, err := createStrategy(config.SecondaryConfig.Name(), config.Storage)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create secondary strategy: %w", err)
+		}
+
+		// Set the individual strategies on the composite
+		if comp, ok := compositeStrategy.(interface {
+			SetPrimaryStrategy(strategies.Strategy)
+			SetSecondaryStrategy(strategies.Strategy)
+		}); ok {
+			comp.SetPrimaryStrategy(primaryStrategy)
+			comp.SetSecondaryStrategy(secondaryStrategy)
+		} else {
+			return nil, fmt.Errorf("composite strategy type assertion failed")
+		}
+
+		return limiter, nil
+	}
+
+	// Single strategy case
 	primaryStrategyName := config.PrimaryConfig.Name()
 	primaryStrategy, err := createStrategy(primaryStrategyName, config.Storage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create primary strategy: %w", err)
 	}
 	limiter.primaryStrategy = primaryStrategy
-
-	// Create secondary strategy if configured
-	if config.SecondaryConfig != nil {
-		secondaryStrategyName := config.SecondaryConfig.Name()
-		secondaryStrategy, err := createStrategy(secondaryStrategyName, config.Storage)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create secondary strategy: %w", err)
-		}
-		limiter.secondaryStrategy = secondaryStrategy
-	}
 
 	return limiter, nil
 }

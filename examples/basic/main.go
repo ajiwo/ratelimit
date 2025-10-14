@@ -56,7 +56,7 @@ func main() {
 			continue
 		}
 
-		result := results["primary_default"]
+		result := results["default"]
 		status := "DENIED"
 		if allowed {
 			status = "ALLOWED"
@@ -82,7 +82,7 @@ func main() {
 		return
 	}
 
-	result := stats["primary_default"]
+	result := stats["default"]
 	fmt.Printf("Current stats - Remaining: %d, Reset: %v\n",
 		result.Remaining, result.Reset.Format("15:04:05"))
 
@@ -102,7 +102,7 @@ func main() {
 		return
 	}
 
-	result = results["primary_default"]
+	result = results["default"]
 	status := "DENIED"
 	if allowed {
 		status = "ALLOWED"

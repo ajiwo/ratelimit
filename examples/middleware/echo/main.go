@@ -91,7 +91,7 @@ func RateLimitMiddleware(limiter *ratelimit.RateLimiter) echo.MiddlewareFunc {
 					ratelimit.WithKey(clientID),
 				)
 				if err == nil && len(stats) > 0 {
-					result := stats["primary_default"]
+					result := stats["default"]
 					c.Response().Header().Set("X-RateLimit-Limit", "10")
 					c.Response().Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", result.Remaining))
 					c.Response().Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", result.Reset.Unix()))

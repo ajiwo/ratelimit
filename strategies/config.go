@@ -4,11 +4,23 @@ import (
 	"strings"
 )
 
+// StrategyRole defines the role a strategy instance will play
+type StrategyRole int
+
+const (
+	RolePrimary StrategyRole = iota
+	RoleSecondary
+)
+
 // StrategyConfig defines the interface for all strategy configurations
 type StrategyConfig interface {
 	Validate() error
 	Name() string
 	Capabilities() CapabilityFlags
+
+	// Role-based methods
+	GetRole() StrategyRole
+	WithRole(role StrategyRole) StrategyConfig
 }
 
 // CapabilityFlags defines the capabilities and roles a strategy can fulfill

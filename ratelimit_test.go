@@ -114,7 +114,7 @@ func TestRateLimiter_GetStats(t *testing.T) {
 	stats, err := limiter.GetStats(WithContext(context.Background()))
 	require.NoError(t, err)
 	require.Len(t, stats, 1)
-	assert.Equal(t, 10, stats["primary_default"].Remaining)
+	assert.Equal(t, 10, stats["default"].Remaining)
 
 	// Make some requests
 	for i := range 5 {
@@ -127,7 +127,7 @@ func TestRateLimiter_GetStats(t *testing.T) {
 	stats, err = limiter.GetStats(WithContext(context.Background()))
 	require.NoError(t, err)
 	require.Len(t, stats, 1)
-	assert.Equal(t, 5, stats["primary_default"].Remaining)
+	assert.Equal(t, 5, stats["default"].Remaining)
 }
 
 func TestRateLimiter_Reset(t *testing.T) {
@@ -295,12 +295,12 @@ func TestRateLimiter_FixedWindow_MultiTier(t *testing.T) {
 	require.Len(t, stats, 2) // Both tiers should return results
 
 	// Check minutely tier (should be exhausted)
-	mResult := stats["primary_minute"]
+	mResult := stats["minute"]
 	assert.False(t, mResult.Allowed, "first tier should be exhausted")
 	assert.Equal(t, 0, mResult.Remaining, "first tier should have 0 remaining")
 
 	// Check hourly tier (should have remaining quota)
-	hResult := stats["primary_hour"]
+	hResult := stats["hour"]
 	assert.True(t, hResult.Allowed, "second tier should still allow")
 	assert.Equal(t, 90, hResult.Remaining, "second tier should have 90 remaining")
 }

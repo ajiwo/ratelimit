@@ -15,6 +15,7 @@ type Tier struct {
 type Config struct {
 	Key   string
 	Tiers map[string]Tier
+	role  strategies.StrategyRole
 }
 
 func (c Config) Validate() error {
@@ -41,6 +42,15 @@ func (c Config) Name() string {
 
 func (c Config) Capabilities() strategies.CapabilityFlags {
 	return strategies.CapPrimary | strategies.CapTiers
+}
+
+func (c Config) GetRole() strategies.StrategyRole {
+	return c.role
+}
+
+func (c Config) WithRole(role strategies.StrategyRole) strategies.StrategyConfig {
+	c.role = role
+	return c
 }
 
 // configBuilder provides a fluent interface for building multi-tier configurations
