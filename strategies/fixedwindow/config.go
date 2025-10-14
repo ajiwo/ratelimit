@@ -7,30 +7,30 @@ import (
 	"github.com/ajiwo/ratelimit/strategies"
 )
 
-type Tier struct {
+type Quota struct {
 	Limit  int
 	Window time.Duration
 }
 
 type Config struct {
-	Key   string
-	Tiers map[string]Tier
-	role  strategies.StrategyRole
+	Key    string
+	Quotas map[string]Quota
+	role   strategies.StrategyRole
 }
 
 func (c Config) Validate() error {
 	if c.Key == "" {
 		return fmt.Errorf("fixed window key cannot be empty")
 	}
-	if len(c.Tiers) == 0 {
-		return fmt.Errorf("fixed window must have at least one tier")
+	if len(c.Quotas) == 0 {
+		return fmt.Errorf("fixed window must have at least one quota")
 	}
-	for name, tier := range c.Tiers {
-		if tier.Limit <= 0 {
-			return fmt.Errorf("fixed window tier '%s' limit must be positive, got %d", name, tier.Limit)
+	for name, quota := range c.Quotas {
+		if quota.Limit <= 0 {
+			return fmt.Errorf("fixed window quota '%s' limit must be positive, got %d", name, quota.Limit)
 		}
-		if tier.Window <= 0 {
-			return fmt.Errorf("fixed window tier '%s' window must be positive, got %v", name, tier.Window)
+		if quota.Window <= 0 {
+			return fmt.Errorf("fixed window quota '%s' window must be positive, got %v", name, quota.Window)
 		}
 	}
 	return nil
@@ -41,7 +41,7 @@ func (c Config) Name() string {
 }
 
 func (c Config) Capabilities() strategies.CapabilityFlags {
-	return strategies.CapPrimary | strategies.CapTiers
+	return strategies.CapPrimary | strategies.CapQuotas
 }
 
 func (c Config) GetRole() strategies.StrategyRole {
@@ -53,23 +53,23 @@ func (c Config) WithRole(role strategies.StrategyRole) strategies.StrategyConfig
 	return c
 }
 
-// configBuilder provides a fluent interface for building multi-tier configurations
+// configBuilder provides a fluent interface for building multi-quota configurations
 type configBuilder struct {
-	key   string
-	tiers map[string]Tier
+	key    string
+	quotas map[string]Quota
 }
 
-// NewConfig creates a multi-tier FixedWindowConfig with a builder pattern
+// NewConfig creates a multi-quota FixedWindowConfig with a builder pattern
 func NewConfig(key string) *configBuilder {
 	return &configBuilder{
-		key:   key,
-		tiers: make(map[string]Tier),
+		key:    key,
+		quotas: make(map[string]Quota),
 	}
 }
 
-// AddTier adds a new tier to the configuration
-func (b *configBuilder) AddTier(name string, limit int, window time.Duration) *configBuilder {
-	b.tiers[name] = Tier{
+// AddQuota adds a new quota to the configuration
+func (b *configBuilder) AddQuota(name string, limit int, window time.Duration) *configBuilder {
+	b.quotas[name] = Quota{
 		Limit:  limit,
 		Window: window,
 	}
@@ -79,13 +79,13 @@ func (b *configBuilder) AddTier(name string, limit int, window time.Duration) *c
 // Build creates the FixedWindowConfig from the builder
 func (b *configBuilder) Build() Config {
 	return Config{
-		Key:   b.key,
-		Tiers: b.tiers,
+		Key:    b.key,
+		Quotas: b.quotas,
 	}
 }
 
-// TierConfig represents a tier configuration for the custom multi-tier builder
-type TierConfig struct {
+// QuotaConfig represents a quota configuration for the custom multi-quota builder
+type QuotaConfig struct {
 	Limit  int
 	Window time.Duration
 }

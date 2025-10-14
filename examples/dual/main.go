@@ -25,7 +25,7 @@ func main() {
 		// Primary strategy: strict rate limiting
 		ratelimit.WithPrimaryStrategy(
 			fixedwindow.NewConfig("user").
-				AddTier("default", 100, time.Hour).
+				AddQuota("default", 100, time.Hour).
 				Build(),
 		),
 		// Secondary strategy: burst smoother

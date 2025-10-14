@@ -31,8 +31,8 @@ const (
 	CapPrimary CapabilityFlags = 1 << iota
 	// CapSecondary indicates the strategy can be used as a secondary (smoother) strategy
 	CapSecondary
-	// CapTiers indicates the strategy supports multi-tier configurations
-	CapTiers
+	// CapQuotas indicates the strategy supports multi-quota configurations
+	CapQuotas
 )
 
 // Has checks if the flags contain a specific capability
@@ -49,8 +49,8 @@ func (flags CapabilityFlags) String() string {
 	if flags.Has(CapSecondary) {
 		caps = append(caps, "Secondary")
 	}
-	if flags.Has(CapTiers) {
-		caps = append(caps, "Tiers")
+	if flags.Has(CapQuotas) {
+		caps = append(caps, "Quotas")
 	}
 	if len(caps) == 0 {
 		return "None"

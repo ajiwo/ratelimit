@@ -25,7 +25,7 @@ func main() {
 		ratelimit.WithBackend(mem),
 		ratelimit.WithPrimaryStrategy(
 			fixedwindow.NewConfig("user").
-				AddTier("default", 5, winDuration).
+				AddQuota("default", 5, winDuration).
 				Build(),
 		),
 		ratelimit.WithBaseKey("api"),

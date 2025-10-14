@@ -18,7 +18,7 @@ func main() {
 		ratelimit.WithBackend(memory.New()),
 		ratelimit.WithPrimaryStrategy(
 			fixedwindow.NewConfig("client").
-				AddTier("default", 10, time.Minute).
+				AddQuota("default", 10, time.Minute).
 				Build(),
 		),
 		ratelimit.WithBaseKey("api"),

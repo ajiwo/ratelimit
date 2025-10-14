@@ -7,7 +7,7 @@ This is a Go library that implements rate limiting functionality with multiple a
 - **Core features:**
   - Single strategy rate limiting
   - Dual strategy support (primary + secondary smoother)
-  - Multi-tier rate limiting (fixed window with multiple tiers)
+  - Multi-quota rate limiting (fixed window with multiple quotas)
   - Detailed statistics and result tracking
   - Dynamic key support for multi-tenant scenarios
 - **Multiple rate limiting algorithms:**
@@ -46,7 +46,7 @@ limiter, err := ratelimit.New(
     ratelimit.WithBackend(mem),
     ratelimit.WithPrimaryStrategy(
         fixedwindow.NewConfig("user:123").
-            AddTier("default", 100, time.Hour).
+            AddQuota("default", 100, time.Hour).
             Build(),
     ),
     ratelimit.WithBaseKey("api"),
@@ -79,9 +79,9 @@ for strategy, result := range results {
 }
 ```
 
-### Multi-Tier Fixed Window Rate Limiting
+### Multi-Quota Fixed Window Rate Limiting
 
-The fixed window strategy now supports multi-tier configurations, allowing you to define multiple rate limits that all must be satisfied for a request to be accepted:
+The fixed window strategy now supports multi-quota configurations, allowing you to define multiple rate limits that all must be satisfied for a request to be accepted:
 
 ```go
 import (
@@ -93,12 +93,12 @@ import (
 // Create a backend instance
 mem := memory.New()
 
-// Create a multi-tier fixed window rate limiter
+// Create a multi-quota fixed window rate limiter
 limiter, err := ratelimit.New(
     ratelimit.WithBackend(mem),
     ratelimit.WithPrimaryStrategy(fixedwindow.Config{
         Key: "api:user123",
-        Tiers: map[string]fixedwindow.Tier{
+        Quotas: map[string]fixedwindow.Quota{
             "burst": {
                 Limit:  10,  // Allow 10 requests per minute
                 Window: time.Minute,
@@ -126,7 +126,7 @@ if err != nil {
     // handle error
 }
 
-// Or get detailed results for all tiers
+// Or get detailed results for all quotas
 var results map[string]strategies.Result
 allowed, err = limiter.Allow(
     ratelimit.WithContext(ctx),
@@ -136,18 +136,18 @@ if err != nil {
     // handle error
 }
 
-// Results include detailed information for each tier
-for tier, result := range results {
-    fmt.Printf("Tier %s: allowed=%v, remaining=%d, reset=%v\n",
-        tier, result.Allowed, result.Remaining, result.Reset)
+// Results include detailed information for each quota
+for quota, result := range results {
+    fmt.Printf("Quota %s: allowed=%v, remaining=%d, reset=%v\n",
+        quota, result.Allowed, result.Remaining, result.Reset)
 }
 ```
 
-**Multi-Tier Logic:**
-1. **All Tiers Must Allow:** A request is only accepted if all tiers have available quota
-2. **Independent Windows:** Each tier operates with its own time window and limit
-3. **Atomic Consumption:** When a request is allowed, quota is consumed from all tiers
-4. **No Consumption on Denial:** If any tier denies, no quota is consumed from any tier
+**Multi-Quota Logic:**
+1. **All Quotas Must Allow:** A request is only accepted if all quotas have available quota
+2. **Independent Windows:** Each quota operates with its own time window and limit
+3. **Atomic Consumption:** When a request is allowed, quota is consumed from all quotas
+4. **No Consumption on Denial:** If any quota denies, no quota is consumed from any quota
 
 **Use Cases:**
 - **Burst + Sustained:** Allow short bursts while maintaining long-term limits
@@ -175,7 +175,7 @@ limiter, err := ratelimit.New(
     // Primary: strict rate limiting
     ratelimit.WithPrimaryStrategy(
         fixedwindow.NewConfig("api:user").
-            AddTier("default", 100, time.Hour).
+            AddQuota("default", 100, time.Hour).
             Build(),
     ),
     // Secondary: burst smoother (5 burst, 0.1 req/sec refill)
@@ -219,7 +219,7 @@ for strategy, result := range results {
 4. **Final Decision:** Both strategies must allow the request
 
 **Supported primary strategies:**
-- `fixedwindow.Config` (supports multi-tier configurations)
+- `fixedwindow.Config` (supports multi-quota configurations)
 - `tokenbucket.Config`
 - `leakybucket.Config`
 
@@ -227,11 +227,11 @@ for strategy, result := range results {
 - `tokenbucket.Config`
 - `leakybucket.Config`
 
-**Multi-tier support:**
-- Fixed Window strategy supports multiple tiers with independent limits and windows
-- All tiers must allow for a request to be accepted
-- Use the builder pattern with `fixedwindow.NewConfig(key).AddTier(name, limit, window).Build()` for both single and multi-tier configurations
-- For single-tier configurations, add a single tier named "default"
+**Multi-quota support:**
+- Fixed Window strategy supports multiple quotas with independent limits and windows
+- All quotas must allow for a request to be accepted
+- Use the builder pattern with `fixedwindow.NewConfig(key).AddQuota(name, limit, window).Build()` for both single and multi-quota configurations
+- For single-quota configurations, add a single quota named "default"
 
 **Available functional options:**
 - `WithBackend(backend)` - Use a custom backend instance
@@ -263,13 +263,13 @@ for strategy, result := range results {
 **Strategy Configuration Structures:**
 
 ```go
-// Fixed Window Strategy (Multi-tier Support) - in strategies/fixedwindow package
+// Fixed Window Strategy (Multi-quota Support) - in strategies/fixedwindow package
 type Config struct {
     Key   string            // Unique identifier for the rate limit
-    Tiers map[string]Tier   // Multiple rate limit tiers
+    Quotas map[string]Quota   // Multiple rate limit quotas
 }
 
-type Tier struct {
+type Quota struct {
     Limit  int              // Number of requests allowed in the window
     Window time.Duration    // Time window (1 minute, 1 hour, 1 day, etc.)
 }
@@ -290,7 +290,7 @@ type Config struct {
 
 // Helper functions for fixed window configuration
 func NewConfig(key string) *configBuilder  // Returns a builder for creating configurations
-func (b *configBuilder) AddTier(name string, limit int, window time.Duration) *configBuilder  // Add a tier to the configuration
+func (b *configBuilder) AddQuota(name string, limit int, window time.Duration) *configBuilder  // Add a quota to the configuration
 func (b *configBuilder) Build() Config  // Build the final configuration
 ```
 
@@ -434,15 +434,15 @@ storage := memory.New()
 // Create a fixed window strategy
 strategy := fixedwindow.New(storage)
 
-// Configure rate limiting (single-tier)
+// Configure rate limiting (single-quota)
 config := fixedwindow.NewConfig("user:123").
-    AddTier("default", 100, time.Minute).
+    AddQuota("default", 100, time.Minute).
     Build()
 
-// Or configure multi-tier rate limiting
-multiTierConfig := fixedwindow.Config{
+// Or configure multi-quota rate limiting
+multiQuotaConfig := fixedwindow.Config{
     Key: "user:123",
-    Tiers: map[string]fixedwindow.Tier{
+    Quotas: map[string]fixedwindow.Quota{
         "burst": {
             Limit:  10,
             Window: time.Minute,
@@ -471,10 +471,10 @@ if result.Allowed {
     // Reject request
 }
 
-// For multi-tier, iterate through all tier results
-for tierName, tierResult := range results {
-    fmt.Printf("Tier %s: allowed=%v, remaining=%d, reset=%v\n",
-        tierName, tierResult.Allowed, tierResult.Remaining, tierResult.Reset)
+// For multi-quota, iterate through all quota results
+for quotaName, quotaResult := range results {
+    fmt.Printf("Quota %s: allowed=%v, remaining=%d, reset=%v\n",
+        quotaName, quotaResult.Allowed, quotaResult.Remaining, quotaResult.Reset)
 }
 ```
 

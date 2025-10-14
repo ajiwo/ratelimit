@@ -224,12 +224,12 @@ func (r *RateLimiter) createPrimaryConfig(dynamicKey string) (strategies.Strateg
 	switch primaryConfig.Name() {
 	case "fixed_window":
 		fixedConfig := primaryConfig.(fixedwindow.Config)
-		// Create new tiers map with updated key
-		newTiers := make(map[string]fixedwindow.Tier)
-		maps.Copy(newTiers, fixedConfig.Tiers)
+		// Create new quotas map with updated key
+		newQuotas := make(map[string]fixedwindow.Quota)
+		maps.Copy(newQuotas, fixedConfig.Quotas)
 		return fixedwindow.Config{
-			Key:   key,
-			Tiers: newTiers,
+			Key:    key,
+			Quotas: newQuotas,
 		}, nil
 
 	case "token_bucket":

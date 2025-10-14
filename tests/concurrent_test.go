@@ -22,7 +22,7 @@ func TestFixedWindow_ConcurrentAccessMemory(t *testing.T) {
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
 			Key: "test",
-			Tiers: map[string]fixedwindow.Tier{
+			Quotas: map[string]fixedwindow.Quota{
 				"default": {
 					Limit:  10,
 					Window: 5 * time.Second,
@@ -90,7 +90,7 @@ func TestFixedWindow_ConcurrentAccessPostgres(t *testing.T) {
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
 			Key: "test",
-			Tiers: map[string]fixedwindow.Tier{
+			Quotas: map[string]fixedwindow.Quota{
 				"default": {
 					Limit:  10,
 					Window: 5 * time.Second,
@@ -158,7 +158,7 @@ func TestFixedWindow_ConcurrentAccessRedis(t *testing.T) {
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
 			Key: "test",
-			Tiers: map[string]fixedwindow.Tier{
+			Quotas: map[string]fixedwindow.Quota{
 				"default": {
 					Limit:  10,
 					Window: 5 * time.Second,
@@ -586,7 +586,7 @@ func TestFixedWindow_ConcurrentAccessMemoryWithResult(t *testing.T) {
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
 			Key: "test",
-			Tiers: map[string]fixedwindow.Tier{
+			Quotas: map[string]fixedwindow.Quota{
 				"default": {
 					Limit:  10,
 					Window: 5 * time.Second,
@@ -658,7 +658,7 @@ func TestFixedWindow_ConcurrentAccessPostgresWithResult(t *testing.T) {
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
 			Key: "test",
-			Tiers: map[string]fixedwindow.Tier{
+			Quotas: map[string]fixedwindow.Quota{
 				"default": {
 					Limit:  10,
 					Window: 5 * time.Second,
@@ -730,7 +730,7 @@ func TestFixedWindow_ConcurrentAccessRedisWithResult(t *testing.T) {
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
 			Key: "test",
-			Tiers: map[string]fixedwindow.Tier{
+			Quotas: map[string]fixedwindow.Quota{
 				"default": {
 					Limit:  10,
 					Window: 5 * time.Second,

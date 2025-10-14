@@ -18,10 +18,10 @@ type FixedWindow struct {
 	Duration time.Duration `json:"duration"` // Window duration
 }
 
-// tierState represents the state of a single tier during processing
-type tierState struct {
+// quotaState represents the state of a single quota during processing
+type quotaState struct {
 	name     string
-	tier     Tier
+	quota    Quota
 	key      string
 	window   FixedWindow
 	oldValue any
@@ -51,24 +51,24 @@ func (f *Strategy) GetResult(ctx context.Context, config strategies.StrategyConf
 	now := time.Now()
 	results := make(map[string]strategies.Result)
 
-	// Process each tier
-	for tierName, tier := range fixedConfig.Tiers {
-		// Create tier-specific key
-		tierKey := fixedConfig.Key + ":" + tierName
+	// Process each quota
+	for quotaName, quota := range fixedConfig.Quotas {
+		// Create quota-specific key
+		quotaKey := fixedConfig.Key + ":" + quotaName
 
-		// Get current window state for this tier
-		data, err := f.storage.Get(ctx, tierKey)
+		// Get current window state for this quota
+		data, err := f.storage.Get(ctx, quotaKey)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get window state for tier '%s': %w", tierName, err)
+			return nil, fmt.Errorf("failed to get window state for quota '%s': %w", quotaName, err)
 		}
 
 		var window FixedWindow
 		if data == "" {
 			// No existing window, return default state
-			results[tierName] = strategies.Result{
+			results[quotaName] = strategies.Result{
 				Allowed:   true,
-				Remaining: tier.Limit,
-				Reset:     now.Add(tier.Window),
+				Remaining: quota.Limit,
+				Reset:     now.Add(quota.Window),
 			}
 			continue
 		}
@@ -77,25 +77,25 @@ func (f *Strategy) GetResult(ctx context.Context, config strategies.StrategyConf
 		if w, ok := decodeFixedWindow(data); ok {
 			window = w
 		} else {
-			return nil, fmt.Errorf("failed to parse window state for tier '%s': invalid encoding", tierName)
+			return nil, fmt.Errorf("failed to parse window state for quota '%s': invalid encoding", quotaName)
 		}
 
 		// Check if current window has expired
 		if now.Sub(window.Start) >= window.Duration {
 			// Window has expired, return fresh state
-			results[tierName] = strategies.Result{
+			results[quotaName] = strategies.Result{
 				Allowed:   true,
-				Remaining: tier.Limit,
-				Reset:     now.Add(tier.Window),
+				Remaining: quota.Limit,
+				Reset:     now.Add(quota.Window),
 			}
 			continue
 		}
 
 		// Calculate remaining requests and reset time
-		remaining := max(tier.Limit-window.Count, 0)
+		remaining := max(quota.Limit-window.Count, 0)
 		resetTime := window.Start.Add(window.Duration)
 
-		results[tierName] = strategies.Result{
+		results[quotaName] = strategies.Result{
 			Allowed:   remaining > 0,
 			Remaining: remaining,
 			Reset:     resetTime,
@@ -113,11 +113,11 @@ func (f *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) 
 		return fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
 	}
 
-	// Delete all tier keys from storage
+	// Delete all quota keys from storage
 	var lastErr error
-	for tierName := range fixedConfig.Tiers {
-		tierKey := fixedConfig.Key + ":" + tierName
-		if err := f.storage.Delete(ctx, tierKey); err != nil {
+	for quotaName := range fixedConfig.Quotas {
+		quotaKey := fixedConfig.Key + ":" + quotaName
+		if err := f.storage.Delete(ctx, quotaKey); err != nil {
 			lastErr = err
 		}
 	}
@@ -207,31 +207,31 @@ func (f *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 
 	now := time.Now()
 
-	// Check if this is a multi-tier configuration
-	isMultiTier := len(fixedConfig.Tiers) > 1
+	// Check if this is a multi-quota configuration
+	isMultiQuota := len(fixedConfig.Quotas) > 1
 
-	if isMultiTier {
-		// Multi-tier: Use two-phase commit for proper atomicity
-		return f.allowMultiTier(ctx, fixedConfig, now)
+	if isMultiQuota {
+		// Multi-quota: Use two-phase commit for proper atomicity
+		return f.allowMultiQuota(ctx, fixedConfig, now)
 	} else {
-		// Single-tier: Use original optimized approach
-		return f.allowSingleTier(ctx, fixedConfig, now)
+		// Single-quota: Use original optimized approach
+		return f.allowSingleQuota(ctx, fixedConfig, now)
 	}
 }
 
-// allowMultiTier handles multi-tier configurations with two-phase commit
-func (f *Strategy) allowMultiTier(ctx context.Context, fixedConfig Config, now time.Time) (map[string]strategies.Result, error) {
+// allowMultiQuota handles multi-quota configurations with two-phase commit
+func (f *Strategy) allowMultiQuota(ctx context.Context, fixedConfig Config, now time.Time) (map[string]strategies.Result, error) {
 	results := make(map[string]strategies.Result)
 
-	// Phase 1: Check all tiers without consuming quota
-	tierStates, err := f.getTierStates(ctx, fixedConfig, now)
+	// Phase 1: Check all quotas without consuming quota
+	quotaStates, err := f.getQuotaStates(ctx, fixedConfig, now)
 	if err != nil {
 		return nil, err
 	}
 
-	// Check if all tiers allow the request
+	// Check if all quotas allow the request
 	allAllowed := true
-	for _, state := range tierStates {
+	for _, state := range quotaStates {
 		if !state.allowed {
 			allAllowed = false
 			break
@@ -239,16 +239,16 @@ func (f *Strategy) allowMultiTier(ctx context.Context, fixedConfig Config, now t
 	}
 
 	// Phase 2: Generate results and optionally consume quota
-	for _, state := range tierStates {
+	for _, state := range quotaStates {
 		if allAllowed {
-			// All tiers allowed, so consume quota from this tier
+			// All quotas allowed, so consume quota from this quota
 			result, err := f.consumeQuota(ctx, state, now)
 			if err != nil {
 				return nil, err
 			}
 			results[state.name] = result
 		} else {
-			// At least one tier denied, so don't consume quota from any tier
+			// At least one quota denied, so don't consume quota from any quota
 			result, err := f.getDenyResult(ctx, state, now)
 			if err != nil {
 				return nil, err
@@ -257,10 +257,10 @@ func (f *Strategy) allowMultiTier(ctx context.Context, fixedConfig Config, now t
 		}
 	}
 
-	// If some tiers weren't processed because an earlier tier denied,
+	// If some quotas weren't processed because an earlier quota denied,
 	// we need to initialize their results
 	if !allAllowed {
-		err = f.initializeUnprocessedTiers(ctx, fixedConfig, now, results)
+		err = f.initializeUnprocessedQuotas(ctx, fixedConfig, now, results)
 		if err != nil {
 			return nil, err
 		}
@@ -269,17 +269,17 @@ func (f *Strategy) allowMultiTier(ctx context.Context, fixedConfig Config, now t
 	return results, nil
 }
 
-// getTierStates gets the current state for all tiers without consuming quota
-func (f *Strategy) getTierStates(ctx context.Context, fixedConfig Config, now time.Time) ([]tierState, error) {
-	var tierStates []tierState
+// getQuotaStates gets the current state for all quotas without consuming quota
+func (f *Strategy) getQuotaStates(ctx context.Context, fixedConfig Config, now time.Time) ([]quotaState, error) {
+	var quotaStates []quotaState
 
-	for tierName, tier := range fixedConfig.Tiers {
-		tierKey := fixedConfig.Key + ":" + tierName
+	for quotaName, quota := range fixedConfig.Quotas {
+		quotaKey := fixedConfig.Key + ":" + quotaName
 
-		// Get current window state for this tier
-		data, err := f.storage.Get(ctx, tierKey)
+		// Get current window state for this quota
+		data, err := f.storage.Get(ctx, quotaKey)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get window state for tier '%s': %w", tierName, err)
+			return nil, fmt.Errorf("failed to get window state for quota '%s': %w", quotaName, err)
 		}
 
 		var window FixedWindow
@@ -289,7 +289,7 @@ func (f *Strategy) getTierStates(ctx context.Context, fixedConfig Config, now ti
 			window = FixedWindow{
 				Count:    0,
 				Start:    now,
-				Duration: tier.Window,
+				Duration: quota.Window,
 			}
 			oldValue = nil // Key doesn't exist
 		} else {
@@ -297,7 +297,7 @@ func (f *Strategy) getTierStates(ctx context.Context, fixedConfig Config, now ti
 			if w, ok := decodeFixedWindow(data); ok {
 				window = w
 			} else {
-				return nil, fmt.Errorf("failed to parse window state for tier '%s': invalid encoding", tierName)
+				return nil, fmt.Errorf("failed to parse window state for quota '%s': invalid encoding", quotaName)
 			}
 
 			// Check if current window has expired
@@ -305,34 +305,34 @@ func (f *Strategy) getTierStates(ctx context.Context, fixedConfig Config, now ti
 				// Start new window - reset count but keep same start time structure
 				window.Count = 0
 				window.Start = now
-				window.Duration = tier.Window
+				window.Duration = quota.Window
 			}
 			oldValue = data
 		}
 
 		// Determine if request is allowed based on current count
-		allowed := window.Count < tier.Limit
+		allowed := window.Count < quota.Limit
 
-		tierStates = append(tierStates, tierState{
-			name:     tierName,
-			tier:     tier,
-			key:      tierKey,
+		quotaStates = append(quotaStates, quotaState{
+			name:     quotaName,
+			quota:    quota,
+			key:      quotaKey,
 			window:   window,
 			oldValue: oldValue,
 			allowed:  allowed,
 		})
 
-		// If this tier doesn't allow, we can stop checking others
+		// If this quota doesn't allow, we can stop checking others
 		if !allowed {
 			break
 		}
 	}
 
-	return tierStates, nil
+	return quotaStates, nil
 }
 
-// consumeQuota consumes quota for a tier using atomic CheckAndSet
-func (f *Strategy) consumeQuota(ctx context.Context, state tierState, now time.Time) (strategies.Result, error) {
+// consumeQuota consumes quota for a quota using atomic CheckAndSet
+func (f *Strategy) consumeQuota(ctx context.Context, state quotaState, now time.Time) (strategies.Result, error) {
 	for attempt := range strategies.CheckAndSetRetries {
 		// Check if context is cancelled or timed out
 		if ctx.Err() != nil {
@@ -344,7 +344,7 @@ func (f *Strategy) consumeQuota(ctx context.Context, state tierState, now time.T
 		updatedWindow.Count += 1
 
 		// Calculate remaining after increment
-		remaining := max(state.tier.Limit-updatedWindow.Count, 0)
+		remaining := max(state.quota.Limit-updatedWindow.Count, 0)
 		resetTime := updatedWindow.Start.Add(updatedWindow.Duration)
 
 		// Save updated window state in compact format
@@ -353,7 +353,7 @@ func (f *Strategy) consumeQuota(ctx context.Context, state tierState, now time.T
 		// Use CheckAndSet for atomic update
 		success, err := f.storage.CheckAndSet(ctx, state.key, state.oldValue, newValue, updatedWindow.Duration)
 		if err != nil {
-			return strategies.Result{}, fmt.Errorf("failed to save window state for tier '%s': %w", state.name, err)
+			return strategies.Result{}, fmt.Errorf("failed to save window state for quota '%s': %w", state.name, err)
 		}
 
 		if success {
@@ -371,7 +371,7 @@ func (f *Strategy) consumeQuota(ctx context.Context, state tierState, now time.T
 			time.Sleep(time.Duration(3*(attempt+1)) * time.Microsecond)
 			data, err := f.storage.Get(ctx, state.key)
 			if err != nil {
-				return strategies.Result{}, fmt.Errorf("failed to re-read window state for tier '%s': %w", state.name, err)
+				return strategies.Result{}, fmt.Errorf("failed to re-read window state for quota '%s': %w", state.name, err)
 			}
 
 			if data == "" {
@@ -379,7 +379,7 @@ func (f *Strategy) consumeQuota(ctx context.Context, state tierState, now time.T
 				updatedWindow = FixedWindow{
 					Count:    0,
 					Start:    now,
-					Duration: state.tier.Window,
+					Duration: state.quota.Window,
 				}
 				state.oldValue = nil
 			} else {
@@ -390,24 +390,24 @@ func (f *Strategy) consumeQuota(ctx context.Context, state tierState, now time.T
 					if now.Sub(updatedWindow.Start) >= updatedWindow.Duration {
 						updatedWindow.Count = 0
 						updatedWindow.Start = now
-						updatedWindow.Duration = state.tier.Window
+						updatedWindow.Duration = state.quota.Window
 					}
 				} else {
-					return strategies.Result{}, fmt.Errorf("failed to parse window state for tier '%s' during retry: invalid encoding", state.name)
+					return strategies.Result{}, fmt.Errorf("failed to parse window state for quota '%s' during retry: invalid encoding", state.name)
 				}
 				state.oldValue = data
 			}
 			state.window = updatedWindow
 			continue
 		}
-		return strategies.Result{}, fmt.Errorf("failed to update window state for tier '%s' after %d attempts due to concurrent access", state.name, strategies.CheckAndSetRetries)
+		return strategies.Result{}, fmt.Errorf("failed to update window state for quota '%s' after %d attempts due to concurrent access", state.name, strategies.CheckAndSetRetries)
 	}
 	return strategies.Result{}, nil // This shouldn't happen due to the loop logic
 }
 
-// getDenyResult returns results for a tier when the request is denied
-func (f *Strategy) getDenyResult(ctx context.Context, state tierState, now time.Time) (strategies.Result, error) {
-	remaining := max(state.tier.Limit-state.window.Count, 0)
+// getDenyResult returns results for a quota when the request is denied
+func (f *Strategy) getDenyResult(ctx context.Context, state quotaState, now time.Time) (strategies.Result, error) {
+	remaining := max(state.quota.Limit-state.window.Count, 0)
 	resetTime := state.window.Start.Add(state.window.Duration)
 
 	result := strategies.Result{
@@ -422,56 +422,56 @@ func (f *Strategy) getDenyResult(ctx context.Context, state tierState, now time.
 		resetWindow := FixedWindow{
 			Count:    0,
 			Start:    now,
-			Duration: state.tier.Window,
+			Duration: state.quota.Window,
 		}
 		newValue := encodeFixedWindow(resetWindow)
 		_, err := f.storage.CheckAndSet(ctx, state.key, state.oldValue, newValue, resetWindow.Duration)
 		if err != nil {
-			return strategies.Result{}, fmt.Errorf("failed to reset expired window for tier '%s': %w", state.name, err)
+			return strategies.Result{}, fmt.Errorf("failed to reset expired window for quota '%s': %w", state.name, err)
 		}
 	}
 
 	return result, nil
 }
 
-// initializeUnprocessedTiers initializes results for tiers that weren't processed
-func (f *Strategy) initializeUnprocessedTiers(ctx context.Context, fixedConfig Config, now time.Time, results map[string]strategies.Result) error {
-	for tierName, tier := range fixedConfig.Tiers {
-		if _, exists := results[tierName]; !exists {
-			// This tier wasn't processed, initialize it without consuming quota
-			tierKey := fixedConfig.Key + ":" + tierName
-			data, err := f.storage.Get(ctx, tierKey)
+// initializeUnprocessedQuotas initializes results for quotas that weren't processed
+func (f *Strategy) initializeUnprocessedQuotas(ctx context.Context, fixedConfig Config, now time.Time, results map[string]strategies.Result) error {
+	for quotaName, quota := range fixedConfig.Quotas {
+		if _, exists := results[quotaName]; !exists {
+			// This quota wasn't processed, initialize it without consuming quota
+			quotaKey := fixedConfig.Key + ":" + quotaName
+			data, err := f.storage.Get(ctx, quotaKey)
 			if err != nil {
-				return fmt.Errorf("failed to get window state for tier '%s': %w", tierName, err)
+				return fmt.Errorf("failed to get window state for quota '%s': %w", quotaName, err)
 			}
 
 			if data == "" {
-				// Initialize this tier without consuming quota
-				results[tierName] = strategies.Result{
+				// Initialize this quota without consuming quota
+				results[quotaName] = strategies.Result{
 					Allowed:   true,
-					Remaining: tier.Limit,
-					Reset:     now.Add(tier.Window),
+					Remaining: quota.Limit,
+					Reset:     now.Add(quota.Window),
 				}
 			} else {
 				// Get current state without modifying
 				if w, ok := decodeFixedWindow(data); ok {
 					if now.Sub(w.Start) >= w.Duration {
 						// Window expired
-						results[tierName] = strategies.Result{
+						results[quotaName] = strategies.Result{
 							Allowed:   true,
-							Remaining: tier.Limit,
-							Reset:     now.Add(tier.Window),
+							Remaining: quota.Limit,
+							Reset:     now.Add(quota.Window),
 						}
 					} else {
-						remaining := max(tier.Limit-w.Count, 0)
-						results[tierName] = strategies.Result{
+						remaining := max(quota.Limit-w.Count, 0)
+						results[quotaName] = strategies.Result{
 							Allowed:   remaining > 0,
 							Remaining: remaining,
 							Reset:     w.Start.Add(w.Duration),
 						}
 					}
 				} else {
-					return fmt.Errorf("failed to parse window state for tier '%s': invalid encoding", tierName)
+					return fmt.Errorf("failed to parse window state for quota '%s': invalid encoding", quotaName)
 				}
 			}
 		}
@@ -479,21 +479,21 @@ func (f *Strategy) initializeUnprocessedTiers(ctx context.Context, fixedConfig C
 	return nil
 }
 
-// allowSingleTier handles single-tier configurations with the original optimized approach
-func (f *Strategy) allowSingleTier(ctx context.Context, fixedConfig Config, now time.Time) (map[string]strategies.Result, error) {
+// allowSingleQuota handles single-quota configurations with the original optimized approach
+func (f *Strategy) allowSingleQuota(ctx context.Context, fixedConfig Config, now time.Time) (map[string]strategies.Result, error) {
 	results := make(map[string]strategies.Result)
 
-	// Get the single tier (there should be exactly one)
-	var tierName string
-	var tier Tier
-	for name, t := range fixedConfig.Tiers {
-		tierName = name
-		tier = t
+	// Get the single quota (there should be exactly one)
+	var quotaName string
+	var quota Quota
+	for name, t := range fixedConfig.Quotas {
+		quotaName = name
+		quota = t
 		break
 	}
 
-	// Create tier-specific key
-	tierKey := fixedConfig.Key + ":" + tierName
+	// Create quota-specific key
+	quotaKey := fixedConfig.Key + ":" + quotaName
 
 	// Try atomic CheckAndSet operations first
 	var allowed bool
@@ -506,10 +506,10 @@ func (f *Strategy) allowSingleTier(ctx context.Context, fixedConfig Config, now 
 			return nil, fmt.Errorf("context cancelled or timed out: %w", ctx.Err())
 		}
 
-		// Get current window state for this tier
-		data, err := f.storage.Get(ctx, tierKey)
+		// Get current window state for this quota
+		data, err := f.storage.Get(ctx, quotaKey)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get window state for tier '%s': %w", tierName, err)
+			return nil, fmt.Errorf("failed to get window state for quota '%s': %w", quotaName, err)
 		}
 
 		var window FixedWindow
@@ -519,7 +519,7 @@ func (f *Strategy) allowSingleTier(ctx context.Context, fixedConfig Config, now 
 			window = FixedWindow{
 				Count:    0,
 				Start:    now,
-				Duration: tier.Window,
+				Duration: quota.Window,
 			}
 			oldValue = nil // Key doesn't exist
 		} else {
@@ -527,7 +527,7 @@ func (f *Strategy) allowSingleTier(ctx context.Context, fixedConfig Config, now 
 			if w, ok := decodeFixedWindow(data); ok {
 				window = w
 			} else {
-				return nil, fmt.Errorf("failed to parse window state for tier '%s': invalid encoding", tierName)
+				return nil, fmt.Errorf("failed to parse window state for quota '%s': invalid encoding", quotaName)
 			}
 
 			// Check if current window has expired
@@ -535,13 +535,13 @@ func (f *Strategy) allowSingleTier(ctx context.Context, fixedConfig Config, now 
 				// Start new window - reset count but keep same start time structure
 				window.Count = 0
 				window.Start = now
-				window.Duration = tier.Window
+				window.Duration = quota.Window
 			}
 			oldValue = data
 		}
 
 		// Determine if request is allowed based on current count
-		allowed = window.Count < tier.Limit
+		allowed = window.Count < quota.Limit
 		resetTime = window.Start.Add(window.Duration)
 
 		if allowed {
@@ -549,15 +549,15 @@ func (f *Strategy) allowSingleTier(ctx context.Context, fixedConfig Config, now 
 			window.Count += 1
 
 			// Calculate remaining after increment (subtract 1 for the request we just processed)
-			remaining = max(tier.Limit-window.Count, 0)
+			remaining = max(quota.Limit-window.Count, 0)
 
 			// Save updated window state in compact format
 			newValue := encodeFixedWindow(window)
 
 			// Use CheckAndSet for atomic update
-			success, err := f.storage.CheckAndSet(ctx, tierKey, oldValue, newValue, window.Duration)
+			success, err := f.storage.CheckAndSet(ctx, quotaKey, oldValue, newValue, window.Duration)
 			if err != nil {
-				return nil, fmt.Errorf("failed to save window state for tier '%s': %w", tierName, err)
+				return nil, fmt.Errorf("failed to save window state for quota '%s': %w", quotaName, err)
 			}
 
 			if success {
@@ -569,10 +569,10 @@ func (f *Strategy) allowSingleTier(ctx context.Context, fixedConfig Config, now 
 				time.Sleep(time.Duration(3*(attempt+1)) * time.Microsecond)
 				continue
 			}
-			return nil, fmt.Errorf("failed to update window state for tier '%s' after %d attempts due to concurrent access", tierName, strategies.CheckAndSetRetries)
+			return nil, fmt.Errorf("failed to update window state for quota '%s' after %d attempts due to concurrent access", quotaName, strategies.CheckAndSetRetries)
 		} else {
 			// Request was denied, return original remaining count
-			remaining = max(tier.Limit-window.Count, 0)
+			remaining = max(quota.Limit-window.Count, 0)
 
 			// For denied requests, we don't need to update the count
 			// Only update if window expired to ensure proper reset handling
@@ -580,20 +580,20 @@ func (f *Strategy) allowSingleTier(ctx context.Context, fixedConfig Config, now 
 				// Window expired, reset it
 				window.Count = 0
 				window.Start = now
-				window.Duration = tier.Window
+				window.Duration = quota.Window
 
 				newValue := encodeFixedWindow(window)
-				_, err := f.storage.CheckAndSet(ctx, tierKey, oldValue, newValue, window.Duration)
+				_, err := f.storage.CheckAndSet(ctx, quotaKey, oldValue, newValue, window.Duration)
 				if err != nil {
-					return nil, fmt.Errorf("failed to reset expired window for tier '%s': %w", tierName, err)
+					return nil, fmt.Errorf("failed to reset expired window for quota '%s': %w", quotaName, err)
 				}
 			}
 			break
 		}
 	}
 
-	// Store result for this tier
-	results[tierName] = strategies.Result{
+	// Store result for this quota
+	results[quotaName] = strategies.Result{
 		Allowed:   allowed,
 		Remaining: remaining,
 		Reset:     resetTime,

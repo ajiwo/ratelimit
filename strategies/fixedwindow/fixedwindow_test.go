@@ -17,7 +17,7 @@ func TestFixedWindow_Allow(t *testing.T) {
 		strategy := New(storage)
 
 		config := NewConfig("test-key").
-			AddTier("default", 5, time.Minute).
+			AddQuota("default", 5, time.Minute).
 			Build()
 
 		ctx := t.Context()
@@ -42,7 +42,7 @@ func TestFixedWindow_WindowReset(t *testing.T) {
 		strategy := New(storage)
 
 		config := NewConfig("test-key").
-			AddTier("default", 2, time.Second).
+			AddQuota("default", 2, time.Second).
 			Build()
 
 		ctx := t.Context()
@@ -76,11 +76,11 @@ func TestFixedWindow_MultipleKeys(t *testing.T) {
 		strategy := New(storage)
 
 		config1 := NewConfig("user1").
-			AddTier("default", 1, time.Minute).
+			AddQuota("default", 1, time.Minute).
 			Build()
 
 		config2 := NewConfig("user2").
-			AddTier("default", 1, time.Minute).
+			AddQuota("default", 1, time.Minute).
 			Build()
 
 		ctx := t.Context()
@@ -108,7 +108,7 @@ func TestFixedWindow_ZeroLimit(t *testing.T) {
 		strategy := New(storage)
 
 		config := NewConfig("test-key").
-			AddTier("default", 0, time.Minute).
+			AddQuota("default", 0, time.Minute).
 			Build()
 
 		ctx := t.Context()
@@ -126,7 +126,7 @@ func TestFixedWindow_GetResult(t *testing.T) {
 		strategy := New(storage)
 
 		config := NewConfig("result-test-key").
-			AddTier("default", 5, time.Minute).
+			AddQuota("default", 5, time.Minute).
 			Build()
 
 		ctx := t.Context()
@@ -178,7 +178,7 @@ func TestFixedWindow_Reset(t *testing.T) {
 		strategy := New(storage)
 
 		config := NewConfig("reset-test-key").
-			AddTier("default", 2, time.Minute).
+			AddQuota("default", 2, time.Minute).
 			Build()
 
 		ctx := t.Context()
@@ -213,7 +213,7 @@ func TestFixedWindow_ConcurrentAccess(t *testing.T) {
 		strategy := New(storage)
 
 		config := NewConfig("concurrent-key").
-			AddTier("default", 5, time.Minute).
+			AddQuota("default", 5, time.Minute).
 			Build()
 
 		ctx := t.Context()
@@ -262,7 +262,7 @@ func TestFixedWindow_PreciseTiming(t *testing.T) {
 		strategy := New(storage)
 
 		config := NewConfig("timing-key").
-			AddTier("default", 3, 5*time.Second).
+			AddQuota("default", 3, 5*time.Second).
 			Build()
 
 		ctx := t.Context()

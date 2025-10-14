@@ -106,10 +106,10 @@ func (cs *compositeStrategy) Allow(ctx context.Context, config StrategyConfig) (
 		return nil, fmt.Errorf("primary strategy check failed: %w", err)
 	}
 
-	// Check if all primary tiers allow the request
+	// Check if all primary quotas allow the request
 	allAllowed := true
-	for tierName, result := range primaryResults {
-		results["primary_"+tierName] = result
+	for quotaName, result := range primaryResults {
+		results["primary_"+quotaName] = result
 		if !result.Allowed {
 			allAllowed = false
 		}
@@ -127,10 +127,10 @@ func (cs *compositeStrategy) Allow(ctx context.Context, config StrategyConfig) (
 		return nil, fmt.Errorf("secondary strategy check failed: %w", err)
 	}
 
-	// Check if all secondary tiers allow the request
+	// Check if all secondary quotas allow the request
 	secondaryAllAllowed := true
-	for tierName, result := range secondaryResults {
-		results["secondary_"+tierName] = result
+	for quotaName, result := range secondaryResults {
+		results["secondary_"+quotaName] = result
 		if !result.Allowed {
 			secondaryAllAllowed = false
 		}
