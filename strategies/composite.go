@@ -61,6 +61,13 @@ func (c CompositeConfig) WithRole(role StrategyRole) StrategyConfig {
 	return c
 }
 
+// WithKey applies the provided fully-qualified key to both primary and secondary configs
+func (c CompositeConfig) WithKey(key string) StrategyConfig {
+	c.Primary = c.Primary.WithKey(key)
+	c.Secondary = c.Secondary.WithKey(key)
+	return c
+}
+
 // compositeStrategy implements dual-strategy behavior
 type compositeStrategy struct {
 	storage   backends.Backend

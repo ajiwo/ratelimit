@@ -37,3 +37,8 @@ func (c Config) GetRole() strategies.StrategyRole {
 func (c Config) WithRole(role strategies.StrategyRole) strategies.StrategyConfig {
 	return c
 }
+
+func (c Config) WithKey(key string) strategies.StrategyConfig {
+	c.Key = key
+	return c
+}

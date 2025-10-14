@@ -3,15 +3,10 @@ package ratelimit
 import (
 	"context"
 	"fmt"
-	"maps"
 	"strings"
 
 	"github.com/ajiwo/ratelimit/backends"
 	"github.com/ajiwo/ratelimit/strategies"
-	"github.com/ajiwo/ratelimit/strategies/fixedwindow"
-	"github.com/ajiwo/ratelimit/strategies/gcra"
-	"github.com/ajiwo/ratelimit/strategies/leakybucket"
-	"github.com/ajiwo/ratelimit/strategies/tokenbucket"
 )
 
 type Limiter = RateLimiter
@@ -222,44 +217,7 @@ func (r *RateLimiter) createPrimaryConfig(dynamicKey string) (strategies.Strateg
 	key := keyBuilder.String()
 
 	primaryConfig := r.config.PrimaryConfig
-	switch primaryConfig.Name() {
-	case "fixed_window":
-		fixedConfig := primaryConfig.(fixedwindow.Config)
-		// Create new quotas map with updated key
-		newQuotas := make(map[string]fixedwindow.Quota)
-		maps.Copy(newQuotas, fixedConfig.Quotas)
-		return fixedwindow.Config{
-			Key:    key,
-			Quotas: newQuotas,
-		}, nil
-
-	case "token_bucket":
-		tokenConfig := primaryConfig.(tokenbucket.Config)
-		return tokenbucket.Config{
-			Key:        key,
-			BurstSize:  tokenConfig.BurstSize,
-			RefillRate: tokenConfig.RefillRate,
-		}, nil
-
-	case "leaky_bucket":
-		leakyConfig := primaryConfig.(leakybucket.Config)
-		return leakybucket.Config{
-			Key:      key,
-			Capacity: leakyConfig.Capacity,
-			LeakRate: leakyConfig.LeakRate,
-		}, nil
-
-	case "gcra":
-		gcraConfig := primaryConfig.(gcra.Config)
-		return gcra.Config{
-			Key:   key,
-			Burst: gcraConfig.Burst,
-			Rate:  gcraConfig.Rate,
-		}, nil
-
-	default:
-		return nil, fmt.Errorf("unknown primary strategy: %s", primaryConfig.Name())
-	}
+	return primaryConfig.WithKey(key), nil
 }
 
 // newRateLimiter creates a new rate limiter
@@ -280,12 +238,12 @@ func newRateLimiter(config Config) (*RateLimiter, error) {
 		limiter.primaryStrategy = compositeStrategy
 
 		// Create and configure the individual strategies
-		primaryStrategy, err := createStrategy(config.PrimaryConfig.Name(), config.Storage)
+		primaryStrategy, err := strategies.Create(config.PrimaryConfig.Name(), config.Storage)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create primary strategy: %w", err)
 		}
 
-		secondaryStrategy, err := createStrategy(config.SecondaryConfig.Name(), config.Storage)
+		secondaryStrategy, err := strategies.Create(config.SecondaryConfig.Name(), config.Storage)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create secondary strategy: %w", err)
 		}
@@ -306,27 +264,11 @@ func newRateLimiter(config Config) (*RateLimiter, error) {
 
 	// Single strategy case
 	primaryStrategyName := config.PrimaryConfig.Name()
-	primaryStrategy, err := createStrategy(primaryStrategyName, config.Storage)
+	primaryStrategy, err := strategies.Create(primaryStrategyName, config.Storage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create primary strategy: %w", err)
 	}
 	limiter.primaryStrategy = primaryStrategy
 
 	return limiter, nil
-}
-
-// createStrategy creates a strategy instance based on the name
-func createStrategy(strategyName string, storage backends.Backend) (strategies.Strategy, error) {
-	switch strategyName {
-	case "fixed_window":
-		return fixedwindow.New(storage), nil
-	case "token_bucket":
-		return tokenbucket.New(storage), nil
-	case "leaky_bucket":
-		return leakybucket.New(storage), nil
-	case "gcra":
-		return gcra.New(storage), nil
-	default:
-		return nil, fmt.Errorf("unknown strategy: %s", strategyName)
-	}
 }

@@ -53,6 +53,11 @@ func (c Config) WithRole(role strategies.StrategyRole) strategies.StrategyConfig
 	return c
 }
 
+func (c Config) WithKey(key string) strategies.StrategyConfig {
+	c.Key = key
+	return c
+}
+
 // configBuilder provides a fluent interface for building multi-quota configurations
 type configBuilder struct {
 	key    string

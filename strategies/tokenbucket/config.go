@@ -39,3 +39,8 @@ func (c Config) WithRole(role strategies.StrategyRole) strategies.StrategyConfig
 	c.role = role
 	return c
 }
+
+func (c Config) WithKey(key string) strategies.StrategyConfig {
+	c.Key = key
+	return c
+}

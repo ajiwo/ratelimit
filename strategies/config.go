@@ -21,6 +21,9 @@ type StrategyConfig interface {
 	// Role-based methods
 	GetRole() StrategyRole
 	WithRole(role StrategyRole) StrategyConfig
+
+	// WithKey returns a copy of the config with the provided fully-qualified key applied
+	WithKey(key string) StrategyConfig
 }
 
 // CapabilityFlags defines the capabilities and roles a strategy can fulfill

@@ -9,11 +9,11 @@ This is a Go library that implements rate limiting functionality with multiple a
   - Dual strategy support (primary + secondary smoother)
   - Multi-quota rate limiting (fixed window with multiple quotas)
   - Detailed statistics and result tracking
-  - Dynamic key support for multi-tenant scenarios
 - **Multiple rate limiting algorithms:**
   - Fixed Window
   - Token Bucket
   - Leaky Bucket
+  - GCRA (Generic Cell Rate Algorithm)
 - **Multiple storage backends:**
   - In-Memory (single instance)
   - Redis (distributed)
@@ -222,6 +222,7 @@ for strategy, result := range results {
 - `fixedwindow.Config` (supports multi-quota configurations)
 - `tokenbucket.Config`
 - `leakybucket.Config`
+- `gcra.Config`
 
 **Supported secondary strategies (smoothers):**
 - `tokenbucket.Config`
@@ -286,6 +287,13 @@ type Config struct {
     Key      string         // Unique identifier for the rate limit
     Capacity int            // Maximum requests the bucket can hold
     LeakRate float64        // Requests to process per second
+}
+
+// GCRA Strategy - in strategies/gcra package
+type Config struct {
+    Key   string            // Unique identifier for the rate limit
+    Rate  float64           // Requests per second
+    Burst int               // Maximum burst size
 }
 
 // Helper functions for fixed window configuration
@@ -455,7 +463,7 @@ multiQuotaConfig := fixedwindow.Config{
 }
 
 // Check if request is allowed and get detailed results
-results, err := strategy.Allow(ctx, config)
+results, err := strategy.Allow(ctx, config) 
 if err != nil {
     // Handle error
 }
@@ -534,6 +542,43 @@ config := leakybucket.Config{
     Key:      "user:123",
     Capacity: 50,  // Maximum requests the bucket can hold
     LeakRate: 2.0, // 2 requests per second leak rate
+}
+
+// Check if request is allowed and get detailed results
+result, err := strategy.Allow(ctx, config)
+if err != nil {
+    // Handle error
+}
+if result.Allowed {
+    fmt.Printf("Request allowed, %d remaining, resets at %v\n",
+        result.Remaining, result.Reset)
+    // Process request
+} else {
+    fmt.Printf("Request blocked, %d remaining, resets at %v\n",
+        result.Remaining, result.Reset)
+    // Reject request
+}
+```
+
+#### GCRA (Generic Cell Rate Algorithm)
+
+```go
+import (
+    "github.com/ajiwo/ratelimit/backends/memory"
+    "github.com/ajiwo/ratelimit/strategies/gcra"
+)
+
+// Create a backend instance
+storage := memory.New()
+
+// Create a GCRA strategy
+strategy := gcra.New(storage)
+
+// Configure rate limiting
+config := gcra.Config{
+    Key:   "user:123", // Identifier, get it from eg JWT
+    Rate:  10.0, // 10 requests per second
+    Burst: 20,   // Maximum burst size
 }
 
 // Check if request is allowed and get detailed results
