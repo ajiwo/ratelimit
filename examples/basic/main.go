@@ -20,7 +20,7 @@ func main() {
 	winDuration := 3 * time.Second
 
 	// Create a basic rate limiter with fixed window strategy
-	// Allow 5 requests per minute per user
+	// Allow 5 requests per 3 seconds per user
 	limiter, err := ratelimit.New(
 		ratelimit.WithBackend(mem),
 		ratelimit.WithPrimaryStrategy(
@@ -87,8 +87,8 @@ func main() {
 		result.Remaining, result.Reset.Format("15:04:05"))
 
 	// Wait for rate limit to reset
-	fmt.Println("\nWaiting for rate limit to reset...")
-	time.Sleep(winDuration - time.Millisecond)
+	fmt.Println("Waiting for rate limit to reset...")
+	time.Sleep(time.Until(result.Reset))
 
 	// Try another request after reset
 	var results map[string]strategies.Result

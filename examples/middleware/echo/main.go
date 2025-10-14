@@ -36,18 +36,15 @@ func main() {
 	e.Use(middleware.Logger())
 	e.Use(middleware.Recover())
 
-	// Add rate limiting middleware
-	e.Use(RateLimitMiddleware(limiter))
-
 	// Define routes
 	e.GET("/", func(c echo.Context) error {
 		return c.String(http.StatusOK, "Hello from protected endpoint!\n")
-	})
+	}, RateLimitMiddleware(limiter))
 
 	e.GET("/slow", func(c echo.Context) error {
 		time.Sleep(100 * time.Millisecond) // Simulate some processing time
 		return c.String(http.StatusOK, "This is a slow endpoint!\n")
-	})
+	}, RateLimitMiddleware(limiter))
 
 	e.GET("/unprotected", func(c echo.Context) error {
 		return c.String(http.StatusOK, "This endpoint is not rate limited.\n")
