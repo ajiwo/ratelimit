@@ -7,16 +7,16 @@ import "github.com/ajiwo/ratelimit/backends"
 // provided at Allow/GetResult time.
 type StrategyFactory func(storage backends.Backend) Strategy
 
-var registeredStrategies = make(map[string]StrategyFactory)
+var registeredStrategies = make(map[StrategyID]StrategyFactory)
 
-// Register registers a strategy factory under a unique name
-func Register(name string, factory StrategyFactory) {
-	registeredStrategies[name] = factory
+// Register registers a strategy factory under a unique ID
+func Register(id StrategyID, factory StrategyFactory) {
+	registeredStrategies[id] = factory
 }
 
-// Create creates a strategy instance by name using the provided backend
-func Create(name string, storage backends.Backend) (Strategy, error) {
-	factory, ok := registeredStrategies[name]
+// Create creates a strategy instance by ID using the provided backend
+func Create(id StrategyID, storage backends.Backend) (Strategy, error) {
+	factory, ok := registeredStrategies[id]
 	if !ok {
 		return nil, ErrStrategyNotFound
 	}

@@ -238,12 +238,12 @@ func newRateLimiter(config Config) (*RateLimiter, error) {
 		limiter.primaryStrategy = compositeStrategy
 
 		// Create and configure the individual strategies
-		primaryStrategy, err := strategies.Create(config.PrimaryConfig.Name(), config.Storage)
+		primaryStrategy, err := strategies.Create(config.PrimaryConfig.ID(), config.Storage)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create primary strategy: %w", err)
 		}
 
-		secondaryStrategy, err := strategies.Create(config.SecondaryConfig.Name(), config.Storage)
+		secondaryStrategy, err := strategies.Create(config.SecondaryConfig.ID(), config.Storage)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create secondary strategy: %w", err)
 		}
@@ -263,8 +263,8 @@ func newRateLimiter(config Config) (*RateLimiter, error) {
 	}
 
 	// Single strategy case
-	primaryStrategyName := config.PrimaryConfig.Name()
-	primaryStrategy, err := strategies.Create(primaryStrategyName, config.Storage)
+	primaryStrategyID := config.PrimaryConfig.ID()
+	primaryStrategy, err := strategies.Create(primaryStrategyID, config.Storage)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create primary strategy: %w", err)
 	}

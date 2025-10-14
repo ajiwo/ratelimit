@@ -6,7 +6,7 @@ import (
 )
 
 func init() {
-	strategies.Register("fixed_window", func(storage backends.Backend) strategies.Strategy {
+	strategies.Register(strategies.StrategyFixedWindow, func(storage backends.Backend) strategies.Strategy {
 		return New(storage)
 	})
 }

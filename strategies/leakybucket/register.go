@@ -6,7 +6,7 @@ import (
 )
 
 func init() {
-	strategies.Register("leaky_bucket", func(storage backends.Backend) strategies.Strategy {
+	strategies.Register(strategies.StrategyLeakyBucket, func(storage backends.Backend) strategies.Strategy {
 		return New(storage)
 	})
 }

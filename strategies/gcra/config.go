@@ -22,8 +22,8 @@ func (c Config) Validate() error {
 	return nil
 }
 
-func (c Config) Name() string {
-	return "gcra"
+func (c Config) ID() strategies.StrategyID {
+	return strategies.StrategyGCRA
 }
 
 func (c Config) Capabilities() strategies.CapabilityFlags {

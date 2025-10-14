@@ -403,7 +403,7 @@ func TestRateLimiter_BackendOperations(t *testing.T) {
 	config := limiter.GetConfig()
 	assert.Equal(t, "test", config.BaseKey)
 	assert.Equal(t, backend, config.Storage)
-	assert.Equal(t, "fixed_window", config.PrimaryConfig.Name())
+	assert.Equal(t, strategies.StrategyFixedWindow, config.PrimaryConfig.ID())
 
 	// Test closing
 	err = limiter.Close()

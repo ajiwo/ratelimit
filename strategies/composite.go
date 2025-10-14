@@ -44,8 +44,8 @@ func (c CompositeConfig) Validate() error {
 	return nil
 }
 
-func (c CompositeConfig) Name() string {
-	return fmt.Sprintf("composite(%s+%s)", c.Primary.Name(), c.Secondary.Name())
+func (c CompositeConfig) ID() StrategyID {
+	return StrategyComposite
 }
 
 func (c CompositeConfig) Capabilities() CapabilityFlags {

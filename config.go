@@ -84,7 +84,7 @@ func (c Config) Validate() error {
 
 		// Secondary strategy must have CapSecondary capability (for smoothing)
 		if !c.SecondaryConfig.Capabilities().Has(strategies.CapSecondary) {
-			return fmt.Errorf("secondary strategy must support secondary capability, got %s", c.SecondaryConfig.Name())
+			return fmt.Errorf("secondary strategy must support secondary capability, got %s", c.SecondaryConfig.ID().String())
 		}
 
 		// Primary strategy cannot have CapSecondary if secondary is also specified

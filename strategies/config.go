@@ -4,6 +4,36 @@ import (
 	"strings"
 )
 
+// StrategyID uniquely identifies a strategy implementation
+type StrategyID uint8
+
+const (
+	StrategyUnknown StrategyID = iota
+	StrategyTokenBucket
+	StrategyFixedWindow
+	StrategyLeakyBucket
+	StrategyGCRA
+	StrategyComposite
+)
+
+// String returns the canonical string representation of the strategy ID
+func (id StrategyID) String() string {
+	switch id {
+	case StrategyTokenBucket:
+		return "token_bucket"
+	case StrategyFixedWindow:
+		return "fixed_window"
+	case StrategyLeakyBucket:
+		return "leaky_bucket"
+	case StrategyGCRA:
+		return "gcra"
+	case StrategyComposite:
+		return "composite"
+	default:
+		return "unknown"
+	}
+}
+
 // StrategyRole defines the role a strategy instance will play
 type StrategyRole int
 
@@ -15,7 +45,7 @@ const (
 // StrategyConfig defines the interface for all strategy configurations
 type StrategyConfig interface {
 	Validate() error
-	Name() string
+	ID() StrategyID
 	Capabilities() CapabilityFlags
 
 	// Role-based methods

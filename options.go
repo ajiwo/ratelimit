@@ -31,7 +31,7 @@ func WithSecondaryStrategy(strategyConfig strategies.StrategyConfig) Option {
 
 		// Secondary strategy must have CapSecondary capability
 		if !strategyConfig.Capabilities().Has(strategies.CapSecondary) {
-			return fmt.Errorf("strategy '%s' doesn't have secondary capability", strategyConfig.Name())
+			return fmt.Errorf("strategy '%s' doesn't have secondary capability", strategyConfig.ID().String())
 		}
 
 		config.SecondaryConfig = strategyConfig

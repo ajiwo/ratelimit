@@ -23,8 +23,8 @@ func (c Config) Validate() error {
 	return nil
 }
 
-func (c Config) Name() string {
-	return "leaky_bucket"
+func (c Config) ID() strategies.StrategyID {
+	return strategies.StrategyLeakyBucket
 }
 
 func (c Config) Capabilities() strategies.CapabilityFlags {

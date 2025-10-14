@@ -6,7 +6,7 @@ import (
 )
 
 func init() {
-	strategies.Register("gcra", func(storage backends.Backend) strategies.Strategy {
+	strategies.Register(strategies.StrategyGCRA, func(storage backends.Backend) strategies.Strategy {
 		return New(storage)
 	})
 }

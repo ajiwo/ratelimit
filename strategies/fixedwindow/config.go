@@ -36,8 +36,8 @@ func (c Config) Validate() error {
 	return nil
 }
 
-func (c Config) Name() string {
-	return "fixed_window"
+func (c Config) ID() strategies.StrategyID {
+	return strategies.StrategyFixedWindow
 }
 
 func (c Config) Capabilities() strategies.CapabilityFlags {
