@@ -9,6 +9,7 @@ import (
 	"github.com/ajiwo/ratelimit/backends"
 	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/ajiwo/ratelimit/strategies/fixedwindow"
+	"github.com/ajiwo/ratelimit/strategies/gcra"
 	"github.com/ajiwo/ratelimit/strategies/leakybucket"
 	"github.com/ajiwo/ratelimit/strategies/tokenbucket"
 )
@@ -248,6 +249,14 @@ func (r *RateLimiter) createPrimaryConfig(dynamicKey string) (strategies.Strateg
 			LeakRate: leakyConfig.LeakRate,
 		}, nil
 
+	case "gcra":
+		gcraConfig := primaryConfig.(gcra.Config)
+		return gcra.Config{
+			Key:   key,
+			Burst: gcraConfig.Burst,
+			Rate:  gcraConfig.Rate,
+		}, nil
+
 	default:
 		return nil, fmt.Errorf("unknown primary strategy: %s", primaryConfig.Name())
 	}
@@ -315,6 +324,8 @@ func createStrategy(strategyName string, storage backends.Backend) (strategies.S
 		return tokenbucket.New(storage), nil
 	case "leaky_bucket":
 		return leakybucket.New(storage), nil
+	case "gcra":
+		return gcra.New(storage), nil
 	default:
 		return nil, fmt.Errorf("unknown strategy: %s", strategyName)
 	}
