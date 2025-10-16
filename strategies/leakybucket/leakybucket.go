@@ -15,8 +15,6 @@ import (
 type LeakyBucket struct {
 	Requests float64   `json:"requests"`  // Current number of requests in the bucket
 	LastLeak time.Time `json:"last_leak"` // Last time we leaked requests
-	Capacity float64   `json:"capacity"`  // Maximum requests the bucket can hold
-	LeakRate float64   `json:"leak_rate"` // Requests to leak per second
 }
 
 // Strategy implements the leaky bucket rate limiting algorithm
@@ -66,9 +64,9 @@ func (l *Strategy) GetResult(ctx context.Context, config strategies.StrategyConf
 		return nil, fmt.Errorf("failed to parse bucket state: invalid encoding")
 	}
 
-	// Leak requests based on time elapsed
+	// Leak requests based on time elapsed using config values
 	timeElapsed := now.Sub(bucket.LastLeak).Seconds()
-	requestsToLeak := timeElapsed * bucket.LeakRate
+	requestsToLeak := timeElapsed * leakyConfig.LeakRate
 	bucket.Requests = max(0, bucket.Requests-requestsToLeak)
 	bucket.LastLeak = now
 
@@ -97,83 +95,51 @@ func (l *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) 
 }
 
 // encodeLeakyBucket serializes LeakyBucket into a compact ASCII format:
-// v1|requests|lastleak_unix_nano|capacity|leak_rate
+// v2|requests|lastleak_unix_nano
 func encodeLeakyBucket(b LeakyBucket) string {
 	var sb strings.Builder
-	sb.Grow(2 + 1 + 24 + 1 + 20 + 1 + 24 + 1 + 24)
-	sb.WriteString("v1|")
+	sb.Grow(2 + 1 + 24 + 1 + 20)
+	sb.WriteString("v2|")
 	sb.WriteString(strconv.FormatFloat(b.Requests, 'g', -1, 64))
 	sb.WriteByte('|')
 	sb.WriteString(strconv.FormatInt(b.LastLeak.UnixNano(), 10))
-	sb.WriteByte('|')
-	sb.WriteString(strconv.FormatFloat(b.Capacity, 'g', -1, 64))
-	sb.WriteByte('|')
-	sb.WriteString(strconv.FormatFloat(b.LeakRate, 'g', -1, 64))
 	return sb.String()
 }
 
 // parseLeakyBucketFields parses the fields from a leaky bucket string representation
-func parseLeakyBucketFields(data string) (float64, int64, float64, float64, bool) {
+func parseLeakyBucketFields(data string) (float64, int64, bool) {
 	// Parse requests (first field)
 	pos1 := 0
 	for pos1 < len(data) && data[pos1] != '|' {
 		pos1++
 	}
 	if pos1 == len(data) {
-		return 0, 0, 0, 0, false
+		return 0, 0, false
 	}
 
 	req, err1 := strconv.ParseFloat(data[:pos1], 64)
 	if err1 != nil {
-		return 0, 0, 0, 0, false
+		return 0, 0, false
 	}
 
 	// Parse last leak (second field)
-	pos2 := pos1 + 1
-	for pos2 < len(data) && data[pos2] != '|' {
-		pos2++
-	}
-	if pos2 == len(data) {
-		return 0, 0, 0, 0, false
-	}
-
-	last, err2 := strconv.ParseInt(data[pos1+1:pos2], 10, 64)
+	last, err2 := strconv.ParseInt(data[pos1+1:], 10, 64)
 	if err2 != nil {
-		return 0, 0, 0, 0, false
+		return 0, 0, false
 	}
 
-	// Parse capacity (third field)
-	pos3 := pos2 + 1
-	for pos3 < len(data) && data[pos3] != '|' {
-		pos3++
-	}
-	if pos3 == len(data) {
-		return 0, 0, 0, 0, false
-	}
-
-	capf, err3 := strconv.ParseFloat(data[pos2+1:pos3], 64)
-	if err3 != nil {
-		return 0, 0, 0, 0, false
-	}
-
-	// Parse leak rate (fourth field)
-	lrate, err4 := strconv.ParseFloat(data[pos3+1:], 64)
-	if err4 != nil {
-		return 0, 0, 0, 0, false
-	}
-
-	return req, last, capf, lrate, true
+	return req, last, true
 }
 
 // decodeLeakyBucket deserializes from compact format; returns ok=false if not compact.
 func decodeLeakyBucket(s string) (LeakyBucket, bool) {
-	if !strategies.CheckV1Header(s) {
+	if !strategies.CheckV2Header(s) {
 		return LeakyBucket{}, false
 	}
 
-	data := s[3:] // Skip "v1|"
+	data := s[3:] // Skip "v2|"
 
-	req, last, capf, lrate, ok := parseLeakyBucketFields(data)
+	req, last, ok := parseLeakyBucketFields(data)
 	if !ok {
 		return LeakyBucket{}, false
 	}
@@ -181,13 +147,11 @@ func decodeLeakyBucket(s string) (LeakyBucket, bool) {
 	return LeakyBucket{
 		Requests: req,
 		LastLeak: time.Unix(0, last),
-		Capacity: capf,
-		LeakRate: lrate,
 	}, true
 }
 
 // calculateLBResetTime calculates when the bucket will have capacity for another request
-func calculateLBResetTime(now time.Time, bucket LeakyBucket, capacity int) time.Time {
+func calculateLBResetTime(now time.Time, bucket LeakyBucket, capacity int, leakRate float64) time.Time {
 	if bucket.Requests < float64(capacity) {
 		// Already has capacity, no reset needed
 		return now
@@ -200,7 +164,7 @@ func calculateLBResetTime(now time.Time, bucket LeakyBucket, capacity int) time.
 	}
 
 	// time = requests / leakRate (convert from float seconds to time.Duration)
-	timeToLeakSeconds := requestsToLeak / bucket.LeakRate
+	timeToLeakSeconds := requestsToLeak / leakRate
 	return now.Add(time.Duration(timeToLeakSeconds * float64(time.Second)))
 }
 
@@ -212,7 +176,6 @@ func (l *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 		return nil, fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
 	}
 
-	capacity := float64(leakyConfig.Capacity)
 	leakRate := leakyConfig.LeakRate
 
 	now := time.Now()
@@ -237,8 +200,6 @@ func (l *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 			bucket = LeakyBucket{
 				Requests: 0,
 				LastLeak: now,
-				Capacity: capacity,
-				LeakRate: leakRate,
 			}
 			oldValue = nil // Key doesn't exist
 		} else {
@@ -250,9 +211,9 @@ func (l *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 			}
 			oldValue = data // Current value for CheckAndSet
 
-			// Leak requests based on elapsed time
+			// Leak requests based on elapsed time using config values
 			elapsed := now.Sub(bucket.LastLeak)
-			requestsToLeak := float64(elapsed.Nanoseconds()) * bucket.LeakRate / 1e9
+			requestsToLeak := float64(elapsed.Nanoseconds()) * leakRate / 1e9
 			bucket.Requests = max(bucket.Requests-requestsToLeak, 0)
 			bucket.LastLeak = now
 		}
@@ -315,7 +276,7 @@ func (l *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 				"default": {
 					Allowed:   false,
 					Remaining: remaining,
-					Reset:     calculateLBResetTime(now, bucket, leakyConfig.Capacity),
+					Reset:     calculateLBResetTime(now, bucket, leakyConfig.Capacity, leakRate),
 				},
 			}, nil
 		}

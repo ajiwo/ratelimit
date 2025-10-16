@@ -13,9 +13,7 @@ import (
 
 // GCRA represents the state for GCRA rate limiting
 type GCRA struct {
-	TAT      time.Time     `json:"tat"`      // Theoretical Arrival Time
-	Interval time.Duration `json:"interval"` // Time between allowed requests
-	Limit    time.Duration `json:"limit"`    // Maximum allowed burst/lateness
+	TAT time.Time `json:"tat"` // Theoretical Arrival Time
 }
 
 // Strategy implements the GCRA rate limiting algorithm
@@ -59,9 +57,7 @@ func (g *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 		if data == "" {
 			// Initialize new state
 			state = GCRA{
-				TAT:      now,
-				Interval: emissionInterval,
-				Limit:    limit,
+				TAT: now,
 			}
 			oldValue = nil // Key doesn't exist
 		} else {
@@ -207,76 +203,42 @@ func (g *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) 
 }
 
 // encodeGCRAState serializes GCRAState into a compact ASCII format:
-// v1|tat_unix_nano|emission_interval_nano|limit_nano
+// v2|tat_unix_nano
 func encodeGCRAState(s GCRA) string {
 	var sb strings.Builder
-	sb.Grow(2 + 1 + 20 + 1 + 20 + 1 + 20) // rough capacity
-	sb.WriteString("v1|")
+	sb.Grow(2 + 1 + 20) // rough capacity
+	sb.WriteString("v2|")
 	sb.WriteString(strconv.FormatInt(s.TAT.UnixNano(), 10))
-	sb.WriteByte('|')
-	sb.WriteString(strconv.FormatInt(int64(s.Interval), 10))
-	sb.WriteByte('|')
-	sb.WriteString(strconv.FormatInt(int64(s.Limit), 10))
 	return sb.String()
 }
 
 // decodeGCRAState deserializes from compact format; returns ok=false if not compact.
 func decodeGCRAState(s string) (GCRA, bool) {
-	if !strategies.CheckV1Header(s) {
+	if !strategies.CheckV2Header(s) {
 		return GCRA{}, false
 	}
 
-	data := s[3:] // Skip "v1|"
+	data := s[3:] // Skip "v2|"
 
-	tat, emissionInterval, limit, ok := parseGCRAStateFields(data)
+	tat, ok := parseGCRAStateFields(data)
 	if !ok {
 		return GCRA{}, false
 	}
 
 	return GCRA{
-		TAT:      time.Unix(0, tat),
-		Interval: time.Duration(emissionInterval),
-		Limit:    time.Duration(limit),
+		TAT: time.Unix(0, tat),
 	}, true
 }
 
 // parseGCRAStateFields parses the fields from a GCRA state string representation
-func parseGCRAStateFields(data string) (int64, int64, int64, bool) {
-	// Parse TAT (first field)
-	pos1 := 0
-	for pos1 < len(data) && data[pos1] != '|' {
-		pos1++
-	}
-	if pos1 == len(data) {
-		return 0, 0, 0, false
+func parseGCRAStateFields(data string) (int64, bool) {
+	// Parse TAT (only field)
+	tat, err := strconv.ParseInt(data, 10, 64)
+	if err != nil {
+		return 0, false
 	}
 
-	tat, err1 := strconv.ParseInt(data[:pos1], 10, 64)
-	if err1 != nil {
-		return 0, 0, 0, false
-	}
-
-	// Parse emission interval (second field)
-	pos2 := pos1 + 1
-	for pos2 < len(data) && data[pos2] != '|' {
-		pos2++
-	}
-	if pos2 == len(data) {
-		return 0, 0, 0, false
-	}
-
-	emissionInterval, err2 := strconv.ParseInt(data[pos1+1:pos2], 10, 64)
-	if err2 != nil {
-		return 0, 0, 0, false
-	}
-
-	// Parse limit (third field)
-	limit, err3 := strconv.ParseInt(data[pos2+1:], 10, 64)
-	if err3 != nil {
-		return 0, 0, 0, false
-	}
-
-	return tat, emissionInterval, limit, true
+	return tat, true
 }
 
 // calculateRemaining calculates the number of remaining requests based on current state

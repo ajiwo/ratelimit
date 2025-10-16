@@ -9,9 +9,9 @@ const (
 	CheckAndSetRetries = 3000
 )
 
-// CheckV1Header validates that the string starts with "v1|"
-func CheckV1Header(s string) bool {
-	return len(s) >= 3 && s[0] == 'v' && s[1] == '1' && s[2] == '|'
+// CheckV2Header validates that the string starts with "v2|"
+func CheckV2Header(s string) bool {
+	return len(s) >= 3 && s[0] == 'v' && s[1] == '2' && s[2] == '|'
 }
 
 // CalcExpiration calculates an appropriate expiration time for storage operations

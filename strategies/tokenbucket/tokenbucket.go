@@ -16,8 +16,6 @@ import (
 type TokenBucket struct {
 	Tokens     float64   `json:"tokens"`
 	LastRefill time.Time `json:"last_refill"`
-	Capacity   float64   `json:"capacity"`
-	RefillRate float64   `json:"refill_rate"` // tokens per second
 }
 
 // Strategy implements the token bucket rate limiting algorithm
@@ -66,10 +64,10 @@ func (t *Strategy) GetResult(ctx context.Context, config strategies.StrategyConf
 		return nil, fmt.Errorf("failed to parse bucket state: invalid encoding")
 	}
 
-	// Refill tokens based on time elapsed
+	// Refill tokens based on time elapsed using config values
 	timeElapsed := now.Sub(bucket.LastRefill).Seconds()
-	tokensToAdd := timeElapsed * bucket.RefillRate
-	bucket.Tokens = math.Min(bucket.Tokens+tokensToAdd, bucket.Capacity)
+	tokensToAdd := timeElapsed * tokenConfig.RefillRate
+	bucket.Tokens = math.Min(bucket.Tokens+tokensToAdd, float64(tokenConfig.BurstSize))
 	bucket.LastRefill = now
 
 	// Calculate remaining requests (floor of available tokens)
@@ -97,84 +95,52 @@ func (t *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) 
 }
 
 // encodeTokenBucket serializes TokenBucket into a compact ASCII format:
-// v1|tokens|lastrefill_unix_nano|capacity|refill_rate
+// v2|tokens|lastrefill_unix_nano
 func encodeTokenBucket(b TokenBucket) string {
 	var sb strings.Builder
 	// rough capacity
-	sb.Grow(2 + 1 + 24 + 1 + 20 + 1 + 24 + 1 + 24)
-	sb.WriteString("v1|")
+	sb.Grow(2 + 1 + 24 + 1 + 20)
+	sb.WriteString("v2|")
 	sb.WriteString(strconv.FormatFloat(b.Tokens, 'g', -1, 64))
 	sb.WriteByte('|')
 	sb.WriteString(strconv.FormatInt(b.LastRefill.UnixNano(), 10))
-	sb.WriteByte('|')
-	sb.WriteString(strconv.FormatFloat(b.Capacity, 'g', -1, 64))
-	sb.WriteByte('|')
-	sb.WriteString(strconv.FormatFloat(b.RefillRate, 'g', -1, 64))
 	return sb.String()
 }
 
 // parseTokenBucketFields parses the fields from a token bucket string representation
-func parseTokenBucketFields(data string) (float64, int64, float64, float64, bool) {
+func parseTokenBucketFields(data string) (float64, int64, bool) {
 	// Parse tokens (first field)
 	pos1 := 0
 	for pos1 < len(data) && data[pos1] != '|' {
 		pos1++
 	}
 	if pos1 == len(data) {
-		return 0, 0, 0, 0, false
+		return 0, 0, false
 	}
 
 	tokens, err1 := strconv.ParseFloat(data[:pos1], 64)
 	if err1 != nil {
-		return 0, 0, 0, 0, false
+		return 0, 0, false
 	}
 
 	// Parse last refill (second field)
-	pos2 := pos1 + 1
-	for pos2 < len(data) && data[pos2] != '|' {
-		pos2++
-	}
-	if pos2 == len(data) {
-		return 0, 0, 0, 0, false
-	}
-
-	last, err2 := strconv.ParseInt(data[pos1+1:pos2], 10, 64)
+	last, err2 := strconv.ParseInt(data[pos1+1:], 10, 64)
 	if err2 != nil {
-		return 0, 0, 0, 0, false
+		return 0, 0, false
 	}
 
-	// Parse capacity (third field)
-	pos3 := pos2 + 1
-	for pos3 < len(data) && data[pos3] != '|' {
-		pos3++
-	}
-	if pos3 == len(data) {
-		return 0, 0, 0, 0, false
-	}
-
-	capf, err3 := strconv.ParseFloat(data[pos2+1:pos3], 64)
-	if err3 != nil {
-		return 0, 0, 0, 0, false
-	}
-
-	// Parse refill rate (fourth field)
-	rrate, err4 := strconv.ParseFloat(data[pos3+1:], 64)
-	if err4 != nil {
-		return 0, 0, 0, 0, false
-	}
-
-	return tokens, last, capf, rrate, true
+	return tokens, last, true
 }
 
 // decodeTokenBucket deserializes from compact format; returns ok=false if not compact.
 func decodeTokenBucket(s string) (TokenBucket, bool) {
-	if !strategies.CheckV1Header(s) {
+	if !strategies.CheckV2Header(s) {
 		return TokenBucket{}, false
 	}
 
-	data := s[3:] // Skip "v1|"
+	data := s[3:] // Skip "v2|"
 
-	tokens, last, capf, rrate, ok := parseTokenBucketFields(data)
+	tokens, last, ok := parseTokenBucketFields(data)
 	if !ok {
 		return TokenBucket{}, false
 	}
@@ -182,13 +148,11 @@ func decodeTokenBucket(s string) (TokenBucket, bool) {
 	return TokenBucket{
 		Tokens:     tokens,
 		LastRefill: time.Unix(0, last),
-		Capacity:   capf,
-		RefillRate: rrate,
 	}, true
 }
 
 // calculateTBResetTime calculates when the bucket will have at least one full token
-func calculateTBResetTime(now time.Time, bucket TokenBucket) time.Time {
+func calculateTBResetTime(now time.Time, bucket TokenBucket, refillRate float64) time.Time {
 	if bucket.Tokens >= 1.0 {
 		// Already has tokens, no reset needed
 		return now
@@ -201,7 +165,7 @@ func calculateTBResetTime(now time.Time, bucket TokenBucket) time.Time {
 	}
 
 	// time = tokensNeeded / refillRate (convert from float seconds to time.Duration)
-	timeToRefillSeconds := tokensNeeded / bucket.RefillRate
+	timeToRefillSeconds := tokensNeeded / refillRate
 	return now.Add(time.Duration(timeToRefillSeconds * float64(time.Second)))
 }
 
@@ -238,8 +202,6 @@ func (t *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 			bucket = TokenBucket{
 				Tokens:     capacity,
 				LastRefill: now,
-				Capacity:   capacity,
-				RefillRate: refillRate,
 			}
 			oldValue = nil // Key doesn't exist
 		} else {
@@ -251,10 +213,10 @@ func (t *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 			}
 			oldValue = data // Current value for CheckAndSet
 
-			// Refill tokens based on elapsed time
+			// Refill tokens based on elapsed time using config values
 			elapsed := now.Sub(bucket.LastRefill)
-			tokensToAdd := float64(elapsed.Nanoseconds()) * bucket.RefillRate / 1e9
-			bucket.Tokens = math.Min(bucket.Tokens+tokensToAdd, bucket.Capacity)
+			tokensToAdd := float64(elapsed.Nanoseconds()) * refillRate / 1e9
+			bucket.Tokens = math.Min(bucket.Tokens+tokensToAdd, capacity)
 			bucket.LastRefill = now
 		}
 
@@ -316,7 +278,7 @@ func (t *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 				"default": {
 					Allowed:   false,
 					Remaining: remaining,
-					Reset:     calculateTBResetTime(now, bucket),
+					Reset:     calculateTBResetTime(now, bucket, refillRate),
 				},
 			}, nil
 		}

@@ -13,9 +13,8 @@ import (
 
 // FixedWindow represents the state of a fixed window
 type FixedWindow struct {
-	Count    int           `json:"count"`    // Current request count in the window
-	Start    time.Time     `json:"start"`    // Window start time
-	Duration time.Duration `json:"duration"` // Window duration
+	Count int       `json:"count"` // Current request count in the window
+	Start time.Time `json:"start"` // Window start time
 }
 
 // quotaState represents the state of a single quota during processing
@@ -81,7 +80,7 @@ func (f *Strategy) GetResult(ctx context.Context, config strategies.StrategyConf
 		}
 
 		// Check if current window has expired
-		if now.Sub(window.Start) >= window.Duration {
+		if now.Sub(window.Start) >= quota.Window {
 			// Window has expired, return fresh state
 			results[quotaName] = strategies.Result{
 				Allowed:   true,
@@ -93,7 +92,7 @@ func (f *Strategy) GetResult(ctx context.Context, config strategies.StrategyConf
 
 		// Calculate remaining requests and reset time
 		remaining := max(quota.Limit-window.Count, 0)
-		resetTime := window.Start.Add(window.Duration)
+		resetTime := window.Start.Add(quota.Window)
 
 		results[quotaName] = strategies.Result{
 			Allowed:   remaining > 0,
@@ -125,75 +124,58 @@ func (f *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) 
 }
 
 // encodeFixedWindow serializes FixedWindow into a compact ASCII format:
-// v1|count|start_unix_nano|duration_nano
+// v2|count|start_unix_nano
 func encodeFixedWindow(w FixedWindow) string {
 	var b strings.Builder
-	b.Grow(2 + 1 + 20 + 1 + 20 + 1 + 20) // rough capacity
-	b.WriteString("v1|")
+	b.Grow(2 + 1 + 20 + 1 + 20) // rough capacity
+	b.WriteString("v2|")
 	b.WriteString(strconv.Itoa(w.Count))
 	b.WriteByte('|')
 	b.WriteString(strconv.FormatInt(w.Start.UnixNano(), 10))
-	b.WriteByte('|')
-	b.WriteString(strconv.FormatInt(int64(w.Duration), 10))
 	return b.String()
 }
 
 // parseFixedWindowFields parses the fields from a fixed window string representation
-func parseFixedWindowFields(data string) (int, int64, int64, bool) {
+func parseFixedWindowFields(data string) (int, int64, bool) {
 	// Parse count (first field)
 	pos1 := 0
 	for pos1 < len(data) && data[pos1] != '|' {
 		pos1++
 	}
 	if pos1 == len(data) {
-		return 0, 0, 0, false
+		return 0, 0, false
 	}
 
 	count, err1 := strconv.Atoi(data[:pos1])
 	if err1 != nil {
-		return 0, 0, 0, false
+		return 0, 0, false
 	}
 
 	// Parse start time (second field)
-	pos2 := pos1 + 1
-	for pos2 < len(data) && data[pos2] != '|' {
-		pos2++
-	}
-	if pos2 == len(data) {
-		return 0, 0, 0, false
-	}
-
-	startNS, err2 := strconv.ParseInt(data[pos1+1:pos2], 10, 64)
+	startNS, err2 := strconv.ParseInt(data[pos1+1:], 10, 64)
 	if err2 != nil {
-		return 0, 0, 0, false
+		return 0, 0, false
 	}
 
-	// Parse duration (third field)
-	durNS, err3 := strconv.ParseInt(data[pos2+1:], 10, 64)
-	if err3 != nil {
-		return 0, 0, 0, false
-	}
-
-	return count, startNS, durNS, true
+	return count, startNS, true
 }
 
 // decodeFixedWindow deserializes from compact format; returns ok=false if not compact.
 func decodeFixedWindow(s string) (FixedWindow, bool) {
-	if !strategies.CheckV1Header(s) {
+	if !strategies.CheckV2Header(s) {
 		return FixedWindow{}, false
 	}
 
-	data := s[3:] // Skip "v1|"
+	data := s[3:] // Skip "v2|"
 
-	count, startNS, durNS, ok := parseFixedWindowFields(data)
+	count, startNS, ok := parseFixedWindowFields(data)
 	if !ok {
 		return FixedWindow{}, false
 	}
 
 	return FixedWindow{
-		Count:    count,
-		Start:    time.Unix(0, startNS),
-		Duration: time.Duration(durNS),
+		Count: count,
+		Start: time.Unix(0, startNS),
 	}, true
 }
 
@@ -287,9 +269,8 @@ func (f *Strategy) getQuotaStates(ctx context.Context, fixedConfig Config, now t
 		if data == "" {
 			// Initialize new window
 			window = FixedWindow{
-				Count:    0,
-				Start:    now,
-				Duration: quota.Window,
+				Count: 0,
+				Start: now,
 			}
 			oldValue = nil // Key doesn't exist
 		} else {
@@ -301,11 +282,10 @@ func (f *Strategy) getQuotaStates(ctx context.Context, fixedConfig Config, now t
 			}
 
 			// Check if current window has expired
-			if now.Sub(window.Start) >= window.Duration {
+			if now.Sub(window.Start) >= quota.Window {
 				// Start new window - reset count but keep same start time structure
 				window.Count = 0
 				window.Start = now
-				window.Duration = quota.Window
 			}
 			oldValue = data
 		}
@@ -345,13 +325,13 @@ func (f *Strategy) consumeQuota(ctx context.Context, state quotaState, now time.
 
 		// Calculate remaining after increment
 		remaining := max(state.quota.Limit-updatedWindow.Count, 0)
-		resetTime := updatedWindow.Start.Add(updatedWindow.Duration)
+		resetTime := updatedWindow.Start.Add(state.quota.Window)
 
 		// Save updated window state in compact format
 		newValue := encodeFixedWindow(updatedWindow)
 
 		// Use CheckAndSet for atomic update
-		success, err := f.storage.CheckAndSet(ctx, state.key, state.oldValue, newValue, updatedWindow.Duration)
+		success, err := f.storage.CheckAndSet(ctx, state.key, state.oldValue, newValue, state.quota.Window)
 		if err != nil {
 			return strategies.Result{}, fmt.Errorf("failed to save window state for quota '%s': %w", state.name, err)
 		}
@@ -377,9 +357,8 @@ func (f *Strategy) consumeQuota(ctx context.Context, state quotaState, now time.
 			if data == "" {
 				// Window disappeared, start fresh
 				updatedWindow = FixedWindow{
-					Count:    0,
-					Start:    now,
-					Duration: state.quota.Window,
+					Count: 0,
+					Start: now,
 				}
 				state.oldValue = nil
 			} else {
@@ -387,10 +366,9 @@ func (f *Strategy) consumeQuota(ctx context.Context, state quotaState, now time.
 				if w, ok := decodeFixedWindow(data); ok {
 					updatedWindow = w
 					// Check if window expired during retry
-					if now.Sub(updatedWindow.Start) >= updatedWindow.Duration {
+					if now.Sub(updatedWindow.Start) >= state.quota.Window {
 						updatedWindow.Count = 0
 						updatedWindow.Start = now
-						updatedWindow.Duration = state.quota.Window
 					}
 				} else {
 					return strategies.Result{}, fmt.Errorf("failed to parse window state for quota '%s' during retry: invalid encoding", state.name)
@@ -408,7 +386,7 @@ func (f *Strategy) consumeQuota(ctx context.Context, state quotaState, now time.
 // getDenyResult returns results for a quota when the request is denied
 func (f *Strategy) getDenyResult(ctx context.Context, state quotaState, now time.Time) (strategies.Result, error) {
 	remaining := max(state.quota.Limit-state.window.Count, 0)
-	resetTime := state.window.Start.Add(state.window.Duration)
+	resetTime := state.window.Start.Add(state.quota.Window)
 
 	result := strategies.Result{
 		Allowed:   state.allowed,
@@ -417,15 +395,14 @@ func (f *Strategy) getDenyResult(ctx context.Context, state quotaState, now time
 	}
 
 	// For denied requests, handle window reset if expired
-	if !state.allowed && now.Sub(state.window.Start) >= state.window.Duration {
+	if !state.allowed && now.Sub(state.window.Start) >= state.quota.Window {
 		// Window expired, reset it
 		resetWindow := FixedWindow{
-			Count:    0,
-			Start:    now,
-			Duration: state.quota.Window,
+			Count: 0,
+			Start: now,
 		}
 		newValue := encodeFixedWindow(resetWindow)
-		_, err := f.storage.CheckAndSet(ctx, state.key, state.oldValue, newValue, resetWindow.Duration)
+		_, err := f.storage.CheckAndSet(ctx, state.key, state.oldValue, newValue, state.quota.Window)
 		if err != nil {
 			return strategies.Result{}, fmt.Errorf("failed to reset expired window for quota '%s': %w", state.name, err)
 		}
@@ -455,7 +432,7 @@ func (f *Strategy) initializeUnprocessedQuotas(ctx context.Context, fixedConfig 
 			} else {
 				// Get current state without modifying
 				if w, ok := decodeFixedWindow(data); ok {
-					if now.Sub(w.Start) >= w.Duration {
+					if now.Sub(w.Start) >= quota.Window {
 						// Window expired
 						results[quotaName] = strategies.Result{
 							Allowed:   true,
@@ -467,7 +444,7 @@ func (f *Strategy) initializeUnprocessedQuotas(ctx context.Context, fixedConfig 
 						results[quotaName] = strategies.Result{
 							Allowed:   remaining > 0,
 							Remaining: remaining,
-							Reset:     w.Start.Add(w.Duration),
+							Reset:     w.Start.Add(quota.Window),
 						}
 					}
 				} else {
@@ -517,9 +494,8 @@ func (f *Strategy) allowSingleQuota(ctx context.Context, fixedConfig Config, now
 		if data == "" {
 			// Initialize new window
 			window = FixedWindow{
-				Count:    0,
-				Start:    now,
-				Duration: quota.Window,
+				Count: 0,
+				Start: now,
 			}
 			oldValue = nil // Key doesn't exist
 		} else {
@@ -531,18 +507,17 @@ func (f *Strategy) allowSingleQuota(ctx context.Context, fixedConfig Config, now
 			}
 
 			// Check if current window has expired
-			if now.Sub(window.Start) >= window.Duration {
+			if now.Sub(window.Start) >= quota.Window {
 				// Start new window - reset count but keep same start time structure
 				window.Count = 0
 				window.Start = now
-				window.Duration = quota.Window
 			}
 			oldValue = data
 		}
 
 		// Determine if request is allowed based on current count
 		allowed = window.Count < quota.Limit
-		resetTime = window.Start.Add(window.Duration)
+		resetTime = window.Start.Add(quota.Window)
 
 		if allowed {
 			// Increment request count
@@ -555,7 +530,7 @@ func (f *Strategy) allowSingleQuota(ctx context.Context, fixedConfig Config, now
 			newValue := encodeFixedWindow(window)
 
 			// Use CheckAndSet for atomic update
-			success, err := f.storage.CheckAndSet(ctx, quotaKey, oldValue, newValue, window.Duration)
+			success, err := f.storage.CheckAndSet(ctx, quotaKey, oldValue, newValue, quota.Window)
 			if err != nil {
 				return nil, fmt.Errorf("failed to save window state for quota '%s': %w", quotaName, err)
 			}
@@ -576,14 +551,13 @@ func (f *Strategy) allowSingleQuota(ctx context.Context, fixedConfig Config, now
 
 			// For denied requests, we don't need to update the count
 			// Only update if window expired to ensure proper reset handling
-			if now.Sub(window.Start) >= window.Duration {
+			if now.Sub(window.Start) >= quota.Window {
 				// Window expired, reset it
 				window.Count = 0
 				window.Start = now
-				window.Duration = quota.Window
 
 				newValue := encodeFixedWindow(window)
-				_, err := f.storage.CheckAndSet(ctx, quotaKey, oldValue, newValue, window.Duration)
+				_, err := f.storage.CheckAndSet(ctx, quotaKey, oldValue, newValue, quota.Window)
 				if err != nil {
 					return nil, fmt.Errorf("failed to reset expired window for quota '%s': %w", quotaName, err)
 				}
