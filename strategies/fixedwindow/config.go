@@ -2,6 +2,7 @@ package fixedwindow
 
 import (
 	"fmt"
+	"math"
 	"time"
 
 	"github.com/ajiwo/ratelimit/strategies"
@@ -15,7 +16,6 @@ type Quota struct {
 type Config struct {
 	Key    string
 	Quotas map[string]Quota
-	role   strategies.StrategyRole
 }
 
 func (c Config) Validate() error {
@@ -33,6 +33,36 @@ func (c Config) Validate() error {
 			return fmt.Errorf("fixed window quota '%s' window must be positive, got %v", name, quota.Window)
 		}
 	}
+
+	// Validate for duplicate rate ratios (requests per second)
+	if err := c.validateUniqueRateRatios(); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// validateUniqueRateRatios ensures each quota has a unique rate ratio
+func (c Config) validateUniqueRateRatios() error {
+	// Map to track rate ratios: normalized requests per second
+	rateRatios := make(map[float64]string)
+
+	for name, quota := range c.Quotas {
+		// Calculate rate as requests per second
+		ratePerSecond := float64(quota.Limit) / quota.Window.Seconds()
+
+		// Check for existing rate ratio (with small tolerance for floating point precision)
+		tolerance := 1e-9
+		for existingRate, existingName := range rateRatios {
+			if math.Abs(ratePerSecond-existingRate) < tolerance {
+				return fmt.Errorf("fixed window quotas '%s' and '%s' have duplicate rate ratios (both %.6f requests/second). Each quota must have a unique rate limit",
+					name, existingName, ratePerSecond)
+			}
+		}
+
+		rateRatios[ratePerSecond] = name
+	}
+
 	return nil
 }
 
@@ -45,11 +75,10 @@ func (c Config) Capabilities() strategies.CapabilityFlags {
 }
 
 func (c Config) GetRole() strategies.StrategyRole {
-	return c.role
+	return strategies.RolePrimary
 }
 
 func (c Config) WithRole(role strategies.StrategyRole) strategies.StrategyConfig {
-	c.role = role
 	return c
 }
 

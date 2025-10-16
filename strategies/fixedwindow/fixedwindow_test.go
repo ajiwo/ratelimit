@@ -324,3 +324,91 @@ func TestFixedWindow_PreciseTiming(t *testing.T) {
 		assert.False(t, result["default"].Allowed, "Seventh request should be denied")
 	})
 }
+
+func TestFixedWindow_ValidationDuplicateRates(t *testing.T) {
+	// Test 1: Valid unique ratios
+	t.Run("valid unique ratios", func(t *testing.T) {
+		config := NewConfig("test").
+			AddQuota("burst", 10, time.Minute).    // 0.166667 req/sec
+			AddQuota("sustained", 100, time.Hour). // 0.027778 req/sec
+			AddQuota("daily", 1000, 24*time.Hour). // 0.011574 req/sec
+			Build()
+		err := config.Validate()
+		assert.NoError(t, err, "Valid unique ratios should pass")
+	})
+
+	// Test 2: Invalid - same ratio, different windows
+	t.Run("same ratio different windows", func(t *testing.T) {
+		config := NewConfig("test").
+			AddQuota("per-minute", 1, time.Minute). // 1/60 = 0.016667 req/sec
+			AddQuota("per-hour", 60, time.Hour).    // 60/3600 = 0.016667 req/sec
+			Build()
+		err := config.Validate()
+		assert.Error(t, err, "Same ratio with different windows should fail")
+		assert.Contains(t, err.Error(), "duplicate rate ratios")
+		assert.Contains(t, err.Error(), "per-minute")
+		assert.Contains(t, err.Error(), "per-hour")
+	})
+
+	// Test 3: Invalid - different limits, same window
+	t.Run("different limits same window", func(t *testing.T) {
+		config := NewConfig("test").
+			AddQuota("low", 10, time.Hour).   // 10/3600 = 0.002778 req/sec
+			AddQuota("high", 100, time.Hour). // 100/3600 = 0.027778 req/sec
+			Build()
+		err := config.Validate()
+		assert.NoError(t, err, "Different limits should pass (they have different rates)")
+	})
+
+	// Test 4: Valid - contradictory names but different rates
+	t.Run("contradictory names different rates", func(t *testing.T) {
+		config := NewConfig("test").
+			AddQuota("slow", 1000, time.Hour). // 1000/3600 = 0.277778 req/sec
+			AddQuota("fast", 50, time.Minute). // 50/60 = 0.833333 req/sec
+			Build()
+		err := config.Validate()
+		assert.NoError(t, err, "Contradictory names with different rates should pass")
+	})
+
+	// Test 5: Valid - very close but different ratios
+	t.Run("close but different ratios", func(t *testing.T) {
+		config := NewConfig("test").
+			AddQuota("quota-a", 100, time.Hour). // 100/3600 = 0.027778 req/sec
+			AddQuota("quota-b", 101, time.Hour). // 101/3600 = 0.028056 req/sec
+			Build()
+		err := config.Validate()
+		assert.NoError(t, err, "Very close but different ratios should pass")
+	})
+
+	// Test 6: Invalid - multiple duplicate ratios
+	t.Run("multiple duplicate ratios", func(t *testing.T) {
+		config := NewConfig("test").
+			AddQuota("quota-a", 30, 30*time.Minute). // 30/1800 = 0.016667 req/sec
+			AddQuota("quota-b", 60, time.Hour).      // 60/3600 = 0.016667 req/sec
+			AddQuota("quota-c", 1440, 24*time.Hour). // 1440/86400 = 0.016667 req/sec
+			Build()
+		err := config.Validate()
+		assert.Error(t, err, "Multiple duplicate ratios should fail")
+		assert.Contains(t, err.Error(), "duplicate rate ratios")
+	})
+
+	// Test 7: Valid - single quota should always pass
+	t.Run("single quota", func(t *testing.T) {
+		config := NewConfig("test").
+			AddQuota("single", 100, time.Hour).
+			Build()
+		err := config.Validate()
+		assert.NoError(t, err, "Single quota should always pass")
+	})
+
+	// Test 8: Invalid - exact same limit and window
+	t.Run("identical quotas", func(t *testing.T) {
+		config := NewConfig("test").
+			AddQuota("quota1", 100, time.Hour).
+			AddQuota("quota2", 100, time.Hour).
+			Build()
+		err := config.Validate()
+		assert.Error(t, err, "Identical quotas should fail")
+		assert.Contains(t, err.Error(), "duplicate rate ratios")
+	})
+}
