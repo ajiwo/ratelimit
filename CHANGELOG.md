@@ -2,6 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+## [0.0.5] - 2025-10-16
+
+### Added
+- **GCRA (Generic Cell Rate Algorithm)** strategy implementation for precise rate limiting with minimal jitter
+- **Strategy Registry System** with plugin-based architecture for dynamic strategy discovery and creation
+- **Strategy ID types** and capability-based validation for type-safe strategy management
+- **Builder pattern** for Fixed Window configuration with `fixedwindow.NewConfig(key).AddQuota(name, limit, window).Build()`
+- **Composite Strategy** for dual-strategy rate limiting with dedicated orchestration logic
+- **Echo framework middleware example** demonstrating integration with web frameworks
+- **Custom strategy composition example** showing how to build custom rate limiters with user-defined decision logic (AND, OR, priority-based, etc.)
+- **Role-based strategy configurations** with Primary/Secondary role awareness
+- **Strategy configuration packages** moved to dedicated packages for better modularity
+
+### Changed
+- **Terminology update**: "tier" renamed to "quota" throughout codebase for clarity
+- **Strategy interface redesigned** to return `map[string]Result` for better multi-quota support
+- **Dual-strategy orchestration** moved from main limiter to dedicated Composite Strategy
+- **Strategy configurations** moved to individual strategy packages with `WithKey()` interface
+- **Backend configuration** standardized across all storage backends
+- **Memory backend** enhanced with automatic cleanup for stale entries
+- **Strategy validation** replaced string-based type checks with capability-based validation
+- **Result structure** unified across all strategies with consistent `map[string]Result` format
+- **State serialization** optimized for improved performance and reduced storage overhead
+
+### Removed
+- **Strategy-specific configuration functions** in favor of generic strategy registry system
+- **Per-key locking** from strategy layer (moved to memory backend)
+
+### Fixed
+- **Context cancellation** checks added to retry loops for better responsiveness
+- **Strategy configuration** validation to ensure explicit strategy selection
+- **Memory leaks** in memory backend through automatic cleanup implementation
+- **Race conditions** in concurrent access scenarios through improved atomic operations
+
+### Performance
+- **Optimized state storage** format for strategies with compact serialization
+- **Reduced memory overhead** through improved cleanup mechanisms
+
 ## [0.0.4] - 2025-10-06
 
 ### Added

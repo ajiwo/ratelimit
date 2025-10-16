@@ -2,10 +2,16 @@ module github.com/ajiwo/ratelimit/tests
 
 go 1.25.0
 
+replace github.com/ajiwo/ratelimit v0.0.5 => ../
+
+replace github.com/ajiwo/ratelimit/backends/postgres v0.0.5 => ../backends/postgres
+
+replace github.com/ajiwo/ratelimit/backends/redis v0.0.5 => ../backends/redis
+
 require (
-	github.com/ajiwo/ratelimit v0.0.4
-	github.com/ajiwo/ratelimit/backends/postgres v0.0.4
-	github.com/ajiwo/ratelimit/backends/redis v0.0.4
+	github.com/ajiwo/ratelimit v0.0.5
+	github.com/ajiwo/ratelimit/backends/postgres v0.0.5
+	github.com/ajiwo/ratelimit/backends/redis v0.0.5
 	github.com/stretchr/testify v1.11.1
 )
 
@@ -19,15 +25,8 @@ require (
 	github.com/jackc/puddle/v2 v2.2.2 // indirect
 	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/redis/go-redis/v9 v9.14.0 // indirect
-	github.com/rogpeppe/go-internal v1.14.1 // indirect
 	golang.org/x/crypto v0.37.0 // indirect
 	golang.org/x/sync v0.13.0 // indirect
 	golang.org/x/text v0.24.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/ajiwo/ratelimit v0.0.4 => ../
-
-replace github.com/ajiwo/ratelimit/backends/postgres v0.0.4 => ../backends/postgres
-
-replace github.com/ajiwo/ratelimit/backends/redis v0.0.4 => ../backends/redis
