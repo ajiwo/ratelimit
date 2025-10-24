@@ -48,12 +48,17 @@ func (f *Strategy) GetResult(ctx context.Context, config strategies.StrategyConf
 	}
 
 	now := time.Now()
-	results := make(map[string]strategies.Result)
+	results := make(map[string]strategies.Result, len(fixedConfig.Quotas))
 
 	// Process each quota
 	for quotaName, quota := range fixedConfig.Quotas {
 		// Create quota-specific key
-		quotaKey := fixedConfig.Key + ":" + quotaName
+		var keyBuilder strings.Builder
+		keyBuilder.Grow(len(fixedConfig.Key) + len(quotaName) + 1)
+		keyBuilder.WriteString(fixedConfig.Key)
+		keyBuilder.WriteByte(':')
+		keyBuilder.WriteString(quotaName)
+		quotaKey := keyBuilder.String()
 
 		// Get current window state for this quota
 		data, err := f.storage.Get(ctx, quotaKey)
@@ -115,7 +120,12 @@ func (f *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) 
 	// Delete all quota keys from storage
 	var lastErr error
 	for quotaName := range fixedConfig.Quotas {
-		quotaKey := fixedConfig.Key + ":" + quotaName
+		var keyBuilder strings.Builder
+		keyBuilder.Grow(len(fixedConfig.Key) + len(quotaName) + 1)
+		keyBuilder.WriteString(fixedConfig.Key)
+		keyBuilder.WriteByte(':')
+		keyBuilder.WriteString(quotaName)
+		quotaKey := keyBuilder.String()
 		if err := f.storage.Delete(ctx, quotaKey); err != nil {
 			lastErr = err
 		}
@@ -203,7 +213,7 @@ func (f *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 
 // allowMultiQuota handles multi-quota configurations with two-phase commit
 func (f *Strategy) allowMultiQuota(ctx context.Context, fixedConfig Config, now time.Time) (map[string]strategies.Result, error) {
-	results := make(map[string]strategies.Result)
+	results := make(map[string]strategies.Result, len(fixedConfig.Quotas))
 
 	// Phase 1: Check all quotas without consuming quota
 	quotaStates, err := f.getQuotaStates(ctx, fixedConfig, now)
@@ -254,9 +264,15 @@ func (f *Strategy) allowMultiQuota(ctx context.Context, fixedConfig Config, now 
 // getQuotaStates gets the current state for all quotas without consuming quota
 func (f *Strategy) getQuotaStates(ctx context.Context, fixedConfig Config, now time.Time) ([]quotaState, error) {
 	var quotaStates []quotaState
+	quotaStates = make([]quotaState, 0, len(fixedConfig.Quotas))
 
 	for quotaName, quota := range fixedConfig.Quotas {
-		quotaKey := fixedConfig.Key + ":" + quotaName
+		var keyBuilder strings.Builder
+		keyBuilder.Grow(len(fixedConfig.Key) + len(quotaName) + 1)
+		keyBuilder.WriteString(fixedConfig.Key)
+		keyBuilder.WriteByte(':')
+		keyBuilder.WriteString(quotaName)
+		quotaKey := keyBuilder.String()
 
 		// Get current window state for this quota
 		data, err := f.storage.Get(ctx, quotaKey)
@@ -416,7 +432,12 @@ func (f *Strategy) initializeUnprocessedQuotas(ctx context.Context, fixedConfig 
 	for quotaName, quota := range fixedConfig.Quotas {
 		if _, exists := results[quotaName]; !exists {
 			// This quota wasn't processed, initialize it without consuming quota
-			quotaKey := fixedConfig.Key + ":" + quotaName
+			var keyBuilder strings.Builder
+			keyBuilder.Grow(len(fixedConfig.Key) + len(quotaName) + 1)
+			keyBuilder.WriteString(fixedConfig.Key)
+			keyBuilder.WriteByte(':')
+			keyBuilder.WriteString(quotaName)
+			quotaKey := keyBuilder.String()
 			data, err := f.storage.Get(ctx, quotaKey)
 			if err != nil {
 				return fmt.Errorf("failed to get window state for quota '%s': %w", quotaName, err)
@@ -470,7 +491,12 @@ func (f *Strategy) allowSingleQuota(ctx context.Context, fixedConfig Config, now
 	}
 
 	// Create quota-specific key
-	quotaKey := fixedConfig.Key + ":" + quotaName
+	var keyBuilder strings.Builder
+	keyBuilder.Grow(len(fixedConfig.Key) + len(quotaName) + 1)
+	keyBuilder.WriteString(fixedConfig.Key)
+	keyBuilder.WriteByte(':')
+	keyBuilder.WriteString(quotaName)
+	quotaKey := keyBuilder.String()
 
 	// Try atomic CheckAndSet operations first
 	var allowed bool
