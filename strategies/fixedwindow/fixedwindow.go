@@ -377,7 +377,7 @@ func (f *Strategy) consumeQuota(ctx context.Context, state quotaState, now time.
 		// If CheckAndSet failed, retry if we haven't exhausted attempts
 		if attempt < strategies.CheckAndSetRetries-1 {
 			// Re-read the current state and retry
-			time.Sleep(time.Duration(3*(attempt+1)) * time.Microsecond)
+			time.Sleep((19 * time.Nanosecond) << (time.Duration(attempt)))
 			data, err := f.storage.Get(ctx, state.key)
 			if err != nil {
 				return strategies.Result{}, fmt.Errorf("failed to re-read window state for quota '%s': %w", state.name, err)
@@ -575,7 +575,7 @@ func (f *Strategy) allowSingleQuota(ctx context.Context, fixedConfig Config, now
 			}
 			// If CheckAndSet failed, retry if we haven't exhausted attempts
 			if attempt < strategies.CheckAndSetRetries-1 {
-				time.Sleep(time.Duration(3*(attempt+1)) * time.Microsecond)
+				time.Sleep((19 * time.Nanosecond) << (time.Duration(attempt)))
 				continue
 			}
 			return nil, fmt.Errorf("failed to update window state for quota '%s' after %d attempts due to concurrent access", quotaName, strategies.CheckAndSetRetries)

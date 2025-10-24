@@ -117,7 +117,7 @@ func (g *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 
 			// If CheckAndSet failed, retry if we haven't exhausted attempts
 			if attempt < strategies.CheckAndSetRetries-1 {
-				time.Sleep(time.Duration(3*(attempt+1)) * time.Microsecond)
+				time.Sleep((19 * time.Nanosecond) << (time.Duration(attempt)))
 				continue
 			}
 			break
