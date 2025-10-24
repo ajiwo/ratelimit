@@ -1,18 +1,68 @@
 package leakybucket
 
 import (
+	"context"
+	"fmt"
+	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
 
-	"github.com/ajiwo/ratelimit/backends/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+// mockBackend is a simple in-memory backend for testing
+type mockBackend struct {
+	store map[string]string
+	mu    sync.RWMutex
+}
+
+func (m *mockBackend) Get(ctx context.Context, key string) (string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.store[key], nil
+}
+
+func (m *mockBackend) Set(ctx context.Context, key string, value any, expiration time.Duration) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.store[key] = fmt.Sprintf("%v", value)
+	return nil
+}
+
+func (m *mockBackend) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, expiration time.Duration) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	current, exists := m.store[key]
+	oldStr := ""
+	if oldValue != nil {
+		oldStr = fmt.Sprintf("%v", oldValue)
+	}
+	if oldValue == nil && exists {
+		return false, nil
+	}
+	if oldValue != nil && (!exists || current != oldStr) {
+		return false, nil
+	}
+	m.store[key] = fmt.Sprintf("%v", newValue)
+	return true, nil
+}
+
+func (m *mockBackend) Delete(ctx context.Context, key string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.store, key)
+	return nil
+}
+
+func (m *mockBackend) Close() error {
+	return nil
+}
+
 func TestLeakyBucketAllowWithResult(t *testing.T) {
 	ctx := t.Context()
-	storage := memory.New()
+	storage := &mockBackend{store: make(map[string]string)}
 	defer storage.Close()
 
 	strategy := New(storage)
@@ -39,7 +89,7 @@ func TestLeakyBucketAllowWithResult(t *testing.T) {
 func TestLeakyBucketLeak(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
-		storage := memory.New()
+		storage := &mockBackend{store: make(map[string]string)}
 		defer storage.Close()
 
 		strategy := New(storage)
@@ -75,7 +125,7 @@ func TestLeakyBucketLeak(t *testing.T) {
 
 func TestLeakyBucketGetResult(t *testing.T) {
 	ctx := t.Context()
-	storage := memory.New()
+	storage := &mockBackend{store: make(map[string]string)}
 	defer storage.Close()
 	strategy := New(storage)
 
@@ -122,7 +172,7 @@ func TestLeakyBucketGetResult(t *testing.T) {
 
 func TestLeakyBucketReset(t *testing.T) {
 	ctx := t.Context()
-	storage := memory.New()
+	storage := &mockBackend{store: make(map[string]string)}
 	defer storage.Close()
 	strategy := New(storage)
 

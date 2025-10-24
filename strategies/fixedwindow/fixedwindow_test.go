@@ -1,19 +1,77 @@
 package fixedwindow
 
 import (
+	"context"
 	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
 
-	"github.com/ajiwo/ratelimit/backends/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+// mockBackend is a simple in-memory backend for testing
+type mockBackend struct {
+	mu    sync.RWMutex
+	store map[string]string
+}
+
+func newMockBackend() *mockBackend {
+	return &mockBackend{
+		store: make(map[string]string),
+	}
+}
+
+func (m *mockBackend) Get(ctx context.Context, key string) (string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	if val, exists := m.store[key]; exists {
+		return val, nil
+	}
+	return "", nil
+}
+
+func (m *mockBackend) Set(ctx context.Context, key string, value any, expiration time.Duration) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.store[key] = value.(string)
+	return nil
+}
+
+func (m *mockBackend) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, expiration time.Duration) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+
+	current, exists := m.store[key]
+	if oldValue == nil && !exists {
+		// Set only if key doesn't exist
+		m.store[key] = newValue.(string)
+		return true, nil
+	}
+
+	if exists && current == oldValue.(string) {
+		m.store[key] = newValue.(string)
+		return true, nil
+	}
+
+	return false, nil
+}
+
+func (m *mockBackend) Delete(ctx context.Context, key string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.store, key)
+	return nil
+}
+
+func (m *mockBackend) Close() error {
+	return nil
+}
+
 func TestFixedWindow_Allow(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		storage := memory.New()
+		storage := newMockBackend()
 		defer storage.Close()
 		strategy := New(storage)
 
@@ -39,7 +97,7 @@ func TestFixedWindow_Allow(t *testing.T) {
 
 func TestFixedWindow_WindowReset(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		storage := memory.New()
+		storage := newMockBackend()
 		defer storage.Close()
 		strategy := New(storage)
 
@@ -74,7 +132,7 @@ func TestFixedWindow_WindowReset(t *testing.T) {
 
 func TestFixedWindow_MultipleKeys(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		storage := memory.New()
+		storage := newMockBackend()
 		defer storage.Close()
 		strategy := New(storage)
 
@@ -107,7 +165,7 @@ func TestFixedWindow_MultipleKeys(t *testing.T) {
 
 func TestFixedWindow_ZeroLimit(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		storage := memory.New()
+		storage := newMockBackend()
 		defer storage.Close()
 		strategy := New(storage)
 
@@ -126,7 +184,7 @@ func TestFixedWindow_ZeroLimit(t *testing.T) {
 
 func TestFixedWindow_GetResult(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		storage := memory.New()
+		storage := newMockBackend()
 		defer storage.Close()
 		strategy := New(storage)
 
@@ -179,7 +237,7 @@ func TestFixedWindow_GetResult(t *testing.T) {
 
 func TestFixedWindow_Reset(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		storage := memory.New()
+		storage := newMockBackend()
 		defer storage.Close()
 		strategy := New(storage)
 
@@ -215,7 +273,7 @@ func TestFixedWindow_Reset(t *testing.T) {
 
 func TestFixedWindow_ConcurrentAccess(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		storage := memory.New()
+		storage := newMockBackend()
 		defer storage.Close()
 		strategy := New(storage)
 
@@ -265,7 +323,7 @@ func TestFixedWindow_ConcurrentAccess(t *testing.T) {
 
 func TestFixedWindow_PreciseTiming(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		storage := memory.New()
+		storage := newMockBackend()
 		defer storage.Close()
 		strategy := New(storage)
 

@@ -1,20 +1,69 @@
 package tokenbucket
 
 import (
+	"context"
+	"fmt"
 	"sync"
 	"testing"
 	"testing/synctest"
 	"time"
 
-	"github.com/ajiwo/ratelimit/backends/memory"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
+// mockBackend is a simple in-memory backend for testing
+type mockBackend struct {
+	store map[string]string
+	mu    sync.RWMutex
+}
+
+func (m *mockBackend) Get(ctx context.Context, key string) (string, error) {
+	m.mu.RLock()
+	defer m.mu.RUnlock()
+	return m.store[key], nil
+}
+
+func (m *mockBackend) Set(ctx context.Context, key string, value any, expiration time.Duration) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.store[key] = fmt.Sprintf("%v", value)
+	return nil
+}
+
+func (m *mockBackend) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, expiration time.Duration) (bool, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	current, exists := m.store[key]
+	oldStr := ""
+	if oldValue != nil {
+		oldStr = fmt.Sprintf("%v", oldValue)
+	}
+	if oldValue == nil && exists {
+		return false, nil
+	}
+	if oldValue != nil && (!exists || current != oldStr) {
+		return false, nil
+	}
+	m.store[key] = fmt.Sprintf("%v", newValue)
+	return true, nil
+}
+
+func (m *mockBackend) Delete(ctx context.Context, key string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	delete(m.store, key)
+	return nil
+}
+
+func (m *mockBackend) Close() error {
+	return nil
+}
+
 func TestTokenBucket_GetResult(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
-		storage := memory.New()
+		storage := &mockBackend{store: make(map[string]string)}
 		defer storage.Close()
 		strategy := New(storage)
 
@@ -61,7 +110,7 @@ func TestTokenBucket_GetResult(t *testing.T) {
 func TestTokenBucket_Reset(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
-		storage := memory.New()
+		storage := &mockBackend{store: make(map[string]string)}
 		defer storage.Close()
 		strategy := New(storage)
 
@@ -99,7 +148,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 	t.Run("initial bucket should allow requests", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
-			storage := memory.New()
+			storage := &mockBackend{store: make(map[string]string)}
 			defer storage.Close()
 			strategy := New(storage)
 
@@ -119,7 +168,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 	t.Run("should respect capacity limit", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
-			storage := memory.New()
+			storage := &mockBackend{store: make(map[string]string)}
 			defer storage.Close()
 			strategy := New(storage)
 
@@ -147,7 +196,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 	t.Run("basic refill functionality", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
-			storage := memory.New()
+			storage := &mockBackend{store: make(map[string]string)}
 			defer storage.Close()
 			strategy := New(storage)
 
@@ -184,7 +233,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 	t.Run("should handle multiple keys independently", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
-			storage := memory.New()
+			storage := &mockBackend{store: make(map[string]string)}
 			defer storage.Close()
 			strategy := New(storage)
 
@@ -229,7 +278,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 	t.Run("fractional refill rate functionality", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
-			storage := memory.New()
+			storage := &mockBackend{store: make(map[string]string)}
 			defer storage.Close()
 			strategy := New(storage)
 
@@ -265,7 +314,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 
 func TestTokenBucket_ConcurrentAccess(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
-		storage := memory.New()
+		storage := &mockBackend{store: make(map[string]string)}
 		defer storage.Close()
 		strategy := New(storage)
 
