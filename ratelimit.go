@@ -4,12 +4,20 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	"github.com/ajiwo/ratelimit/backends"
 	"github.com/ajiwo/ratelimit/strategies"
 )
 
 type Limiter = RateLimiter
+
+// keyBuilderPool reduces allocations in key construction
+var keyBuilderPool = sync.Pool{
+	New: func() any {
+		return &strings.Builder{}
+	},
+}
 
 // RateLimiter implements single or dual strategy rate limiting
 type RateLimiter struct {
@@ -169,7 +177,14 @@ func (r *RateLimiter) createPrimaryConfig(dynamicKey string) (strategies.Strateg
 	if prefix == "" {
 		prefix = r.config.BaseKey + ":"
 	}
-	var keyBuilder strings.Builder
+
+	// Use pooled string builder to reduce allocations
+	keyBuilder := keyBuilderPool.Get().(*strings.Builder)
+	defer func() {
+		keyBuilder.Reset()
+		keyBuilderPool.Put(keyBuilder)
+	}()
+
 	keyBuilder.Grow(len(prefix) + len(dynamicKey))
 	keyBuilder.WriteString(prefix)
 	keyBuilder.WriteString(dynamicKey)

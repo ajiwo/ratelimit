@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
@@ -25,6 +26,28 @@ type quotaState struct {
 	window   FixedWindow
 	oldValue any
 	allowed  bool
+}
+
+// keyBuilderPool reduces allocations in key construction for fixed window strategy
+var keyBuilderPool = sync.Pool{
+	New: func() any {
+		return &strings.Builder{}
+	},
+}
+
+// buildQuotaKey builds a quota-specific key using pooled string builder for efficiency
+func buildQuotaKey(baseKey, quotaName string) string {
+	keyBuilder := keyBuilderPool.Get().(*strings.Builder)
+	defer func() {
+		keyBuilder.Reset()
+		keyBuilderPool.Put(keyBuilder)
+	}()
+
+	keyBuilder.Grow(len(baseKey) + len(quotaName) + 1)
+	keyBuilder.WriteString(baseKey)
+	keyBuilder.WriteByte(':')
+	keyBuilder.WriteString(quotaName)
+	return keyBuilder.String()
 }
 
 // Strategy implements the fixed window rate limiting algorithm
@@ -53,12 +76,7 @@ func (f *Strategy) GetResult(ctx context.Context, config strategies.StrategyConf
 	// Process each quota
 	for quotaName, quota := range fixedConfig.Quotas {
 		// Create quota-specific key
-		var keyBuilder strings.Builder
-		keyBuilder.Grow(len(fixedConfig.Key) + len(quotaName) + 1)
-		keyBuilder.WriteString(fixedConfig.Key)
-		keyBuilder.WriteByte(':')
-		keyBuilder.WriteString(quotaName)
-		quotaKey := keyBuilder.String()
+		quotaKey := buildQuotaKey(fixedConfig.Key, quotaName)
 
 		// Get current window state for this quota
 		data, err := f.storage.Get(ctx, quotaKey)
@@ -120,12 +138,7 @@ func (f *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) 
 	// Delete all quota keys from storage
 	var lastErr error
 	for quotaName := range fixedConfig.Quotas {
-		var keyBuilder strings.Builder
-		keyBuilder.Grow(len(fixedConfig.Key) + len(quotaName) + 1)
-		keyBuilder.WriteString(fixedConfig.Key)
-		keyBuilder.WriteByte(':')
-		keyBuilder.WriteString(quotaName)
-		quotaKey := keyBuilder.String()
+		quotaKey := buildQuotaKey(fixedConfig.Key, quotaName)
 		if err := f.storage.Delete(ctx, quotaKey); err != nil {
 			lastErr = err
 		}
@@ -491,12 +504,7 @@ func (f *Strategy) allowSingleQuota(ctx context.Context, fixedConfig Config, now
 	}
 
 	// Create quota-specific key
-	var keyBuilder strings.Builder
-	keyBuilder.Grow(len(fixedConfig.Key) + len(quotaName) + 1)
-	keyBuilder.WriteString(fixedConfig.Key)
-	keyBuilder.WriteByte(':')
-	keyBuilder.WriteString(quotaName)
-	quotaKey := keyBuilder.String()
+	quotaKey := buildQuotaKey(fixedConfig.Key, quotaName)
 
 	// Try atomic CheckAndSet operations first
 	var allowed bool

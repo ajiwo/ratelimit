@@ -12,6 +12,13 @@ const (
 	DefaultCleanupInterval = 10 * time.Minute
 )
 
+// mutexPool reduces allocations for mutex creation
+var mutexPool = sync.Pool{
+	New: func() any {
+		return &sync.Mutex{}
+	},
+}
+
 type Backend struct {
 	locks         sync.Map     // map[string]*sync.Mutex
 	values        sync.Map     // map[string]memoryValue
@@ -44,9 +51,19 @@ func NewWithCleanup(interval time.Duration) *Backend {
 	return m
 }
 
-// getLock returns a mutex for the given key
+// getLock returns a mutex for the given key using pool to reduce allocations
 func (m *Backend) getLock(key string) *sync.Mutex {
-	actual, _ := m.locks.LoadOrStore(key, &sync.Mutex{})
+	if existing, ok := m.locks.Load(key); ok {
+		return existing.(*sync.Mutex)
+	}
+
+	// Use pooled mutex for new keys
+	mutex := mutexPool.Get().(*sync.Mutex)
+	actual, loaded := m.locks.LoadOrStore(key, mutex)
+	if loaded {
+		// Key already exists, return the pooled mutex to the pool
+		mutexPool.Put(mutex)
+	}
 	return actual.(*sync.Mutex)
 }
 

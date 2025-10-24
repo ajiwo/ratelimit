@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
@@ -14,6 +15,13 @@ import (
 // GCRA represents the state for GCRA rate limiting
 type GCRA struct {
 	TAT time.Time `json:"tat"` // Theoretical Arrival Time
+}
+
+// builderPool reduces allocations in string operations for GCRA strategy
+var builderPool = sync.Pool{
+	New: func() any {
+		return &strings.Builder{}
+	},
 }
 
 // Strategy implements the GCRA rate limiting algorithm
@@ -205,7 +213,12 @@ func (g *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) 
 // encodeGCRAState serializes GCRAState into a compact ASCII format:
 // v2|tat_unix_nano
 func encodeGCRAState(s GCRA) string {
-	var sb strings.Builder
+	sb := builderPool.Get().(*strings.Builder)
+	defer func() {
+		sb.Reset()
+		builderPool.Put(sb)
+	}()
+
 	sb.Grow(2 + 1 + 20) // rough capacity
 	sb.WriteString("v2|")
 	sb.WriteString(strconv.FormatInt(s.TAT.UnixNano(), 10))

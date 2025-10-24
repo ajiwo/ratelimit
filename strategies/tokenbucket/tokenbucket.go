@@ -6,6 +6,7 @@ import (
 	"math"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
@@ -16,6 +17,13 @@ import (
 type TokenBucket struct {
 	Tokens     float64   `json:"tokens"`
 	LastRefill time.Time `json:"last_refill"`
+}
+
+// builderPool reduces allocations in string operations for token bucket strategy
+var builderPool = sync.Pool{
+	New: func() any {
+		return &strings.Builder{}
+	},
 }
 
 // Strategy implements the token bucket rate limiting algorithm
@@ -97,7 +105,12 @@ func (t *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) 
 // encodeTokenBucket serializes TokenBucket into a compact ASCII format:
 // v2|tokens|lastrefill_unix_nano
 func encodeTokenBucket(b TokenBucket) string {
-	var sb strings.Builder
+	sb := builderPool.Get().(*strings.Builder)
+	defer func() {
+		sb.Reset()
+		builderPool.Put(sb)
+	}()
+
 	// rough capacity
 	sb.Grow(2 + 1 + 24 + 1 + 20)
 	sb.WriteString("v2|")

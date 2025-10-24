@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
@@ -15,6 +16,13 @@ import (
 type LeakyBucket struct {
 	Requests float64   `json:"requests"`  // Current number of requests in the bucket
 	LastLeak time.Time `json:"last_leak"` // Last time we leaked requests
+}
+
+// builderPool reduces allocations in string operations for leaky bucket strategy
+var builderPool = sync.Pool{
+	New: func() any {
+		return &strings.Builder{}
+	},
 }
 
 // Strategy implements the leaky bucket rate limiting algorithm
@@ -97,7 +105,12 @@ func (l *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) 
 // encodeLeakyBucket serializes LeakyBucket into a compact ASCII format:
 // v2|requests|lastleak_unix_nano
 func encodeLeakyBucket(b LeakyBucket) string {
-	var sb strings.Builder
+	sb := builderPool.Get().(*strings.Builder)
+	defer func() {
+		sb.Reset()
+		builderPool.Put(sb)
+	}()
+
 	sb.Grow(2 + 1 + 24 + 1 + 20)
 	sb.WriteString("v2|")
 	sb.WriteString(strconv.FormatFloat(b.Requests, 'g', -1, 64))
