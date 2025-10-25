@@ -74,10 +74,7 @@ func (r *RateLimiter) Peek(ctx context.Context, options AccessOptions) (bool, er
 		return false, err
 	}
 
-	strategyConfig, err := r.buildStrategyConfig(dynamicKey)
-	if err != nil {
-		return false, err
-	}
+	strategyConfig := r.buildStrategyConfig(dynamicKey)
 
 	// Get stats from the strategy (composite or single)
 	results, err := r.primaryStrategy.Peek(ctx, strategyConfig)
@@ -105,10 +102,7 @@ func (r *RateLimiter) Reset(ctx context.Context, options AccessOptions) error {
 		return err
 	}
 
-	strategyConfig, err := r.buildStrategyConfig(dynamicKey)
-	if err != nil {
-		return err
-	}
+	strategyConfig := r.buildStrategyConfig(dynamicKey)
 
 	// Reset the strategy (composite or single)
 	if err := r.primaryStrategy.Reset(ctx, strategyConfig); err != nil {
@@ -129,10 +123,7 @@ func (r *RateLimiter) Close() error {
 
 // allowWithResult1 checks if a request is allowed and returns detailed results
 func (r *RateLimiter) allowWithResult(ctx context.Context, dynamicKey string) (bool, map[string]strategies.Result, error) {
-	strategyConfig, err := r.buildStrategyConfig(dynamicKey)
-	if err != nil {
-		return false, nil, err
-	}
+	strategyConfig := r.buildStrategyConfig(dynamicKey)
 
 	// Use the strategy (composite or single)
 	results, err := r.primaryStrategy.Allow(ctx, strategyConfig)
@@ -152,8 +143,8 @@ func (r *RateLimiter) allowWithResult(ctx context.Context, dynamicKey string) (b
 	return allAllowed, results, nil
 }
 
-// createPrimaryConfig creates strategy-specific configuration for the primary strategy
-func (r *RateLimiter) createPrimaryConfig(dynamicKey string) (strategies.StrategyConfig, error) {
+// buildStrategyConfigKey builds the fully-qualified key for the strategy config
+func (r *RateLimiter) buildStrategyConfigKey(dynamicKey string) string {
 	prefix := r.basePrefix
 	if prefix == "" {
 		prefix = r.config.BaseKey + ":"
@@ -171,22 +162,23 @@ func (r *RateLimiter) createPrimaryConfig(dynamicKey string) (strategies.Strateg
 	keyBuilder.WriteString(dynamicKey)
 	key := keyBuilder.String()
 
-	primaryConfig := r.config.PrimaryConfig
-	return primaryConfig.WithKey(key), nil
+	return key
 }
 
 // buildStrategyConfig builds the appropriate strategy config (composite or single)
-func (r *RateLimiter) buildStrategyConfig(dynamicKey string) (strategies.StrategyConfig, error) {
+func (r *RateLimiter) buildStrategyConfig(dynamicKey string) strategies.StrategyConfig {
+	key := r.buildStrategyConfigKey(dynamicKey)
 	if r.config.SecondaryConfig != nil {
 		return strategies.CompositeConfig{
 			BaseKey:   r.config.BaseKey,
-			Primary:   r.config.PrimaryConfig,
-			Secondary: r.config.SecondaryConfig,
-		}, nil
+			Primary:   r.config.PrimaryConfig.WithKey(key),
+			Secondary: r.config.SecondaryConfig.WithKey(key),
+		}
 	}
-	return r.createPrimaryConfig(dynamicKey)
+	return r.config.PrimaryConfig.WithKey(key)
 }
 
+// checkDynamicKey validates (if enabled) and returns the dynamic key
 func checkDynamicKey(options AccessOptions) (string, error) {
 	if options.Key != "" {
 		if !options.SkipValidation {
