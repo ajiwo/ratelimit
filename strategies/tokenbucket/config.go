@@ -42,3 +42,17 @@ func (c Config) WithKey(key string) strategies.StrategyConfig {
 	c.Key = key
 	return c
 }
+
+// These 3 methods implement `internal.Config`
+
+func (c Config) GetKey() string {
+	return c.Key
+}
+
+func (c Config) GetBurstSize() int {
+	return c.BurstSize
+}
+
+func (c Config) GetRefillRate() float64 {
+	return c.RefillRate
+}
