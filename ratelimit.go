@@ -143,8 +143,8 @@ func (r *RateLimiter) allowWithResult(ctx context.Context, dynamicKey string) (b
 	return allAllowed, results, nil
 }
 
-// buildStrategyConfigKey builds the fully-qualified key for the strategy config
-func (r *RateLimiter) buildStrategyConfigKey(dynamicKey string) string {
+// buildStrategyConfig builds the appropriate strategy config (composite or single)
+func (r *RateLimiter) buildStrategyConfig(dynamicKey string) strategies.StrategyConfig {
 	prefix := r.basePrefix
 	if prefix == "" {
 		prefix = r.config.BaseKey + ":"
@@ -157,25 +157,25 @@ func (r *RateLimiter) buildStrategyConfigKey(dynamicKey string) string {
 		keyBuilderPool.Put(keyBuilder)
 	}()
 
-	keyBuilder.Grow(len(prefix) + len(dynamicKey))
+	// a multiply of 8 is faster because it would avoid internal padding/alignment of `strings.Builder`
+	// simply use a static value of 64 (max allowed by `validateKey`)
+	keyBuilder.Grow(64)
 	keyBuilder.WriteString(prefix)
 	keyBuilder.WriteString(dynamicKey)
-	key := keyBuilder.String()
+	key1 := keyBuilder.String()
 
-	return key
-}
-
-// buildStrategyConfig builds the appropriate strategy config (composite or single)
-func (r *RateLimiter) buildStrategyConfig(dynamicKey string) strategies.StrategyConfig {
-	key := r.buildStrategyConfigKey(dynamicKey)
-	if r.config.SecondaryConfig != nil {
-		return strategies.CompositeConfig{
-			BaseKey:   r.config.BaseKey,
-			Primary:   r.config.PrimaryConfig.WithKey(key),
-			Secondary: r.config.SecondaryConfig.WithKey(key),
-		}
+	if r.config.SecondaryConfig == nil {
+		return r.config.PrimaryConfig.WithKey(key1)
 	}
-	return r.config.PrimaryConfig.WithKey(key)
+
+	keyBuilder.WriteString("s")
+	key2 := keyBuilder.String()
+
+	return strategies.CompositeConfig{
+		BaseKey:   r.config.BaseKey,
+		Primary:   r.config.PrimaryConfig.WithKey(key1),
+		Secondary: r.config.SecondaryConfig.WithKey(key2),
+	}
 }
 
 // checkDynamicKey validates (if enabled) and returns the dynamic key
