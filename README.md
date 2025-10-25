@@ -1,23 +1,12 @@
-# Rate Limiting Library
+# ratelimit
 
-This is a Go library that implements rate limiting functionality with multiple algorithms and storage backends, including support for single and dual strategy configurations.
+A Go rate-limiting library with pluggable storage backends and multiple algorithms. 
 
-## Features
+- Storage backends: in-memory, Redis, Postgres
+- Algorithms ("strategies"): Fixed Window (multi-quota), Token Bucket, Leaky Bucket, GCRA
+- Dual strategy mode: combine a primary hard limiter with a secondary smoother
+- Simple API: Allow, Peek, Reset, Close
 
-- **Core features:**
-  - Single strategy rate limiting
-  - Dual strategy support (primary + secondary smoother)
-  - Multi-quota rate limiting (fixed window with multiple quotas)
-  - Detailed statistics and result tracking
-- **Multiple rate limiting algorithms:**
-  - Fixed Window
-  - Token Bucket
-  - Leaky Bucket
-  - GCRA (Generic Cell Rate Algorithm)
-- **Multiple storage backends:**
-  - In-Memory (single instance)
-  - Redis (distributed)
-  - PostgreSQL (distributed)
 
 ## Installation
 
@@ -25,597 +14,262 @@ This is a Go library that implements rate limiting functionality with multiple a
 go get github.com/ajiwo/ratelimit
 ```
 
-## Usage
+## Quick start
 
-### Single Strategy Rate Limiting
-
-The library provides a high-level rate limiting interface that allows you to configure individual rate limiting strategies:
+### Single strategy (Fixed Window, in-memory)
 
 ```go
+package main
+
 import (
+    "context"
+    "fmt"
+    "log"
+    "time"
+
     "github.com/ajiwo/ratelimit"
     "github.com/ajiwo/ratelimit/backends/memory"
+    "github.com/ajiwo/ratelimit/strategies"
     "github.com/ajiwo/ratelimit/strategies/fixedwindow"
 )
 
-// Create a backend instance
-backend := memory.New()
+func main() {
+    // Backend
+    mem := memory.New()
 
-// Create a rate limiter using functional options
-limiter, err := ratelimit.New(
-    ratelimit.WithBackend(backend),
-    ratelimit.WithPrimaryStrategy(
-        fixedwindow.NewConfig().
-            SetKey("user:123").
-            AddQuota("default", 100, time.Hour).
-            Build(),
-    ),
-    ratelimit.WithBaseKey("api"),
-)
-if err != nil {
-    panic(err)
-}
-defer limiter.Close()
+    // Allow 5 requests per 3 seconds per user
+    limiter, err := ratelimit.New(
+        ratelimit.WithBackend(mem),
+        ratelimit.WithBaseKey("api"),
+        ratelimit.WithPrimaryStrategy(
+            fixedwindow.NewConfig().
+                AddQuota("default", 5, 3*time.Second).
+                Build(),
+        ),
+    )
+    if err != nil { log.Fatal(err) }
+    defer limiter.Close()
 
-// Check if request is allowed (simple version)
-allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
-if err != nil {
-    // handle error
-}
+    ctx := context.Background()
+    userID := "user123"
 
-// Or get detailed results
-var results map[string]strategies.Result
-allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{
-    Result: &results,
-})
-if err != nil {
-    // handle error
-}
-
-// Results include detailed information for each strategy
-for strategy, result := range results {
-    fmt.Printf("Strategy %s: allowed=%v, remaining=%d, reset=%v\n",
-        strategy, result.Allowed, result.Remaining, result.Reset)
+    for i := 1; i <= 7; i++ {
+        var results map[string]strategies.Result
+        allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
+        if err != nil { log.Fatal(err) }
+        res := results["default"]
+        fmt.Printf("req %d => allowed=%v remaining=%d reset=%s\n", i, allowed, res.Remaining, res.Reset.Format(time.RFC3339))
+    }
 }
 ```
 
-### Multi-Quota Fixed Window Rate Limiting
+### Dual strategy (Composite: Fixed Window + Token Bucket)
 
-The fixed window strategy now supports multi-quota configurations, allowing you to define multiple rate limits that all must be satisfied for a request to be accepted:
+Use a strict primary limiter and a burst-smoothing secondary limiter. Both must allow for the request to pass.
 
 ```go
-import (
-    "github.com/ajiwo/ratelimit"
-    "github.com/ajiwo/ratelimit/backends/memory"
-    "github.com/ajiwo/ratelimit/strategies/fixedwindow"
-)
-
-// Create a backend instance
-backend := memory.New()
-
-// Create a multi-quota fixed window rate limiter
 limiter, err := ratelimit.New(
-    ratelimit.WithBackend(backend),
-    ratelimit.WithPrimaryStrategy(fixedwindow.Config{
-        Key: "api:user123",
-        Quotas: map[string]fixedwindow.Quota{
-            "burst": {
-                Limit:  10,  // Allow 10 requests per minute
-                Window: time.Minute,
-            },
-            "sustained": {
-                Limit:  100, // Allow 100 requests per hour
-                Window: time.Hour,
-            },
-            "daily": {
-                Limit:  1000, // Allow 1000 requests per day
-                Window: 24 * time.Hour,
-            },
-        },
-    }),
+    ratelimit.WithBackend(memory.New()),
     ratelimit.WithBaseKey("api"),
-)
-if err != nil {
-    panic(err)
-}
-defer limiter.Close()
-
-// Check if request is allowed (simple version)
-allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
-if err != nil {
-    // handle error
-}
-
-// Or get detailed results for all quotas
-var results map[string]strategies.Result
-allowed, err = limiter.Allow(ctx, ratelimit.AccessOptions{
-    Result: &results,
-})
-if err != nil {
-    // handle error
-}
-
-// Results include detailed information for each quota
-for quota, result := range results {
-    fmt.Printf("Quota %s: allowed=%v, remaining=%d, reset=%v\n",
-        quota, result.Allowed, result.Remaining, result.Reset)
-}
-```
-
-**Multi-Quota Logic:**
-1. **All Quotas Must Allow:** A request is only accepted if all quotas have available quota
-2. **Independent Windows:** Each quota operates with its own time window and limit
-3. **Atomic Consumption:** When a request is allowed, quota is consumed from all quotas
-4. **No Consumption on Denial:** If any quota denies, no quota is consumed from any quota
-
-**Use Cases:**
-- **Burst + Sustained:** Allow short bursts while maintaining long-term limits
-- **Multiple Time Windows:** Enforce per-minute, per-hour, and per-day limits simultaneously
-- **Progressive Limits:** Create graduated rate limiting policies
-
-### Dual Strategy Rate Limiting
-
-The library supports combining a primary strategy with an optional secondary bucket strategy for request smoothing:
-
-```go
-import (
-    "github.com/ajiwo/ratelimit"
-    "github.com/ajiwo/ratelimit/backends/memory"
-    "github.com/ajiwo/ratelimit/strategies/fixedwindow"
-    "github.com/ajiwo/ratelimit/strategies/tokenbucket"
-)
-
-// Create a backend instance
-backend := memory.New()
-
-// Create a dual-strategy rate limiter
-limiter, err := ratelimit.New(
-    ratelimit.WithBackend(backend),
-    // Primary: strict rate limiting
+    // Primary: hard limits
     ratelimit.WithPrimaryStrategy(
         fixedwindow.NewConfig().
-            SetKey("api:user").
+            SetKey("user").
             AddQuota("default", 100, time.Hour).
             Build(),
     ),
-    // Secondary: burst smoother (5 burst, 0.1 req/sec refill)
+    // Secondary: smoothing/burst window (must support CapSecondary)
     ratelimit.WithSecondaryStrategy(tokenbucket.Config{
-        BurstSize:  5,
-        RefillRate: 0.1,
+        BurstSize:  10,   // max burst tokens
+        RefillRate: 1.0,  // tokens per second
     }),
-    ratelimit.WithBaseKey("api"),
 )
-if err != nil {
-    panic(err)
-}
-defer limiter.Close()
-
-// Check if request is allowed (simple version)
-allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
-if err != nil {
-    // handle error
-}
-
-// Or get detailed results
-var results map[string]strategies.Result
-allowed, err = limiter.Allow(ctx, ratelimit.AccessOptions{
-    Result: &results,
-})
-if err != nil {
-    // handle error
-}
-
-// Results include both primary and secondary strategy results
-for strategy, result := range results {
-    fmt.Printf("Strategy %s: allowed=%v, remaining=%d\n", strategy, result.Remaining)
-}
 ```
 
-**Dual Strategy Logic:**
-1. **Primary Strategy** provides hard rate limits
-2. **Secondary Strategy** acts as a smoother/request shaper
-3. **Request Flow:** Check primary first -> If allowed, check secondary smoother
-4. **Final Decision:** Both strategies must allow the request
+When using dual strategy, the per-quota names in results are prefixed by `primary_` and `secondary_` respectively (e.g., `primary_default`, `secondary_default`).
 
-**Supported primary strategies:**
-- `fixedwindow.Config` (supports multi-quota configurations)
-- `tokenbucket.Config`
-- `leakybucket.Config`
-- `gcra.Config`
 
-**Supported secondary strategies (smoothers):**
-- `tokenbucket.Config`
-- `leakybucket.Config`
+## Concepts
 
-**Multi-quota support:**
-- Fixed Window strategy supports multiple quotas with independent limits and windows
-- All quotas must allow for a request to be accepted
-- Use the builder pattern with `fixedwindow.NewConfig().SetKey(key).AddQuota(name, limit, window).Build()` for both single and multi-quota configurations
-- For single-quota configurations, add a single quota named "default"
+- Base key: global prefix applied to all rate-limiting keys (e.g., `api:`)
+- Dynamic key: runtime dimension like user ID, client IP, or API key
+- Strategy config: algorithm-specific configuration implementing `strategies.StrategyConfig`
+- Results: per-quota map[string]Result with `Allowed`, `Remaining`, `Reset`
 
-**Available functional options:**
-- `WithBackend(backend)` - Use a custom backend instance
-- `WithPrimaryStrategy(strategyConfig)` - Set primary strategy with custom configuration
-- `WithSecondaryStrategy(strategyConfig)` - Set secondary smoother strategy
-- `WithBaseKey(key)` - Set the base key for rate limiting
 
-**Access Options (for Allow method):**
+## API overview
+
+- `ratelimit.New(opts ...Option) (*RateLimiter, error)`
+  - Options: `WithBackend(Backend)`, `WithPrimaryStrategy(StrategyConfig)`, `WithSecondaryStrategy(StrategyConfig)`, `WithBaseKey(string)`
+- `(*RateLimiter) Allow(ctx, AccessOptions) (bool, error)`
+  - Consumes quota. If `AccessOptions.Result` is provided, receives `map[string]strategies.Result`.
+- `(*RateLimiter) Peek(ctx, AccessOptions) (bool, error)`
+  - Read the current rate limit state without consuming quota; also populates results when provided.
+- `(*RateLimiter) Reset(ctx, AccessOptions) error`
+  - Resets counters; mainly for testing.
+- `(*RateLimiter) Close() error`
+  - Releases backend resources.
+
+`AccessOptions`:
+
 ```go
 type AccessOptions struct {
-    Key            string                        // Dynamic key for this specific request
-    SkipValidation bool                          // Skip key validation
-    Result         *map[string]strategies.Result // Optional pointer to capture detailed results
+    Key            string                        // dynamic key (e.g., user ID)
+    SkipValidation bool                          // skip key validation if true
+    Result         *map[string]strategies.Result // optional results pointer
 }
 ```
 
-**Top-level Methods:**
-- `Allow(ctx context.Context, options AccessOptions) (bool, error)` - Check if request is allowed
-- `Peek(ctx context.Context, options AccessOptions) (bool, error)` - Get statistics without consuming quota
-- `Reset(ctx context.Context, options AccessOptions) error` - Reset rate limit counters (mainly for testing)
-- `Close() error` - Clean up resources and close the rate limiter
 
-**Strategy Behavior:**
-- **Single Strategy:** Use any strategy alone (Fixed Window, Token Bucket, or Leaky Bucket)
-- **Dual Strategy:** Combine any primary strategy + bucket-based secondary strategy
-- **Strategy Priority:** Primary strategy provides hard limits, secondary strategy provides smoothing
+## Key validation
 
-**Limits and Constraints:**
-- Arbitrary time intervals are supported (30 seconds, 5 minutes, 2 hours, etc.)
-- Secondary strategy must be bucket-based (Token Bucket or Leaky Bucket)
-- Primary bucket-based strategy cannot be combined with secondary strategy
-- Only one secondary strategy allowed per limiter
+Two kinds of keys exist:
+- Base key: provided via `WithBaseKey(...)` during construction. This key is always validated and cannot be skipped.
+- Dynamic key: provided at access time via `AccessOptions.Key`. This key is validated by default but can be bypassed per-call with `SkipValidation: true`.
 
-**Strategy Configuration Structures:**
+Validation rules (applied to both base and dynamic keys unless explicitly skipped for dynamic keys):
+- Non-empty and at most 64 bytes
+- Allowed characters: ASCII alphanumeric, underscore (_), hyphen (-), colon (:), period (.), and at (@)
 
-```go
-// Fixed Window Strategy (Multi-quota Support) - in strategies/fixedwindow package
-type Config struct {
-    Key   string            // Unique identifier for the rate limit
-    Quotas map[string]Quota   // Multiple rate limit quotas
-}
 
-type Quota struct {
-    Limit  int              // Number of requests allowed in the window
-    Window time.Duration    // Time window (1 minute, 1 hour, 1 day, etc.)
-}
+## Strategies
 
-// Token Bucket Strategy - in strategies/tokenbucket package
-type Config struct {
-    Key        string       // Unique identifier for the rate limit
-    BurstSize  int          // Maximum tokens the bucket can hold
-    RefillRate float64      // Tokens to add per second
-}
+Available strategy IDs and capabilities:
 
-// Leaky Bucket Strategy - in strategies/leakybucket package
-type Config struct {
-    Key      string         // Unique identifier for the rate limit
-    Capacity int            // Maximum requests the bucket can hold
-    LeakRate float64        // Requests to process per second
-}
+- fixed_window
+  - Capabilities: Primary, Quotas (multi-quota)
+  - Builder: `fixedwindow.NewConfig().SetKey(k).AddQuota(name, limit, window).Build()`
+- token_bucket
+  - Capabilities: Primary, Secondary
+  - Config: `tokenbucket.Config{BurstSize: int, RefillRate: float64}`
+- leaky_bucket
+  - Capabilities: Primary, Secondary
+  - Config: `leakybucket.Config{Capacity: int, LeakRate: float64}`
+- gcra
+  - Capabilities: Primary
+  - Config: `gcra.Config{Rate: float64, Burst: int}`
 
-// GCRA Strategy - in strategies/gcra package
-type Config struct {
-    Key   string            // Unique identifier for the rate limit
-    Rate  float64           // Requests per second
-    Burst int               // Maximum burst size
-}
+Notes:
+- Only Fixed Window supports multiple named quotas simultaneously.
+- When setting a secondary strategy via `WithSecondaryStrategy`, it must advertise `CapSecondary`.
+- If a secondary strategy is specified, the primary strategy must not itself be a `CapSecondary`-only secondary in this composite context; the library validates incompatible combinations.
 
-// Helper functions for fixed window configuration
-func NewConfig(key string) *configBuilder  // Returns a builder for creating configurations
-func (b *configBuilder) AddQuota(name string, limit int, window time.Duration) *configBuilder  // Add a quota to the configuration
-func (b *configBuilder) Build() Config  // Build the final configuration
-```
 
-**Result Structure:**
-```go
-package strategies
-// ...
-type Result struct {
-    Allowed   bool      // Whether the request is allowed
-    Remaining int       // Remaining requests in the current window
-    Reset     time.Time // When the current window resets
-}
-```
+## Backends
 
-**Key Validation:**
-- Keys must be 1-64 characters long
-- Only alphanumeric ASCII, underscore (_), hyphen (-), colon (:), period (.), and at (@) symbols are allowed
-- Keys are automatically validated when provided
+Backends implement atomic Get/Set/CheckAndSet/Delete operations. Available implementations:
 
-### Storage Backends
+- In-memory: `github.com/ajiwo/ratelimit/backends/memory`
+- Redis: `github.com/ajiwo/ratelimit/backends/redis`
+- Postgres: `github.com/ajiwo/ratelimit/backends/postgres`
 
-The library supports multiple storage backends:
-
-#### 1. In-Memory Storage
+Use them with `ratelimit.WithBackend(...)`. Example (memory):
 
 ```go
-import "github.com/ajiwo/ratelimit/backends/memory"
-
-// Create memory backend instance
-backend := memory.New()
-
 limiter, err := ratelimit.New(
-    ratelimit.WithBackend(backend),
-    // ... other options
+    ratelimit.WithBackend(memory.New()),
+    ratelimit.WithPrimaryStrategy(
+        fixedwindow.NewConfig().SetKey("user").AddQuota("default", 10, time.Minute).Build(),
+    ),
+    ratelimit.WithBaseKey("api"),
 )
 ```
 
-#### 2. Redis Storage
+## Direct usage with strategies and backends (no ratelimit wrapper)
+
+You can use a strategy directly with a backend if you want full control. In this mode, you construct the storage, the strategy, and the strategy config yourself. The config's Key should represent your full logical key (e.g., base segments + dynamic identifier). Quotas are named and will be returned in the results map.
 
 ```go
-import "github.com/ajiwo/ratelimit/backends/redis"
+package main
 
-// Create Redis backend instance
-backend, err := redis.New(redis.Config{
-    Addr:     "localhost:6379",
-    Password: "", // no password
-    DB:       0,  // default DB
-    PoolSize: 10,
-})
-if err != nil {
-    // handle error
-}
-
-limiter, err := ratelimit.New(
-    ratelimit.WithBackend(backend),
-    // ... other options
-)
-```
-
-#### 3. PostgreSQL Storage
-
-```go
-import "github.com/ajiwo/ratelimit/backends/postgres"
-
-// Create PostgreSQL backend instance
-backend, err := postgres.New(postgres.Config{
-    ConnString: "postgres://user:pass@localhost/db",
-    MaxConns:   10,
-    MinConns:   2,
-})
-if err != nil {
-    // handle error
-}
-
-limiter, err := ratelimit.New(
-    ratelimit.WithBackend(backend),
-    // ... other options
-)
-```
-
-
-### Advanced Usage
-
-#### Getting Statistics Without Consuming Quota
-
-```go
-// Get current statistics without consuming quota
-var stats map[string]strategies.Result
-_, err := limiter.Peek(ctx, ratelimit.AccessOptions{
-    Key:    "user:123",
-    Result: &stats,
-})
-if err != nil {
-    // handle error
-}
-
-for strategy, result := range stats {
-    fmt.Printf("Strategy %s: %d remaining, resets at %v\n",
-        strategy, result.Remaining, result.Reset)
-}
-```
-
-#### Resetting Rate Limits
-
-```go
-// Reset rate limits for a specific key (useful for testing)
-err := limiter.Reset(ctx, ratelimit.AccessOptions{
-    Key: "user:123",
-})
-if err != nil {
-    // handle error
-}
-```
-
-#### Dynamic Key Support
-
-```go
-// Use different keys for different users/endpoints
-allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{
-    Key: "user:123", // Dynamic key
-})
-```
-
-### Rate Limiting Strategies
-
-For direct strategy usage, you can create strategies individually:
-
-#### Fixed Window
-
-```go
 import (
+    "context"
+    "fmt"
+    "time"
+
     "github.com/ajiwo/ratelimit/backends/memory"
-    "github.com/ajiwo/ratelimit/strategies/fixedwindow"
+    fw "github.com/ajiwo/ratelimit/strategies/fixedwindow"
 )
 
-// Create a backend instance
-backend := memory.New()
+func main() {
+    ctx := context.Background()
 
-// Create a fixed window strategy
-strategy := fixedwindow.New(backend)
+    // 1) Choose a backend
+    store := memory.New()
 
-// Configure rate limiting (single-quota)
-config := fixedwindow.NewConfig().
-    SetKey("user:123").
-    AddQuota("default", 100, time.Minute).
-    Build()
+    // 2) Create a strategy bound to the backend
+    strat := fw.New(store)
 
-// Or configure multi-quota rate limiting
-multiQuotaConfig := fixedwindow.Config{
-    Key: "user:123",
-    Quotas: map[string]fixedwindow.Quota{
-        "burst": {
-            Limit:  10,
-            Window: time.Minute,
-        },
-        "sustained": {
-            Limit:  100,
-            Window: time.Hour,
-        },
-    },
-}
+    // 3) Build a strategy config
+    // Compose the full key yourself (e.g., base segments + dynamic ID)
+    userID := "user123"
+    key := "api:user:" + userID
+    cfg := fw.NewConfig().
+        SetKey(key).
+        AddQuota("default", 5, 3*time.Second).
+        Build()
 
-// Check if request is allowed and get detailed results
-results, err := strategy.Allow(ctx, config) 
-if err != nil {
-    // Handle error
-}
+    // 4) Perform checks
+    // Allow consumes quota and returns per-quota results
+    results, err := strat.Allow(ctx, cfg)
+    if err != nil {
+        panic(err)
+    }
+    r := results["default"]
+    fmt.Printf("allowed=%v remaining=%d reset=%s\n", r.Allowed, r.Remaining, r.Reset.Format(time.RFC3339))
 
-result := results["default"]
-if result.Allowed {
-    fmt.Printf("Request allowed, %d remaining, resets at %v\n",
-        result.Remaining, result.Reset)
-    // Process request
-} else {
-    fmt.Printf("Request blocked, %d remaining, resets at %v\n",
-        result.Remaining, result.Reset)
-    // Reject request
-}
-
-// For multi-quota, iterate through all quota results
-for quotaName, quotaResult := range results {
-    fmt.Printf("Quota %s: allowed=%v, remaining=%d, reset=%v\n",
-        quotaName, quotaResult.Allowed, quotaResult.Remaining, quotaResult.Reset)
+    // GetResult inspects current state without consuming quota
+    peek, err := strat.GetResult(ctx, cfg)
+    if err != nil {
+        panic(err)
+    }
+    pr := peek["default"]
+    fmt.Printf("peek remaining=%d reset=%s\n", pr.Remaining, pr.Reset.Format(time.RFC3339))
 }
 ```
 
-#### Token Bucket
+Notes:
+- When using strategies directly, you are responsible for constructing the key string. Follow the same key validation rules as elsewhere.
+- Fixed Window supports multiple quotas. Other strategies (Token Bucket, Leaky Bucket, GCRA) have their own configs and typically a single logical limit.
 
-```go
-import (
-    "github.com/ajiwo/ratelimit/backends/memory"
-    "github.com/ajiwo/ratelimit/strategies/tokenbucket"
-)
 
-// Create a backend instance
-backend := memory.New()
+## Middleware examples
 
-// Create a token bucket strategy
-strategy := tokenbucket.New(backend)
+The repository includes runnable examples for Echo and net/http.
 
-// Configure rate limiting
-config := tokenbucket.Config{
-    Key:        "user:123",
-    BurstSize:  10,
-    RefillRate: 1.0, // 1 token per second
-}
+- Echo: `examples/middleware/echo`
+- net/http stdlib: `examples/middleware/stdlib`
 
-// Check if request is allowed and get detailed results
-results, err := strategy.Allow(ctx, config)
-if err != nil {
-    // Handle error
-}
+Both demonstrate:
+- calling `Allow` to enforce
+- on 429, calling `Peek` to populate standard headers like `X-RateLimit-Remaining` and `Retry-After`
 
-result := results["default"]
-if result.Allowed {
-    fmt.Printf("Request allowed, %d remaining, resets at %v\n",
-        result.Remaining, result.Reset)
-    // Process request
-} else {
-    fmt.Printf("Request blocked, %d remaining, resets at %v\n",
-        result.Remaining, result.Reset)
-    // Reject request
-}
+
+## Examples directory
+
+- `examples/basic`: single strategy fixed-window limiting
+- `examples/dual`: composite fixed-window + token-bucket
+- `examples/middleware/echo`, `examples/middleware/stdlib`: ready-to-run middleware
+- `examples/custom`: shows custom composition/decision logic
+
+Run an example:
+
+```bash
+go run ./examples/basic
 ```
 
-#### Leaky Bucket
-
-```go
-import (
-    "github.com/ajiwo/ratelimit/backends/memory"
-    "github.com/ajiwo/ratelimit/strategies/leakybucket"
-)
-
-// Create a backend instance
-backend := memory.New()
-
-// Create a leaky bucket strategy
-strategy := leakybucket.New(backend)
-
-// Configure rate limiting
-config := leakybucket.Config{
-    Key:      "user:123",
-    Capacity: 50,  // Maximum requests the bucket can hold
-    LeakRate: 2.0, // 2 requests per second leak rate
-}
-
-// Check if request is allowed and get detailed results
-results, err := strategy.Allow(ctx, config)
-if err != nil {
-    // Handle error
-}
-
-result := results["default"]
-if result.Allowed {
-    fmt.Printf("Request allowed, %d remaining, resets at %v\n",
-        result.Remaining, result.Reset)
-    // Process request
-} else {
-    fmt.Printf("Request blocked, %d remaining, resets at %v\n",
-        result.Remaining, result.Reset)
-    // Reject request
-}
-```
-
-#### GCRA (Generic Cell Rate Algorithm)
-
-```go
-import (
-    "github.com/ajiwo/ratelimit/backends/memory"
-    "github.com/ajiwo/ratelimit/strategies/gcra"
-)
-
-// Create a backend instance
-backend := memory.New()
-
-// Create a GCRA strategy
-strategy := gcra.New(backend)
-
-// Configure rate limiting
-config := gcra.Config{
-    Key:   "user:123", // Identifier, get it from eg JWT
-    Rate:  10.0, // 10 requests per second
-    Burst: 20,   // Maximum burst size
-}
-
-// Check if request is allowed and get detailed results
-results, err := strategy.Allow(ctx, config)
-if err != nil {
-    // Handle error
-}
-
-result := results["default"]
-if result.Allowed {
-    fmt.Printf("Request allowed, %d remaining, resets at %v\n",
-        result.Remaining, result.Reset)
-    // Process request
-} else {
-    fmt.Printf("Request blocked, %d remaining, resets at %v\n",
-        result.Remaining, result.Reset)
-    // Reject request
-}
-```
 
 ## Testing
 
-Run tests with:
+Run the full test suite (root + strategies/backends/tests):
 
 ```bash
-./test.sh
+go test ./...
 ```
 
-Note: Some tests require running Redis and PostgreSQL instances for integration testing.
+There are focused tests for concurrency, strategy behavior, and backend correctness.
+
 
 ## License
 
-MIT
+MIT — see [LICENSE](./LICENSE).
