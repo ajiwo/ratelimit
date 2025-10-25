@@ -5,16 +5,24 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit/strategies"
+	"github.com/ajiwo/ratelimit/strategies/fixedwindow/internal"
 )
 
-type Quota struct {
-	Limit  int
-	Window time.Duration
-}
+type Quota = internal.Quota
 
 type Config struct {
 	Key    string
 	Quotas map[string]Quota
+}
+
+// GetKey implements internal.Config interface
+func (c Config) GetKey() string {
+	return c.Key
+}
+
+// GetQuotas implements internal.Config interface
+func (c Config) GetQuotas() map[string]internal.Quota {
+	return c.Quotas
 }
 
 func (c Config) Validate() error {
