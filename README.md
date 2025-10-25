@@ -43,7 +43,7 @@ backend := memory.New()
 
 // Create a rate limiter using functional options
 limiter, err := ratelimit.New(
-    ratelimit.WithBackend(mem),
+    ratelimit.WithBackend(backend),
     ratelimit.WithPrimaryStrategy(
         fixedwindow.NewConfig("user:123").
             AddQuota("default", 100, time.Hour).
@@ -57,17 +57,16 @@ if err != nil {
 defer limiter.Close()
 
 // Check if request is allowed (simple version)
-allowed, err := limiter.Allow(ratelimit.WithContext(ctx))
+allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
 if err != nil {
     // handle error
 }
 
 // Or get detailed results
 var results map[string]strategies.Result
-allowed, err := limiter.Allow(
-    ratelimit.WithContext(ctx),
-    ratelimit.WithResult(&results),
-)
+allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{
+    Result: &results,
+})
 if err != nil {
     // handle error
 }
@@ -95,7 +94,7 @@ backend := memory.New()
 
 // Create a multi-quota fixed window rate limiter
 limiter, err := ratelimit.New(
-    ratelimit.WithBackend(mem),
+    ratelimit.WithBackend(backend),
     ratelimit.WithPrimaryStrategy(fixedwindow.Config{
         Key: "api:user123",
         Quotas: map[string]fixedwindow.Quota{
@@ -121,17 +120,16 @@ if err != nil {
 defer limiter.Close()
 
 // Check if request is allowed (simple version)
-allowed, err := limiter.Allow(ratelimit.WithContext(ctx))
+allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
 if err != nil {
     // handle error
 }
 
 // Or get detailed results for all quotas
 var results map[string]strategies.Result
-allowed, err = limiter.Allow(
-    ratelimit.WithContext(ctx),
-    ratelimit.WithResult(&results),
-)
+allowed, err = limiter.Allow(ctx, ratelimit.AccessOptions{
+    Result: &results,
+})
 if err != nil {
     // handle error
 }
@@ -171,7 +169,7 @@ backend := memory.New()
 
 // Create a dual-strategy rate limiter
 limiter, err := ratelimit.New(
-    ratelimit.WithBackend(mem),
+    ratelimit.WithBackend(backend),
     // Primary: strict rate limiting
     ratelimit.WithPrimaryStrategy(
         fixedwindow.NewConfig("api:user").
@@ -191,17 +189,16 @@ if err != nil {
 defer limiter.Close()
 
 // Check if request is allowed (simple version)
-allowed, err := limiter.Allow(ratelimit.WithContext(ctx))
+allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
 if err != nil {
     // handle error
 }
 
 // Or get detailed results
 var results map[string]strategies.Result
-allowed, err = limiter.Allow(
-    ratelimit.WithContext(ctx),
-    ratelimit.WithResult(&results),
-)
+allowed, err = limiter.Allow(ctx, ratelimit.AccessOptions{
+    Result: &results,
+})
 if err != nil {
     // handle error
 }
@@ -241,14 +238,19 @@ for strategy, result := range results {
 - `WithBaseKey(key)` - Set the base key for rate limiting
 
 **Access Options (for Allow method):**
-- `WithContext(ctx)` - Provide context for the operation
-- `WithKey(key)` - Use a dynamic key for this specific request
-- `WithResult(&results)` - Get detailed results in a map[string]strategies.Result
+```go
+type AccessOptions struct {
+    Key            string                        // Dynamic key for this specific request
+    SkipValidation bool                          // Skip key validation
+    Result         *map[string]strategies.Result // Optional pointer to capture detailed results
+}
+```
 
-**Additional Methods:**
-- `GetStats(opts...)` - Get detailed statistics for all strategies without consuming quota
-- `Reset(opts...)` - Reset rate limit counters (mainly for testing)
-- `Close()` - Clean up resources and close the rate limiter
+**Top-level Methods:**
+- `Allow(ctx context.Context, options AccessOptions) (bool, error)` - Check if request is allowed
+- `Peek(ctx context.Context, options AccessOptions) (bool, error)` - Get statistics without consuming quota
+- `Reset(ctx context.Context, options AccessOptions) error` - Reset rate limit counters (mainly for testing)
+- `Close() error` - Clean up resources and close the rate limiter
 
 **Strategy Behavior:**
 - **Single Strategy:** Use any strategy alone (Fixed Window, Token Bucket, or Leaky Bucket)
@@ -387,10 +389,10 @@ limiter, err := ratelimit.New(
 ```go
 // Get current statistics without consuming quota
 var stats map[string]strategies.Result
-stats, err := limiter.GetStats(
-    ratelimit.WithContext(ctx),
-    ratelimit.WithKey("user:123"),
-)
+_, err := limiter.Peek(ctx, ratelimit.AccessOptions{
+    Key:    "user:123",
+    Result: &stats,
+})
 if err != nil {
     // handle error
 }
@@ -405,10 +407,9 @@ for strategy, result := range stats {
 
 ```go
 // Reset rate limits for a specific key (useful for testing)
-err := limiter.Reset(
-    ratelimit.WithContext(ctx),
-    ratelimit.WithKey("user:123"),
-)
+err := limiter.Reset(ctx, ratelimit.AccessOptions{
+    Key: "user:123",
+})
 if err != nil {
     // handle error
 }
@@ -418,10 +419,9 @@ if err != nil {
 
 ```go
 // Use different keys for different users/endpoints
-allowed, err := limiter.Allow(
-    ratelimit.WithContext(ctx),
-    ratelimit.WithKey("user:123"), // Dynamic key
-)
+allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{
+    Key: "user:123", // Dynamic key
+})
 ```
 
 ### Rate Limiting Strategies
@@ -508,10 +508,12 @@ config := tokenbucket.Config{
 }
 
 // Check if request is allowed and get detailed results
-result, err := strategy.Allow(ctx, config)
+results, err := strategy.Allow(ctx, config)
 if err != nil {
     // Handle error
 }
+
+result := results["default"]
 if result.Allowed {
     fmt.Printf("Request allowed, %d remaining, resets at %v\n",
         result.Remaining, result.Reset)
@@ -545,10 +547,12 @@ config := leakybucket.Config{
 }
 
 // Check if request is allowed and get detailed results
-result, err := strategy.Allow(ctx, config)
+results, err := strategy.Allow(ctx, config)
 if err != nil {
     // Handle error
 }
+
+result := results["default"]
 if result.Allowed {
     fmt.Printf("Request allowed, %d remaining, resets at %v\n",
         result.Remaining, result.Reset)
@@ -582,10 +586,12 @@ config := gcra.Config{
 }
 
 // Check if request is allowed and get detailed results
-result, err := strategy.Allow(ctx, config)
+results, err := strategy.Allow(ctx, config)
 if err != nil {
     // Handle error
 }
+
+result := results["default"]
 if result.Allowed {
     fmt.Printf("Request allowed, %d remaining, resets at %v\n",
         result.Remaining, result.Reset)
