@@ -40,3 +40,14 @@ func (c Config) WithKey(key string) strategies.StrategyConfig {
 	c.Key = key
 	return c
 }
+
+// These 3 methods implement `internal.Config`
+func (c Config) GetBurst() int {
+	return c.Burst
+}
+func (c Config) GetKey() string {
+	return c.Key
+}
+func (c Config) GetRate() float64 {
+	return c.Rate
+}
