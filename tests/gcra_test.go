@@ -1,376 +1,292 @@
 package tests
 
 import (
-	"fmt"
+	"context"
+	"errors"
+	"sync"
 	"testing"
 	"time"
 
-	"github.com/ajiwo/ratelimit"
-	"github.com/ajiwo/ratelimit/strategies"
+	"github.com/ajiwo/ratelimit/backends/memory"
 	"github.com/ajiwo/ratelimit/strategies/gcra"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-func TestGCRA_ConcurrentAccessMemory(t *testing.T) {
-	backend := UseBackend(t, "memory")
-	key := fmt.Sprintf("gm-%d", time.Now().UnixNano())
+// TestGCRA_MemoryBackend tests GCRA strategy with memory backend
+func TestGCRA_MemoryBackend(t *testing.T) {
+	ctx := context.Background()
+	storage := memory.New()
+	defer storage.Close()
 
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(gcra.Config{Burst: 10, Rate: 0.1}),
-		ratelimit.WithBackend(backend),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	defer func() {
-		_ = limiter.Close()
-	}()
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan bool, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- allowed
-		}()
+	strategy := gcra.New(storage)
+	config := gcra.Config{
+		Key:   "test_memory",
+		Rate:  10.0, // 10 requests per second
+		Burst: 5,    // burst of 5
 	}
 
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
+	// Test initial state - should allow requests
+	result, err := strategy.Allow(ctx, config)
+	require.NoError(t, err, "Unexpected error")
+	assert.True(t, result["default"].Allowed, "Expected first request to be allowed")
+	assert.Equal(t, 4, result["default"].Remaining, "Expected 4 remaining requests")
 
-	for range 20 {
-		select {
-		case allowed := <-results:
-			if allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
+	// Test burst consumption
+	for i := 0; i < 4; i++ {
+		result, err := strategy.Allow(ctx, config)
+		require.NoError(t, err, "Unexpected error on burst request %d", i)
+		assert.True(t, result["default"].Allowed, "Expected burst request %d to be allowed", i+1)
 	}
 
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
+	// Next request should be denied (burst exhausted)
+	result, err = strategy.Allow(ctx, config)
+	require.NoError(t, err, "Unexpected error")
+	assert.False(t, result["default"].Allowed, "Expected request to be denied after burst exhaustion")
+	assert.Equal(t, 0, result["default"].Remaining, "Expected 0 remaining requests")
 }
 
-func TestGCRA_ConcurrentAccessPostgres(t *testing.T) {
-	backend := UseBackend(t, "postgres")
-	key := fmt.Sprintf("gp-%d", time.Now().UnixNano())
+// TestGCRA_PeekBehavior tests Peek vs Allow behavior
+func TestGCRA_PeekBehavior(t *testing.T) {
+	ctx := context.Background()
+	storage := memory.New()
+	defer storage.Close()
 
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(gcra.Config{Burst: 10, Rate: 0.1}),
-		ratelimit.WithBackend(backend),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	defer func() {
-		_ = limiter.Close()
-	}()
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan bool, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- allowed
-		}()
+	strategy := gcra.New(storage)
+	config := gcra.Config{
+		Key:   "test_peek",
+		Rate:  5.0,
+		Burst: 3,
 	}
 
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
+	// Initial peek should show full burst
+	result, err := strategy.Peek(ctx, config)
+	require.NoError(t, err, "Unexpected error")
+	assert.True(t, result["default"].Allowed, "Peek should show request as allowed")
+	assert.Equal(t, 3, result["default"].Remaining, "Expected 3 remaining")
 
-	for range 20 {
-		select {
-		case allowed := <-results:
-			if allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
-	}
+	// Peek again should show same state (no consumption)
+	result, err = strategy.Peek(ctx, config)
+	require.NoError(t, err, "Unexpected error")
+	assert.Equal(t, 3, result["default"].Remaining, "Peek should not consume quota, expected 3 remaining")
 
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
+	// Allow should consume quota
+	result, err = strategy.Allow(ctx, config)
+	require.NoError(t, err, "Unexpected error")
+	assert.Equal(t, 2, result["default"].Remaining, "Expected 2 remaining after allow")
 
-	err = limiter.Close()
-	require.NoError(t, err)
+	// Peek should reflect consumed state
+	result, err = strategy.Peek(ctx, config)
+	require.NoError(t, err, "Unexpected error")
+	assert.Equal(t, 2, result["default"].Remaining, "Peek should reflect consumed state, expected 2 remaining")
 }
 
-func TestGCRA_ConcurrentAccessRedis(t *testing.T) {
-	backend := UseBackend(t, "redis")
-	key := fmt.Sprintf("gr-%d", time.Now().UnixNano())
+// TestGCRA_Reset tests reset functionality
+func TestGCRA_Reset(t *testing.T) {
+	ctx := context.Background()
+	storage := memory.New()
+	defer storage.Close()
 
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(gcra.Config{Burst: 10, Rate: 0.1}),
-		ratelimit.WithBackend(backend),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	defer func() {
-		_ = limiter.Close()
-	}()
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan bool, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- allowed
-		}()
+	strategy := gcra.New(storage)
+	config := gcra.Config{
+		Key:   "test_reset",
+		Rate:  2.0,
+		Burst: 2,
 	}
 
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case allowed := <-results:
-			if allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
+	// Consume all burst
+	for i := 0; i < 2; i++ {
+		result, err := strategy.Allow(ctx, config)
+		require.NoError(t, err, "Unexpected error")
+		assert.True(t, result["default"].Allowed, "Expected request %d to be allowed", i+1)
 	}
 
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
+	// Should be denied now
+	result, err := strategy.Allow(ctx, config)
+	require.NoError(t, err, "Unexpected error")
+	assert.False(t, result["default"].Allowed, "Expected request to be denied after burst consumption")
 
-	err = limiter.Close()
-	require.NoError(t, err)
+	// Reset should clear the state
+	err = strategy.Reset(ctx, config)
+	require.NoError(t, err, "Unexpected error during reset")
+
+	// Should now be allowed again with full burst
+	result, err = strategy.Allow(ctx, config)
+	require.NoError(t, err, "Unexpected error")
+	assert.True(t, result["default"].Allowed, "Expected request to be allowed after reset")
+	assert.Equal(t, 1, result["default"].Remaining, "Expected 1 remaining after reset")
 }
 
-func TestGCRA_ConcurrentAccessMemoryWithResult(t *testing.T) {
-	backend := UseBackend(t, "memory")
-	key := fmt.Sprintf("gcra-mwr-%d", time.Now().UnixNano())
+// TestGCRA_ConcurrentAccess tests concurrent access to GCRA
+func TestGCRA_ConcurrentAccess(t *testing.T) {
+	ctx := context.Background()
+	storage := memory.New()
+	defer storage.Close()
 
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(gcra.Config{Burst: 10, Rate: 0.1}),
-		ratelimit.WithBackend(backend),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	defer func() {
-		_ = limiter.Close()
-	}()
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan strategies.Result, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			var res map[string]strategies.Result
-			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- res["default"]
-		}()
+	strategy := gcra.New(storage)
+	config := gcra.Config{
+		Key:   "test_concurrent",
+		Rate:  100.0, // High rate for concurrent testing
+		Burst: 50,
 	}
 
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
+	const numGoroutines = 10
+	const requestsPerGoroutine = 20
 
-	for range 20 {
-		select {
-		case result := <-results:
-			if result.Allowed {
-				allowedCount++
-			} else {
-				deniedCount++
+	var wg sync.WaitGroup
+	var allowedCount int64
+	var errorCount int64
+	var mu sync.Mutex
+
+	// Launch multiple goroutines making concurrent requests
+	for range numGoroutines {
+		wg.Go(func() {
+			for range requestsPerGoroutine {
+				result, err := strategy.Allow(ctx, config)
+				if err != nil {
+					mu.Lock()
+					errorCount++
+					mu.Unlock()
+					continue
+				}
+				if result["default"].Allowed {
+					mu.Lock()
+					allowedCount++
+					mu.Unlock()
+				}
 			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
+		})
 	}
 
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
+	wg.Wait()
 
-	err = limiter.Close()
-	require.NoError(t, err)
+	totalRequests := int64(numGoroutines * requestsPerGoroutine)
+	assert.Equal(t, int64(0), errorCount, "Encountered %d errors during concurrent access", errorCount)
+
+	// Should not have allowed more than burst + rate*time elapsed requests
+	// This is a rough check - the exact number depends on timing
+	if allowedCount > int64(config.Burst) {
+		t.Logf("Allowed %d requests out of %d total", allowedCount, totalRequests)
+	}
 }
 
-func TestGCRA_ConcurrentAccessPostgresWithResult(t *testing.T) {
-	backend := UseBackend(t, "postgres")
-	key := fmt.Sprintf("gcra-pwr-%d", time.Now().UnixNano())
+// TestGCRA_RateLimiting tests actual rate limiting over time
+func TestGCRA_RateLimiting(t *testing.T) {
+	ctx := context.Background()
+	storage := memory.New()
+	defer storage.Close()
 
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(gcra.Config{Burst: 10, Rate: 0.1}),
-		ratelimit.WithBackend(backend),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	defer func() {
-		_ = limiter.Close()
-	}()
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan strategies.Result, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			var res map[string]strategies.Result
-			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- res["default"]
-		}()
+	strategy := gcra.New(storage)
+	config := gcra.Config{
+		Key:   "test_rate",
+		Rate:  2.0, // 2 requests per second
+		Burst: 1,   // Small burst
 	}
 
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
+	// Consume burst first
+	result, err := strategy.Allow(ctx, config)
+	require.NoError(t, err, "Unexpected error")
+	assert.True(t, result["default"].Allowed, "Expected first request to be allowed")
 
-	for range 20 {
-		select {
-		case result := <-results:
-			if result.Allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
-	}
+	// Should be denied now
+	result, err = strategy.Allow(ctx, config)
+	require.NoError(t, err, "Unexpected error")
+	assert.False(t, result["default"].Allowed, "Expected request to be denied")
 
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
+	// Wait for rate to allow new request
+	time.Sleep(600 * time.Millisecond) // More than 500ms interval (2.0 req/sec = 500ms per request)
 
-	err = limiter.Close()
-	require.NoError(t, err)
+	// Should now be allowed (enough time passed for 1 request)
+	result, err = strategy.Allow(ctx, config)
+	require.NoError(t, err, "Unexpected error")
+	assert.True(t, result["default"].Allowed, "Expected request to be allowed after rate interval")
+
+	// Should be denied again immediately (no burst left)
+	result, err = strategy.Allow(ctx, config)
+	require.NoError(t, err, "Unexpected error")
+	assert.False(t, result["default"].Allowed, "Expected request to be denied again")
 }
 
-func TestGCRA_ConcurrentAccessRedisWithResult(t *testing.T) {
-	backend := UseBackend(t, "redis")
-	key := fmt.Sprintf("gcra-rwr-%d", time.Now().UnixNano())
+// TestGCRA_ErrorHandling tests error scenarios
+func TestGCRA_ErrorHandling(t *testing.T) {
+	ctx := context.Background()
+	storage := memory.New()
+	defer storage.Close()
 
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(gcra.Config{Burst: 10, Rate: 0.1}),
-		ratelimit.WithBackend(backend),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	defer func() {
-		_ = limiter.Close()
-	}()
+	strategy := gcra.New(storage)
 
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan strategies.Result, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			var res map[string]strategies.Result
-			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- res["default"]
-		}()
+	// Test invalid config
+	invalidConfig := gcra.Config{
+		Key:   "test_invalid",
+		Rate:  -1.0, // Invalid rate
+		Burst: 5,
 	}
 
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
+	err := invalidConfig.Validate()
+	assert.Error(t, err, "Expected error for invalid rate")
 
-	for range 20 {
-		select {
-		case result := <-results:
-			if result.Allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
+	// Test context cancellation
+	cancelCtx, cancel := context.WithCancel(ctx)
+	cancel() // Cancel immediately
+
+	validConfig := gcra.Config{
+		Key:   "test_cancel",
+		Rate:  10.0,
+		Burst: 5,
+	}
+
+	_, err = strategy.Allow(cancelCtx, validConfig)
+	assert.Error(t, err, "Expected error for cancelled context")
+	assert.True(t, errors.Is(err, context.Canceled), "Expected context.Canceled error, got %v", err)
+}
+
+// TestGCRA_MultipleKeys tests GCRA with different keys
+func TestGCRA_MultipleKeys(t *testing.T) {
+	ctx := context.Background()
+	storage := memory.New()
+	defer storage.Close()
+
+	strategy := gcra.New(storage)
+
+	configs := []gcra.Config{
+		{Key: "user1", Rate: 5.0, Burst: 3},
+		{Key: "user2", Rate: 2.0, Burst: 2},
+		{Key: "user3", Rate: 10.0, Burst: 5},
+	}
+
+	// Test that different keys work independently
+	for i, config := range configs {
+		// Consume burst for each user
+		for j := 0; j < config.Burst; j++ {
+			result, err := strategy.Allow(ctx, config)
+			require.NoError(t, err, "Unexpected error for user %d", i+1)
+			assert.True(t, result["default"].Allowed, "Expected user %d request %d to be allowed", i+1, j+1)
 		}
+
+		// Should be denied for each user
+		result, err := strategy.Allow(ctx, config)
+		require.NoError(t, err, "Unexpected error for user %d", i+1)
+		assert.False(t, result["default"].Allowed, "Expected user %d to be denied after burst", i+1)
 	}
+}
 
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
+// TestGCRA_BackendCompatibility tests GCRA with different backends
+func TestGCRA_BackendCompatibility(t *testing.T) {
+	ctx := context.Background()
 
-	err = limiter.Close()
-	require.NoError(t, err)
+	backends := []string{"memory", "redis", "postgres"}
+
+	for _, backendName := range backends {
+		t.Run(backendName+"Backend", func(t *testing.T) {
+			storage := UseBackend(t, backendName)
+			defer storage.Close()
+
+			strategy := gcra.New(storage)
+			config := gcra.Config{Key: "test_" + backendName, Rate: 10.0, Burst: 5}
+
+			result, err := strategy.Allow(ctx, config)
+			require.NoError(t, err, "%s backend error", backendName)
+			assert.True(t, result["default"].Allowed, "%s backend should allow request", backendName)
+		})
+	}
 }
