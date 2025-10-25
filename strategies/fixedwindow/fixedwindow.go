@@ -62,8 +62,8 @@ func New(storage backends.Backend) *Strategy {
 	}
 }
 
-// GetResult returns detailed statistics for the current window state
-func (f *Strategy) GetResult(ctx context.Context, config strategies.StrategyConfig) (map[string]strategies.Result, error) {
+// Peek inspects current state without consuming quota
+func (f *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (map[string]strategies.Result, error) {
 	// Type assert to FixedWindowConfig
 	fixedConfig, ok := config.(Config)
 	if !ok {

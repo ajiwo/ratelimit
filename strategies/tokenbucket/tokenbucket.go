@@ -37,8 +37,8 @@ func New(storage backends.Backend) *Strategy {
 	}
 }
 
-// GetResult returns detailed statistics for the current bucket state
-func (t *Strategy) GetResult(ctx context.Context, config strategies.StrategyConfig) (map[string]strategies.Result, error) {
+// Peek inspects current state without consuming quota
+func (t *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (map[string]strategies.Result, error) {
 	// // Type assert to TokenBucketConfig
 	tokenConfig, ok := config.(Config)
 	if !ok {

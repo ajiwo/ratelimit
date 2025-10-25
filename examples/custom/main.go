@@ -51,7 +51,7 @@ func (c *customStrategy) Peek(ctx context.Context,
 	results := make(strategyResults)
 
 	// Check primary strategy without consuming quota
-	primaryResults, err := c.primary.GetResult(ctx, primaryConfig)
+	primaryResults, err := c.primary.Peek(ctx, primaryConfig)
 	if err != nil {
 		return nil, fmt.Errorf("primary strategy check failed: %w", err)
 	}
@@ -62,7 +62,7 @@ func (c *customStrategy) Peek(ctx context.Context,
 	}
 
 	// Check secondary strategy without consuming quota
-	secondaryResults, err := c.secondary.GetResult(ctx, secondaryConfig)
+	secondaryResults, err := c.secondary.Peek(ctx, secondaryConfig)
 	if err != nil {
 		return nil, fmt.Errorf("secondary strategy check failed: %w", err)
 	}

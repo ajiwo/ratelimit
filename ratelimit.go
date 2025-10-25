@@ -80,7 +80,7 @@ func (r *RateLimiter) Peek(ctx context.Context, options AccessOptions) (bool, er
 	}
 
 	// Get stats from the strategy (composite or single)
-	results, err := r.primaryStrategy.GetResult(ctx, strategyConfig)
+	results, err := r.primaryStrategy.Peek(ctx, strategyConfig)
 	if err != nil {
 		return false, fmt.Errorf("failed to get stats: %w", err)
 	}

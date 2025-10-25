@@ -151,8 +151,8 @@ func (g *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 	return nil, fmt.Errorf("failed to update GCRA state after %d attempts due to concurrent access", strategies.CheckAndSetRetries)
 }
 
-// GetResult returns detailed statistics for the current GCRA state
-func (g *Strategy) GetResult(ctx context.Context, config strategies.StrategyConfig) (map[string]strategies.Result, error) {
+// Peek inspects current state without consuming quota
+func (g *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (map[string]strategies.Result, error) {
 	gcraConfig, ok := config.(Config)
 	if !ok {
 		return nil, fmt.Errorf("GCRA strategy requires GCRAConfig")

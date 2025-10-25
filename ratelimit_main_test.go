@@ -76,7 +76,7 @@ func (m *mockStrategyOne) Allow(ctx context.Context, cfg strategies.StrategyConf
 	return m.allowRes, m.allowErr
 }
 
-func (m *mockStrategyOne) GetResult(ctx context.Context, cfg strategies.StrategyConfig) (map[string]strategies.Result, error) {
+func (m *mockStrategyOne) Peek(ctx context.Context, cfg strategies.StrategyConfig) (map[string]strategies.Result, error) {
 	m.lastConfig = cfg
 	return m.getRes, m.getErr
 }

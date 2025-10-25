@@ -187,7 +187,7 @@ func TestFixedWindow_ZeroLimit(t *testing.T) {
 	})
 }
 
-func TestFixedWindow_GetResult(t *testing.T) {
+func TestFixedWindow_Peek(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := newMockBackend()
 		defer storage.Close()
@@ -200,8 +200,8 @@ func TestFixedWindow_GetResult(t *testing.T) {
 
 		ctx := t.Context()
 
-		// Test GetResult with no existing data
-		result, err := strategy.GetResult(ctx, config)
+		// Test Peek with no existing data
+		result, err := strategy.Peek(ctx, config)
 		require.NoError(t, err)
 		assert.True(t, result["default"].Allowed, "Result should be allowed initially")
 		assert.Equal(t, 5, result["default"].Remaining, "Remaining should be 5 initially")
@@ -214,8 +214,8 @@ func TestFixedWindow_GetResult(t *testing.T) {
 			assert.True(t, result["default"].Allowed, "Request should be allowed")
 		}
 
-		// Test GetResult after requests
-		result, err = strategy.GetResult(ctx, config)
+		// Test Peek after requests
+		result, err = strategy.Peek(ctx, config)
 		require.NoError(t, err)
 		assert.True(t, result["default"].Allowed, "Result should still be allowed")
 		assert.Equal(t, 2, result["default"].Remaining, "Remaining should be 2 after 3 requests")
@@ -232,8 +232,8 @@ func TestFixedWindow_GetResult(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, result["default"].Allowed, "Request should be denied")
 
-		// Test GetResult when at limit
-		result, err = strategy.GetResult(ctx, config)
+		// Test Peek when at limit
+		result, err = strategy.Peek(ctx, config)
 		require.NoError(t, err)
 		assert.False(t, result["default"].Allowed, "Result should not be allowed when at limit")
 		assert.Equal(t, 0, result["default"].Remaining, "Remaining should be 0 when at limit")

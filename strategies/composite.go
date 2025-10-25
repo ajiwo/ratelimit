@@ -108,7 +108,7 @@ func (cs *compositeStrategy) Allow(ctx context.Context, config StrategyConfig) (
 
 	// Step 1: Check primary strategy (no consumption yet)
 	primaryConfig := cs.createPrimaryConfig(compositeConfig)
-	primaryResults, err := cs.primary.GetResult(ctx, primaryConfig)
+	primaryResults, err := cs.primary.Peek(ctx, primaryConfig)
 	if err != nil {
 		return nil, fmt.Errorf("primary strategy check failed: %w", err)
 	}
@@ -129,7 +129,7 @@ func (cs *compositeStrategy) Allow(ctx context.Context, config StrategyConfig) (
 
 	// Step 2: Check secondary strategy (no consumption yet)
 	secondaryConfig := cs.createSecondaryConfig(compositeConfig)
-	secondaryResults, err := cs.secondary.GetResult(ctx, secondaryConfig)
+	secondaryResults, err := cs.secondary.Peek(ctx, secondaryConfig)
 	if err != nil {
 		return nil, fmt.Errorf("secondary strategy check failed: %w", err)
 	}
@@ -162,8 +162,8 @@ func (cs *compositeStrategy) Allow(ctx context.Context, config StrategyConfig) (
 	return results, nil
 }
 
-// GetResult returns current state without consuming quota
-func (cs *compositeStrategy) GetResult(ctx context.Context, config StrategyConfig) (map[string]Result, error) {
+// Peek inspects current state without consuming quota
+func (cs *compositeStrategy) Peek(ctx context.Context, config StrategyConfig) (map[string]Result, error) {
 	compositeConfig, ok := config.(CompositeConfig)
 	if !ok {
 		return nil, fmt.Errorf("composite strategy requires CompositeConfig")
@@ -177,7 +177,7 @@ func (cs *compositeStrategy) GetResult(ctx context.Context, config StrategyConfi
 
 	// Get primary results
 	primaryConfig := cs.createPrimaryConfig(compositeConfig)
-	primaryResults, err := cs.primary.GetResult(ctx, primaryConfig)
+	primaryResults, err := cs.primary.Peek(ctx, primaryConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get primary results: %w", err)
 	}
@@ -187,7 +187,7 @@ func (cs *compositeStrategy) GetResult(ctx context.Context, config StrategyConfi
 
 	// Get secondary results
 	secondaryConfig := cs.createSecondaryConfig(compositeConfig)
-	secondaryResults, err := cs.secondary.GetResult(ctx, secondaryConfig)
+	secondaryResults, err := cs.secondary.Peek(ctx, secondaryConfig)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get secondary results: %w", err)
 	}

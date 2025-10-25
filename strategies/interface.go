@@ -17,8 +17,8 @@ type Strategy interface {
 	// Allow checks if a request is allowed and returns detailed statistics in a single call
 	Allow(ctx context.Context, config StrategyConfig) (map[string]Result, error)
 
-	// GetResult returns detailed statistics for the current state
-	GetResult(ctx context.Context, config StrategyConfig) (map[string]Result, error)
+	// Peek inspects current rate limit status without consuming quota
+	Peek(ctx context.Context, config StrategyConfig) (map[string]Result, error)
 
 	// Reset resets the rate limit counter (mainly for testing)
 	Reset(ctx context.Context, config StrategyConfig) error

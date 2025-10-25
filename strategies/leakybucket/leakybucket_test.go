@@ -123,7 +123,7 @@ func TestLeakyBucketLeak(t *testing.T) {
 	})
 }
 
-func TestLeakyBucketGetResult(t *testing.T) {
+func TestLeakyBucketPeek(t *testing.T) {
 	ctx := t.Context()
 	storage := &mockBackend{store: make(map[string]string)}
 	defer storage.Close()
@@ -135,8 +135,8 @@ func TestLeakyBucketGetResult(t *testing.T) {
 		LeakRate: 1.0, // 1 request per second
 	}
 
-	// Test GetResult with no existing data
-	result, err := strategy.GetResult(ctx, config)
+	// Test Peek with no existing data
+	result, err := strategy.Peek(ctx, config)
 	require.NoError(t, err)
 	assert.True(t, result["default"].Allowed, "Result should be allowed initially")
 	assert.Equal(t, 5, result["default"].Remaining, "Remaining should be 5 initially")
@@ -148,8 +148,8 @@ func TestLeakyBucketGetResult(t *testing.T) {
 		assert.True(t, result["default"].Allowed, "Request %d should be allowed", i)
 	}
 
-	// Test GetResult after adding requests
-	result, err = strategy.GetResult(ctx, config)
+	// Test Peek after adding requests
+	result, err = strategy.Peek(ctx, config)
 	require.NoError(t, err)
 	assert.True(t, result["default"].Allowed, "Result should still be allowed")
 	// Note: Since we're leaking 1 request per second, and some time has passed,

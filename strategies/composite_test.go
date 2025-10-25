@@ -23,7 +23,7 @@ type compMockStrategy struct {
 func (m *compMockStrategy) Allow(ctx context.Context, cfg StrategyConfig) (map[string]Result, error) {
 	return m.allowRes, m.allowErr
 }
-func (m *compMockStrategy) GetResult(ctx context.Context, cfg StrategyConfig) (map[string]Result, error) {
+func (m *compMockStrategy) Peek(ctx context.Context, cfg StrategyConfig) (map[string]Result, error) {
 	return m.getRes, m.getErr
 }
 func (m *compMockStrategy) Reset(ctx context.Context, cfg StrategyConfig) error { return m.resetErr }
@@ -129,7 +129,7 @@ func TestCompositeStrategyFlows(t *testing.T) {
 	cfg := CompositeConfig{BaseKey: "k", Primary: compMockConfig{caps: CapPrimary}, Secondary: compMockConfig{caps: CapSecondary}}
 
 	// GetResult aggregates results with prefixes
-	res, err := comp.GetResult(context.Background(), cfg)
+	res, err := comp.Peek(context.Background(), cfg)
 	require.NoError(t, err, "GetResult error: %v", err)
 	require.Contains(t, res, "primary_p", "expected primary_p in results")
 	require.Contains(t, res, "secondary_s", "expected secondary_s in results")

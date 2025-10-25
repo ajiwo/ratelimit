@@ -218,8 +218,8 @@ func main() {
     r := results["default"]
     fmt.Printf("allowed=%v remaining=%d reset=%s\n", r.Allowed, r.Remaining, r.Reset.Format(time.RFC3339))
 
-    // GetResult inspects current state without consuming quota
-    peek, err := strat.GetResult(ctx, cfg)
+    // Peek inspects current state without consuming quota
+    peek, err := strat.Peek(ctx, cfg)
     if err != nil {
         panic(err)
     }

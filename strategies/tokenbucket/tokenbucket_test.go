@@ -60,7 +60,7 @@ func (m *mockBackend) Close() error {
 	return nil
 }
 
-func TestTokenBucket_GetResult(t *testing.T) {
+func TestTokenBucket_Peek(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
 		storage := &mockBackend{store: make(map[string]string)}
@@ -73,8 +73,8 @@ func TestTokenBucket_GetResult(t *testing.T) {
 			RefillRate: 10.0, // 10 tokens per second
 		}
 
-		// Test GetResult with no existing data
-		result, err := strategy.GetResult(ctx, config)
+		// Test Peek with no existing data
+		result, err := strategy.Peek(ctx, config)
 		require.NoError(t, err)
 		assert.True(t, result["default"].Allowed, "Result should be allowed initially")
 		assert.Equal(t, 10, result["default"].Remaining, "Remaining should be 10 initially")
@@ -86,8 +86,8 @@ func TestTokenBucket_GetResult(t *testing.T) {
 			assert.True(t, result["default"].Allowed, "Request %d should be allowed", i)
 		}
 
-		// Test GetResult after requests
-		result, err = strategy.GetResult(ctx, config)
+		// Test Peek after requests
+		result, err = strategy.Peek(ctx, config)
 		require.NoError(t, err)
 		assert.True(t, result["default"].Allowed, "Result should still be allowed")
 		assert.Equal(t, 5, result["default"].Remaining, "Remaining should be 5 after 5 requests")
