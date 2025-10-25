@@ -9,6 +9,7 @@ import (
 
 	"github.com/ajiwo/ratelimit"
 	"github.com/ajiwo/ratelimit/backends/memory"
+	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/ajiwo/ratelimit/strategies/fixedwindow"
 )
 
@@ -55,8 +56,8 @@ func middleware(limiter *ratelimit.RateLimiter, next http.Handler) http.Handler 
 
 		// Check rate limit
 		allowed, err := limiter.Allow(
-			ratelimit.WithContext(r.Context()),
-			ratelimit.WithKey(clientID),
+			r.Context(),
+			ratelimit.AccessOptions{Key: clientID},
 		)
 		if err != nil {
 			http.Error(w, "Internal Server Error", http.StatusInternalServerError)
@@ -66,9 +67,13 @@ func middleware(limiter *ratelimit.RateLimiter, next http.Handler) http.Handler 
 
 		if !allowed {
 			// Get rate limit info for response headers
-			stats, err := limiter.GetStats(
-				ratelimit.WithContext(r.Context()),
-				ratelimit.WithKey(clientID),
+			var stats map[string]strategies.Result
+			_, err := limiter.Peek(
+				r.Context(),
+				ratelimit.AccessOptions{
+					Key:    clientID,
+					Result: &stats,
+				},
 			)
 			if err == nil && len(stats) > 0 {
 				result := stats["default"]

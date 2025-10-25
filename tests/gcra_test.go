@@ -36,7 +36,7 @@ func TestGCRA_ConcurrentAccessMemory(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			allowed, err := limiter.Allow(ratelimit.WithContext(ctx))
+			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
 			if err != nil {
 				errors <- err
 				return
@@ -96,7 +96,7 @@ func TestGCRA_ConcurrentAccessPostgres(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			allowed, err := limiter.Allow(ratelimit.WithContext(ctx))
+			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
 			if err != nil {
 				errors <- err
 				return
@@ -156,7 +156,7 @@ func TestGCRA_ConcurrentAccessRedis(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			allowed, err := limiter.Allow(ratelimit.WithContext(ctx))
+			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
 			if err != nil {
 				errors <- err
 				return
@@ -217,10 +217,7 @@ func TestGCRA_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	for range 20 {
 		go func() {
 			var res map[string]strategies.Result
-			_, err := limiter.Allow(
-				ratelimit.WithContext(ctx),
-				ratelimit.WithResult(&res),
-			)
+			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
 				return
@@ -281,10 +278,7 @@ func TestGCRA_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	for range 20 {
 		go func() {
 			var res map[string]strategies.Result
-			_, err := limiter.Allow(
-				ratelimit.WithContext(ctx),
-				ratelimit.WithResult(&res),
-			)
+			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
 				return
@@ -345,10 +339,7 @@ func TestGCRA_ConcurrentAccessRedisWithResult(t *testing.T) {
 	for range 20 {
 		go func() {
 			var res map[string]strategies.Result
-			_, err := limiter.Allow(
-				ratelimit.WithContext(ctx),
-				ratelimit.WithResult(&res),
-			)
+			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
 				return

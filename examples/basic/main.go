@@ -46,11 +46,10 @@ func main() {
 		var results map[string]strategies.Result
 
 		// Check if request is allowed with results
-		allowed, err := limiter.Allow(
-			ratelimit.WithContext(ctx),
-			ratelimit.WithKey(userID),
-			ratelimit.WithResult(&results),
-		)
+		allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{
+			Key:    userID,
+			Result: &results,
+		})
 		if err != nil {
 			log.Printf("Error checking rate limit: %v", err)
 			continue
@@ -73,10 +72,10 @@ func main() {
 	// Demonstrate getting statistics without consuming quota
 	fmt.Println("=== Getting Statistics Without Consuming Quota ===")
 	var stats map[string]strategies.Result
-	stats, err = limiter.GetStats(
-		ratelimit.WithContext(ctx),
-		ratelimit.WithKey(userID),
-	)
+	_, err = limiter.Peek(ctx, ratelimit.AccessOptions{
+		Key:    userID,
+		Result: &stats,
+	})
 	if err != nil {
 		log.Printf("Error getting stats: %v", err)
 		return
@@ -92,11 +91,11 @@ func main() {
 
 	// Try another request after reset
 	var results map[string]strategies.Result
-	allowed, err := limiter.Allow(
-		ratelimit.WithContext(ctx),
-		ratelimit.WithKey(userID),
-		ratelimit.WithResult(&results),
-	)
+	// allowed, err := limiter.Allow(ctx, &userID, &results)
+	allowed, err := limiter.Peek(ctx, ratelimit.AccessOptions{
+		Key:    userID,
+		Result: &results,
+	})
 	if err != nil {
 		log.Printf("Error checking rate limit: %v", err)
 		return

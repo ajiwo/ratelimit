@@ -37,8 +37,7 @@ func newCustomStrategy(storage backends.Backend,
 		composer.primary = tokenbucket.New(storage)
 	}
 
-	switch secondaryName {
-	case "token_bucket":
+	if secondaryName == "token_bucket" {
 		composer.secondary = tokenbucket.New(storage)
 	}
 

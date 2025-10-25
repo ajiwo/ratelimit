@@ -46,7 +46,7 @@ func TestFixedWindow_ConcurrentAccessMemory(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			allowed, err := limiter.Allow(ratelimit.WithContext(ctx))
+			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
 			if err != nil {
 				errors <- err
 				return
@@ -114,7 +114,7 @@ func TestFixedWindow_ConcurrentAccessPostgres(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			allowed, err := limiter.Allow(ratelimit.WithContext(ctx))
+			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
 			if err != nil {
 				errors <- err
 				return
@@ -182,7 +182,7 @@ func TestFixedWindow_ConcurrentAccessRedis(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			allowed, err := limiter.Allow(ratelimit.WithContext(ctx))
+			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
 			if err != nil {
 				errors <- err
 				return
@@ -242,7 +242,7 @@ func TestLeakyBucket_ConcurrentAccessMemory(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			allowed, err := limiter.Allow(ratelimit.WithContext(ctx))
+			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
 			if err != nil {
 				errors <- err
 				return
@@ -302,7 +302,7 @@ func TestLeakyBucket_ConcurrentAccessPostgres(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			allowed, err := limiter.Allow(ratelimit.WithContext(ctx))
+			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
 			if err != nil {
 				errors <- err
 				return
@@ -362,7 +362,7 @@ func TestLeakyBucket_ConcurrentAccessRedis(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			allowed, err := limiter.Allow(ratelimit.WithContext(ctx))
+			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
 			if err != nil {
 				errors <- err
 				return
@@ -422,7 +422,7 @@ func TestTokenBucket_ConcurrentAccessMemory(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			allowed, err := limiter.Allow(ratelimit.WithContext(ctx))
+			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
 			if err != nil {
 				errors <- err
 				return
@@ -482,7 +482,7 @@ func TestTokenBucket_ConcurrentAccessPostgres(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			allowed, err := limiter.Allow(ratelimit.WithContext(ctx))
+			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
 			if err != nil {
 				errors <- err
 				return
@@ -542,7 +542,7 @@ func TestTokenBucket_ConcurrentAccessRedis(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			allowed, err := limiter.Allow(ratelimit.WithContext(ctx))
+			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
 			if err != nil {
 				errors <- err
 				return
@@ -611,10 +611,7 @@ func TestFixedWindow_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	for range 20 {
 		go func() {
 			var res map[string]strategies.Result
-			_, err := limiter.Allow(
-				ratelimit.WithContext(ctx),
-				ratelimit.WithResult(&res),
-			)
+			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
 				return
@@ -683,10 +680,7 @@ func TestFixedWindow_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	for range 20 {
 		go func() {
 			var res map[string]strategies.Result
-			_, err := limiter.Allow(
-				ratelimit.WithContext(ctx),
-				ratelimit.WithResult(&res),
-			)
+			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
 				return
@@ -755,10 +749,7 @@ func TestFixedWindow_ConcurrentAccessRedisWithResult(t *testing.T) {
 	for range 20 {
 		go func() {
 			var res map[string]strategies.Result
-			_, err := limiter.Allow(
-				ratelimit.WithContext(ctx),
-				ratelimit.WithResult(&res),
-			)
+			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
 				return
@@ -819,10 +810,7 @@ func TestLeakyBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	for range 20 {
 		go func() {
 			var res map[string]strategies.Result
-			_, err := limiter.Allow(
-				ratelimit.WithContext(ctx),
-				ratelimit.WithResult(&res),
-			)
+			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
 				return
@@ -883,10 +871,7 @@ func TestLeakyBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	for range 20 {
 		go func() {
 			var res map[string]strategies.Result
-			_, err := limiter.Allow(
-				ratelimit.WithContext(ctx),
-				ratelimit.WithResult(&res),
-			)
+			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
 				return
@@ -947,10 +932,7 @@ func TestLeakyBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
 	for range 20 {
 		go func() {
 			var res map[string]strategies.Result
-			_, err := limiter.Allow(
-				ratelimit.WithContext(ctx),
-				ratelimit.WithResult(&res),
-			)
+			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
 				return
@@ -1011,10 +993,7 @@ func TestTokenBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	for range 20 {
 		go func() {
 			var res map[string]strategies.Result
-			_, err := limiter.Allow(
-				ratelimit.WithContext(ctx),
-				ratelimit.WithResult(&res),
-			)
+			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
 				return
@@ -1075,10 +1054,7 @@ func TestTokenBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	for range 20 {
 		go func() {
 			var res map[string]strategies.Result
-			_, err := limiter.Allow(
-				ratelimit.WithContext(ctx),
-				ratelimit.WithResult(&res),
-			)
+			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
 				return
@@ -1139,10 +1115,7 @@ func TestTokenBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
 	for range 20 {
 		go func() {
 			var res map[string]strategies.Result
-			_, err := limiter.Allow(
-				ratelimit.WithContext(ctx),
-				ratelimit.WithResult(&res),
-			)
+			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
 				return

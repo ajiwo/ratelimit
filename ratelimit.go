@@ -6,7 +6,6 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/ajiwo/ratelimit/backends"
 	"github.com/ajiwo/ratelimit/strategies"
 )
 
@@ -24,6 +23,10 @@ type RateLimiter struct {
 	config          Config
 	primaryStrategy strategies.Strategy
 	basePrefix      string // cached BaseKey + ":" for fast key construction
+}
+
+func Ptr[T any](val T) *T {
+	return &val
 }
 
 // New creates a new rate limiter with functional options
@@ -45,76 +48,70 @@ func New(opts ...Option) (*RateLimiter, error) {
 }
 
 // Allow checks if a request is allowed according to the configured strategies
-func (r *RateLimiter) Allow(opts ...AccessOption) (bool, error) {
-	// Parse access options to check if results are requested
-	accessOpts, err := r.parseAccessOptions(opts)
+func (r *RateLimiter) Allow(ctx context.Context, options AccessOptions) (bool, error) {
+	dynamicKey, err := checkDynamicKey(options)
 	if err != nil {
-		return false, fmt.Errorf("failed to parse access options: %w", err)
+		return false, err
 	}
 
-	// Check if results are requested
-	if accessOpts.result != nil {
-		// Use allowWithResult and populate the results map
-		allowed, results, err := r.allowWithResult(accessOpts)
-		if err != nil {
-			return false, err
-		}
-		*accessOpts.result = results
-		return allowed, nil
+	allowed, results, err := r.allowWithResult(ctx, dynamicKey)
+	if err != nil {
+		return false, err
 	}
 
-	// No results requested, use simple version
-	allowed, _, err := r.allowWithResult(accessOpts)
+	// If result map is provided, populate it
+	if options.Result != nil {
+		*options.Result = results
+	}
+
 	return allowed, err
 }
 
-// GetStats returns detailed statistics for all configured strategies
-func (r *RateLimiter) GetStats(opts ...AccessOption) (map[string]strategies.Result, error) {
-	// Parse access options
-	accessOpts, err := r.parseAccessOptions(opts)
+// Peek retrieves strategy results without consuming quota and returns an overall allowed boolean
+func (r *RateLimiter) Peek(ctx context.Context, options AccessOptions) (bool, error) {
+	dynamicKey, err := checkDynamicKey(options)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse access options: %w", err)
+		return false, err
 	}
 
-	strategyConfig, err := r.buildStrategyConfig(accessOpts)
+	strategyConfig, err := r.buildStrategyConfig(dynamicKey)
 	if err != nil {
-		return nil, err
+		return false, err
 	}
 
 	// Get stats from the strategy (composite or single)
-	results, err := r.primaryStrategy.GetResult(accessOpts.ctx, strategyConfig)
+	results, err := r.primaryStrategy.GetResult(ctx, strategyConfig)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get stats: %w", err)
+		return false, fmt.Errorf("failed to get stats: %w", err)
 	}
-
-	return results, nil
-}
-
-// GetBackend returns the storage backend used by this rate limiter
-func (r *RateLimiter) GetBackend() backends.Backend {
-	return r.config.Storage
-}
-
-// GetConfig returns the configuration used by this rate limiter
-func (r *RateLimiter) GetConfig() Config {
-	return r.config
+	if options.Result != nil {
+		*options.Result = results
+	}
+	// Determine overall allowed similarly to Allow
+	allAllowed := true
+	for _, res := range results {
+		if !res.Allowed {
+			allAllowed = false
+			break
+		}
+	}
+	return allAllowed, nil
 }
 
 // Reset resets the rate limit counters for all strategies (mainly for testing)
-func (r *RateLimiter) Reset(opts ...AccessOption) error {
-	// Parse access options
-	accessOpts, err := r.parseAccessOptions(opts)
+func (r *RateLimiter) Reset(ctx context.Context, options AccessOptions) error {
+	dynamicKey, err := checkDynamicKey(options)
 	if err != nil {
-		return fmt.Errorf("failed to parse access options: %w", err)
+		return err
 	}
 
-	strategyConfig, err := r.buildStrategyConfig(accessOpts)
+	strategyConfig, err := r.buildStrategyConfig(dynamicKey)
 	if err != nil {
 		return err
 	}
 
 	// Reset the strategy (composite or single)
-	if err := r.primaryStrategy.Reset(accessOpts.ctx, strategyConfig); err != nil {
+	if err := r.primaryStrategy.Reset(ctx, strategyConfig); err != nil {
 		return fmt.Errorf("failed to reset strategy: %w", err)
 	}
 
@@ -131,14 +128,14 @@ func (r *RateLimiter) Close() error {
 }
 
 // allowWithResult1 checks if a request is allowed and returns detailed results
-func (r *RateLimiter) allowWithResult(accessOpts *accessOptions) (bool, map[string]strategies.Result, error) {
-	strategyConfig, err := r.buildStrategyConfig(accessOpts)
+func (r *RateLimiter) allowWithResult(ctx context.Context, dynamicKey string) (bool, map[string]strategies.Result, error) {
+	strategyConfig, err := r.buildStrategyConfig(dynamicKey)
 	if err != nil {
 		return false, nil, err
 	}
 
 	// Use the strategy (composite or single)
-	results, err := r.primaryStrategy.Allow(accessOpts.ctx, strategyConfig)
+	results, err := r.primaryStrategy.Allow(ctx, strategyConfig)
 	if err != nil {
 		return false, nil, fmt.Errorf("strategy check failed: %w", err)
 	}
@@ -153,22 +150,6 @@ func (r *RateLimiter) allowWithResult(accessOpts *accessOptions) (bool, map[stri
 	}
 
 	return allAllowed, results, nil
-}
-
-// parseAccessOptions parses the provided access options and returns the configuration
-func (r *RateLimiter) parseAccessOptions(opts []AccessOption) (*accessOptions, error) {
-	result := &accessOptions{
-		ctx: context.Background(), // Default context
-		key: "default",            // Default key
-	}
-
-	for _, opt := range opts {
-		if err := opt(result); err != nil {
-			return nil, err
-		}
-	}
-
-	return result, nil
 }
 
 // createPrimaryConfig creates strategy-specific configuration for the primary strategy
@@ -195,7 +176,7 @@ func (r *RateLimiter) createPrimaryConfig(dynamicKey string) (strategies.Strateg
 }
 
 // buildStrategyConfig builds the appropriate strategy config (composite or single)
-func (r *RateLimiter) buildStrategyConfig(accessOpts *accessOptions) (strategies.StrategyConfig, error) {
+func (r *RateLimiter) buildStrategyConfig(dynamicKey string) (strategies.StrategyConfig, error) {
 	if r.config.SecondaryConfig != nil {
 		return strategies.CompositeConfig{
 			BaseKey:   r.config.BaseKey,
@@ -203,7 +184,19 @@ func (r *RateLimiter) buildStrategyConfig(accessOpts *accessOptions) (strategies
 			Secondary: r.config.SecondaryConfig,
 		}, nil
 	}
-	return r.createPrimaryConfig(accessOpts.key)
+	return r.createPrimaryConfig(dynamicKey)
+}
+
+func checkDynamicKey(options AccessOptions) (string, error) {
+	if options.Key != "" {
+		if !options.SkipValidation {
+			if err := validateKey(options.Key, "dynamic key"); err != nil {
+				return "", err
+			}
+		}
+		return options.Key, nil
+	}
+	return "default", nil
 }
 
 // newRateLimiter creates a new rate limiter

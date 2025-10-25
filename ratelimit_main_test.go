@@ -109,15 +109,6 @@ func (m mockStrategyConfig) WithKey(key string) strategies.StrategyConfig {
 	return m
 }
 
-func TestGetBackendAndConfig(t *testing.T) {
-	mb := &mockBackendOne{}
-	cfg := Config{BaseKey: "base", Storage: mb, PrimaryConfig: mockStrategyConfig{}}
-	rl := &RateLimiter{config: cfg}
-
-	assert.Equal(t, mb, rl.GetBackend(), "GetBackend mismatch")
-	assert.Equal(t, cfg, rl.GetConfig(), "GetConfig mismatch")
-}
-
 func TestWithPrimaryAndSecondaryStrategyOptions(t *testing.T) {
 	cfg := &Config{}
 
@@ -154,29 +145,6 @@ func TestWithBackend_ClosesPrevious(t *testing.T) {
 	// closing error propagates
 	cfg = &Config{Storage: &mockBackendOne{closeErr: errors.New("boom")}}
 	require.Error(t, WithBackend(&mockBackendOne{})(cfg), "expected error when closing existing backend fails")
-}
-
-func TestAccessOptions_WithKeyAndContextAndResult(t *testing.T) {
-	var res map[string]strategies.Result
-
-	opts := []AccessOption{
-		WithKey("abcd-XYZ_01"),
-		WithContext(context.Background()),
-		WithResult(&res),
-	}
-
-	rl := &RateLimiter{}
-	ao, err := rl.parseAccessOptions(opts)
-	require.NoError(t, err, "parseAccessOptions error: %v", err)
-	assert.Equal(t, "abcd-XYZ_01", ao.key, "expected key to be set")
-	assert.NotNil(t, ao.ctx, "expected context to be set")
-	assert.NotNil(t, ao.result, "expected result pointer to be set")
-
-	// WithContext(nil) should error via Allow wrapper
-	//lint:ignore SA1012 need to explicitly pass nil context for testing.
-	allowed, err := rl.Allow(WithContext(nil)) //nolint:staticcheck
-	require.Error(t, err, "expected error from Allow when context is nil")
-	assert.False(t, allowed, "expected allowed to be false when context is nil")
 }
 
 func TestValidateKey(t *testing.T) {
@@ -246,7 +214,8 @@ func TestAllowAndResultFlow_SingleStrategy(t *testing.T) {
 	}
 
 	// request without explicit result
-	allowed, err := rl.Allow(WithKey("user"))
+	user := "user"
+	allowed, err := rl.Allow(context.Background(), AccessOptions{Key: user})
 	require.NoError(t, err, "expected allowed without error")
 	require.True(t, allowed, "expected allowed to be true")
 
@@ -260,13 +229,13 @@ func TestAllowAndResultFlow_SingleStrategy(t *testing.T) {
 
 	// request with result map capture
 	resHolder := map[string]strategies.Result{}
-	allowed, err = rl.Allow(WithResult(&resHolder))
+	allowed, err = rl.Allow(context.Background(), AccessOptions{Result: &resHolder})
 	require.NoError(t, err, "expected allowed with result")
 	require.True(t, allowed, "expected allowed to be true")
 	assert.True(t, reflect.DeepEqual(resHolder, ms.allowRes), "results not propagated correctly")
 }
 
-func TestGetStatsAndReset_DualStrategy_PassesCompositeConfig(t *testing.T) {
+func TestPeekAndReset_DualStrategy_PassesCompositeConfig(t *testing.T) {
 	// In dual strategy mode, the RateLimiter constructs strategies.CompositeConfig and delegates
 	primCfg := mockStrategyConfig{caps: strategies.CapPrimary}
 	secCfg := mockStrategyConfig{caps: strategies.CapSecondary}
@@ -278,13 +247,13 @@ func TestGetStatsAndReset_DualStrategy_PassesCompositeConfig(t *testing.T) {
 		primaryStrategy: ms,
 	}
 
-	// GetStats should forward CompositeConfig to strategy
-	_, err := rl.GetStats()
-	require.NoError(t, err, "GetStats error: %v", err)
+	// Peek should forward CompositeConfig to strategy
+	_, err := rl.Peek(context.Background(), AccessOptions{})
+	require.NoError(t, err, "Peek error: %v", err)
 
 	// Last config should be CompositeConfig with both configs containing same fully qualified key after WithKey
 	if cc, ok := ms.lastConfig.(strategies.CompositeConfig); ok {
-		// Apply key so we can inspect keys passed down via WithKey inside GetStats
+		// Apply key so we can inspect keys passed down via WithKey inside Peek
 		cc = cc.WithKey("base:default").(strategies.CompositeConfig)
 		if pc, okp := cc.Primary.(mockStrategyConfig); okp {
 			assert.NotEmpty(t, pc.key, "expected key on primary after WithKey")
@@ -301,5 +270,5 @@ func TestGetStatsAndReset_DualStrategy_PassesCompositeConfig(t *testing.T) {
 	}
 
 	// Reset should also forward CompositeConfig
-	require.NoError(t, rl.Reset(), "Reset error: %v", err)
+	require.NoError(t, rl.Reset(context.Background(), AccessOptions{}), "Reset error: %v", err)
 }

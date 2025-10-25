@@ -1,6 +1,7 @@
 package ratelimit
 
 import (
+	"context"
 	"errors"
 	"testing"
 
@@ -40,7 +41,7 @@ func TestNew_And_Composites(t *testing.T) {
 	require.NoError(t, err, "unexpected error creating limiter")
 
 	// Ensure composite flow works and returns results without errors
-	allowed, err := rl.Allow()
+	allowed, err := rl.Allow(context.Background(), AccessOptions{})
 	require.NoError(t, err, "composite allow error")
 	require.True(t, allowed, "expected allowed when both strategies allow")
 
@@ -77,7 +78,7 @@ func TestAllow_ErrorAndDenialPaths(t *testing.T) {
 	rl, err := New(WithBackend(mb), WithBaseKey("base"), WithPrimaryStrategy(primCfg))
 	require.NoError(t, err, "unexpected error")
 
-	ok, err := rl.Allow()
+	ok, err := rl.Allow(context.Background(), AccessOptions{})
 	require.Error(t, err, "expected error from strategy allow")
 	assert.False(t, ok, "expected ok to be false when strategy errors")
 
@@ -88,12 +89,12 @@ func TestAllow_ErrorAndDenialPaths(t *testing.T) {
 	rl, err = New(WithBackend(mb), WithBaseKey("base"), WithPrimaryStrategy(primCfg))
 	require.NoError(t, err, "unexpected error")
 
-	ok, err = rl.Allow()
+	ok, err = rl.Allow(context.Background(), AccessOptions{})
 	require.NoError(t, err, "unexpected error")
 	assert.False(t, ok, "expected not allowed when any quota denies")
 }
 
-func TestGetStatsAndReset_ErrorPaths(t *testing.T) {
+func TestPeekAndReset_ErrorPaths(t *testing.T) {
 	mb := &mockBackendOne{}
 	primCfg := mockStrategyConfig{id: strategies.StrategyTokenBucket, caps: strategies.CapPrimary}
 
@@ -104,8 +105,8 @@ func TestGetStatsAndReset_ErrorPaths(t *testing.T) {
 	rl, err := New(WithBackend(mb), WithBaseKey("base"), WithPrimaryStrategy(primCfg))
 	require.NoError(t, err, "unexpected error")
 
-	_, err = rl.GetStats()
-	require.Error(t, err, "expected error from GetStats")
+	_, err = rl.Peek(context.Background(), AccessOptions{})
+	require.Error(t, err, "expected error from Peek")
 
 	// Reset fails
 	st = &mockStrategyOne{resetErr: errors.New("bad reset")}
@@ -113,6 +114,6 @@ func TestGetStatsAndReset_ErrorPaths(t *testing.T) {
 	rl, err = New(WithBackend(mb), WithBaseKey("base"), WithPrimaryStrategy(primCfg))
 	require.NoError(t, err, "unexpected error")
 
-	err = rl.Reset()
+	err = rl.Reset(context.Background(), AccessOptions{})
 	require.Error(t, err, "expected error from Reset")
 }

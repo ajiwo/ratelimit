@@ -1,7 +1,6 @@
 package ratelimit
 
 import (
-	"context"
 	"fmt"
 
 	"github.com/ajiwo/ratelimit/backends"
@@ -47,47 +46,11 @@ func WithBaseKey(key string) Option {
 	}
 }
 
-// AccessOption defines a functional option for rate limiter access methods
-type AccessOption func(*accessOptions) error
-
-// accessOptions holds the configuration for a rate limiter access operation
-type accessOptions struct {
-	ctx    context.Context
-	key    string
-	result *map[string]strategies.Result // Optional results pointer
-}
-
-// WithContext provides a context for the rate limiter operation
-func WithContext(ctx context.Context) AccessOption {
-	return func(opts *accessOptions) error {
-		if ctx == nil {
-			return fmt.Errorf("context cannot be nil")
-		}
-		opts.ctx = ctx
-		return nil
-	}
-}
-
-// WithKey provides a dynamic key for the rate limiter operation
-func WithKey(key string) AccessOption {
-	return func(opts *accessOptions) error {
-		if err := validateKey(key, "dynamic key"); err != nil {
-			return err
-		}
-		opts.key = key
-		return nil
-	}
-}
-
-// WithResult provides a pointer to a map that will be populated with detailed results
-func WithResult(results *map[string]strategies.Result) AccessOption {
-	return func(opts *accessOptions) error {
-		if results == nil {
-			return fmt.Errorf("results pointer cannot be nil")
-		}
-		opts.result = results
-		return nil
-	}
+// AccessOptions holds the configuration for a rate limiter access operation
+type AccessOptions struct {
+	Key            string                        // Dynamic key
+	SkipValidation bool                          // Skip key validation
+	Result         *map[string]strategies.Result // Optional results pointer
 }
 
 // WithBackend configures the rate limiter to use a custom backend

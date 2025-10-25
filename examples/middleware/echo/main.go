@@ -8,6 +8,7 @@ import (
 
 	"github.com/ajiwo/ratelimit"
 	"github.com/ajiwo/ratelimit/backends/memory"
+	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/ajiwo/ratelimit/strategies/fixedwindow"
 	"github.com/labstack/echo/v4"
 	"github.com/labstack/echo/v4/middleware"
@@ -70,8 +71,8 @@ func RateLimitMiddleware(limiter *ratelimit.RateLimiter) echo.MiddlewareFunc {
 
 			// Check if request is allowed by rate limiter
 			allowed, err := limiter.Allow(
-				ratelimit.WithContext(c.Request().Context()),
-				ratelimit.WithKey(clientID),
+				c.Request().Context(),
+				ratelimit.AccessOptions{Key: clientID},
 			)
 			if err != nil {
 				log.Printf("Rate limiter error for %s: %v", clientID, err)
@@ -83,11 +84,15 @@ func RateLimitMiddleware(limiter *ratelimit.RateLimiter) echo.MiddlewareFunc {
 			// If rate limit exceeded, return 429 with rate limit headers
 			if !allowed {
 				// Get rate limit statistics to include in the response
-				stats, err := limiter.GetStats(
-					ratelimit.WithContext(c.Request().Context()),
-					ratelimit.WithKey(clientID),
+				var stats map[string]strategies.Result
+				statsOK, err := limiter.Peek(
+					c.Request().Context(),
+					ratelimit.AccessOptions{
+						Key:    clientID,
+						Result: &stats,
+					},
 				)
-				if err == nil && len(stats) > 0 {
+				if err == nil && statsOK && len(stats) > 0 {
 					result := stats["default"]
 					c.Response().Header().Set("X-RateLimit-Limit", "10")
 					c.Response().Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", result.Remaining))

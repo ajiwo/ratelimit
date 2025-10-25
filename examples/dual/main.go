@@ -53,11 +53,7 @@ func main() {
 	for i := 1; i <= 5; i++ {
 		var results map[string]strategies.Result
 
-		allowed, err := limiter.Allow(
-			ratelimit.WithContext(ctx),
-			ratelimit.WithKey(userID),
-			ratelimit.WithResult(&results),
-		)
+		allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
 		if err != nil {
 			log.Printf("Error checking rate limit: %v", err)
 			continue
@@ -86,11 +82,10 @@ func main() {
 	for i := 1; i <= 12; i++ {
 		var results map[string]strategies.Result
 
-		allowed, err := limiter.Allow(
-			ratelimit.WithContext(ctx),
-			ratelimit.WithKey(userID),
-			ratelimit.WithResult(&results),
-		)
+		allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{
+			Key:    userID,
+			Result: &results,
+		})
 		if err != nil {
 			log.Printf("Error checking rate limit: %v", err)
 			continue
@@ -117,11 +112,10 @@ func main() {
 
 	// Try again after refill
 	var results map[string]strategies.Result
-	allowed, err := limiter.Allow(
-		ratelimit.WithContext(ctx),
-		ratelimit.WithKey(userID),
-		ratelimit.WithResult(&results),
-	)
+	allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{
+		Key:    userID,
+		Result: &results,
+	})
 	if err != nil {
 		log.Printf("Error checking rate limit: %v", err)
 		return
@@ -149,11 +143,10 @@ func main() {
 		}
 
 		var results map[string]strategies.Result
-		allowed, err := limiter.Allow(
-			ratelimit.WithContext(ctx),
-			ratelimit.WithKey(userID),
-			ratelimit.WithResult(&results),
-		)
+		allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{
+			Key:    userID,
+			Result: &results,
+		})
 		if err != nil {
 			log.Printf("Error checking rate limit: %v", err)
 			continue
