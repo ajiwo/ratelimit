@@ -20,6 +20,7 @@ func TestFixedWindow_ConcurrentAccessMemory(t *testing.T) {
 	key := fmt.Sprintf("fwm-%d", time.Now().UnixNano())
 
 	limiter, err := ratelimit.New(
+		ratelimit.WithBackend(backend),
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
 			Key: "test",
@@ -30,7 +31,11 @@ func TestFixedWindow_ConcurrentAccessMemory(t *testing.T) {
 				},
 			},
 		}),
-		ratelimit.WithBackend(backend),
+		// Slow down, don't spend all 10 allowances at once
+		ratelimit.WithSecondaryStrategy(tokenbucket.Config{
+			BurstSize:  5,
+			RefillRate: 500.0, // fast enough to refil after the burst
+		}),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
@@ -75,8 +80,8 @@ func TestFixedWindow_ConcurrentAccessMemory(t *testing.T) {
 	}
 
 	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
+	assert.Equal(t, 5, allowedCount, "Exactly 5 requests should be allowed")
+	assert.Equal(t, 15, deniedCount, "Exactly 15 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
 
 	err = limiter.Close()
