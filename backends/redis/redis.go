@@ -33,7 +33,7 @@ func New(config Config) (*Backend, error) {
 	})
 
 	if _, err := client.Ping(context.Background()).Result(); err != nil {
-		return nil, err
+		return nil, NewConnectionFailedError(config.Addr, err)
 	}
 
 	return &Backend{client: client}, nil
@@ -44,19 +44,31 @@ func (r *Backend) Get(ctx context.Context, key string) (string, error) {
 	if err == redis.Nil {
 		return "", nil // Key doesn't exist, return empty string with no error
 	}
-	return val, err
+	if err != nil {
+		return "", NewGetFailedError(key, err)
+	}
+	return val, nil
 }
 
 func (r *Backend) Set(ctx context.Context, key string, value any, expiration time.Duration) error {
-	return r.client.Set(ctx, key, value, expiration).Err()
+	if err := r.client.Set(ctx, key, value, expiration).Err(); err != nil {
+		return NewSetFailedError(key, err)
+	}
+	return nil
 }
 
 func (r *Backend) Delete(ctx context.Context, key string) error {
-	return r.client.Del(ctx, key).Err()
+	if err := r.client.Del(ctx, key).Err(); err != nil {
+		return NewDeleteFailedError(key, err)
+	}
+	return nil
 }
 
 func (r *Backend) Close() error {
-	return r.client.Close()
+	if err := r.client.Close(); err != nil {
+		return NewCloseFailedError(err)
+	}
+	return nil
 }
 
 // CheckAndSet atomically sets key to newValue only if current value matches oldValue
@@ -110,7 +122,7 @@ func (r *Backend) CheckAndSet(ctx context.Context, key string, oldValue, newValu
 
 	result, err := r.client.Eval(ctx, luaScript, []string{key}, oldStr, newStr, expMs).Result()
 	if err != nil {
-		return false, err
+		return false, NewEvalFailedError("check-and-set lua script", err)
 	}
 
 	return result.(int64) == 1, nil

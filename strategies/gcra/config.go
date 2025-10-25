@@ -1,8 +1,6 @@
 package gcra
 
 import (
-	"fmt"
-
 	"github.com/ajiwo/ratelimit/strategies"
 )
 
@@ -14,10 +12,10 @@ type Config struct {
 
 func (c Config) Validate() error {
 	if c.Rate <= 0 {
-		return fmt.Errorf("gcra rate must be positive, got %f", c.Rate)
+		return NewInvalidRateError(c.Rate)
 	}
 	if c.Burst <= 0 {
-		return fmt.Errorf("gcra burst must be positive, got %d", c.Burst)
+		return NewInvalidBurstError(c.Burst)
 	}
 	return nil
 }

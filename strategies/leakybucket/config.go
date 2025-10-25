@@ -1,8 +1,6 @@
 package leakybucket
 
 import (
-	"fmt"
-
 	"github.com/ajiwo/ratelimit/strategies"
 )
 
@@ -15,10 +13,10 @@ type Config struct {
 
 func (c Config) Validate() error {
 	if c.Capacity <= 0 {
-		return fmt.Errorf("leaky bucket capacity must be positive, got %d", c.Capacity)
+		return NewInvalidCapacityError(c.Capacity)
 	}
 	if c.LeakRate <= 0 {
-		return fmt.Errorf("leaky bucket leak rate must be positive, got %f", c.LeakRate)
+		return NewInvalidLeakRateError(c.LeakRate)
 	}
 	return nil
 }

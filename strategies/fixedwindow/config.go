@@ -1,7 +1,6 @@
 package fixedwindow
 
 import (
-	"fmt"
 	"math"
 	"time"
 
@@ -20,14 +19,14 @@ type Config struct {
 
 func (c Config) Validate() error {
 	if len(c.Quotas) == 0 {
-		return fmt.Errorf("fixed window must have at least one quota")
+		return ErrNoQuotas
 	}
 	for name, quota := range c.Quotas {
 		if quota.Limit <= 0 {
-			return fmt.Errorf("fixed window quota '%s' limit must be positive, got %d", name, quota.Limit)
+			return NewInvalidQuotaLimitError(name, quota.Limit)
 		}
 		if quota.Window <= 0 {
-			return fmt.Errorf("fixed window quota '%s' window must be positive, got %v", name, quota.Window)
+			return NewInvalidQuotaWindowError(name, quota.Window)
 		}
 	}
 
@@ -52,8 +51,7 @@ func (c Config) validateUniqueRateRatios() error {
 		tolerance := 1e-9
 		for existingRate, existingName := range rateRatios {
 			if math.Abs(ratePerSecond-existingRate) < tolerance {
-				return fmt.Errorf("fixed window quotas '%s' and '%s' have duplicate rate ratios (both %.6f requests/second). Each quota must have a unique rate limit",
-					name, existingName, ratePerSecond)
+				return NewDuplicateRateRatioError(name, existingName, ratePerSecond)
 			}
 		}
 

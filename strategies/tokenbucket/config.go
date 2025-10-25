@@ -1,8 +1,6 @@
 package tokenbucket
 
 import (
-	"fmt"
-
 	"github.com/ajiwo/ratelimit/strategies"
 )
 
@@ -15,10 +13,10 @@ type Config struct {
 
 func (c Config) Validate() error {
 	if c.BurstSize <= 0 {
-		return fmt.Errorf("token bucket burst size must be positive, got %d", c.BurstSize)
+		return NewInvalidBurstSizeError(c.BurstSize)
 	}
 	if c.RefillRate <= 0 {
-		return fmt.Errorf("token bucket refill rate must be positive, got %f", c.RefillRate)
+		return NewInvalidRefillRateError(c.RefillRate)
 	}
 	return nil
 }

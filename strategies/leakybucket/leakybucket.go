@@ -2,7 +2,6 @@ package leakybucket
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -42,7 +41,7 @@ func (l *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (
 	// Type assert to LeakyBucketConfig
 	leakyConfig, ok := config.(Config)
 	if !ok {
-		return nil, fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
+		return nil, ErrInvalidConfig
 	}
 
 	now := time.Now()
@@ -50,7 +49,7 @@ func (l *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (
 	// Get current bucket state
 	data, err := l.storage.Get(ctx, leakyConfig.Key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get bucket state: %w", err)
+		return nil, NewStateRetrievalError(err)
 	}
 
 	var bucket LeakyBucket
@@ -69,7 +68,7 @@ func (l *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (
 	if b, ok := decodeLeakyBucket(data); ok {
 		bucket = b
 	} else {
-		return nil, fmt.Errorf("failed to parse bucket state: invalid encoding")
+		return nil, ErrStateParsing
 	}
 
 	// Leak requests based on time elapsed using config values
@@ -95,7 +94,7 @@ func (l *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) 
 	// Type assert to LeakyBucketConfig
 	leakyConfig, ok := config.(Config)
 	if !ok {
-		return fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
+		return ErrInvalidConfig
 	}
 
 	// Delete the key from storage to reset the bucket
@@ -186,7 +185,7 @@ func (l *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 	// Type assert to LeakyBucketConfig
 	leakyConfig, ok := config.(Config)
 	if !ok {
-		return nil, fmt.Errorf("LeakyBucket strategy requires LeakyBucketConfig")
+		return nil, ErrInvalidConfig
 	}
 
 	leakRate := leakyConfig.LeakRate
@@ -197,13 +196,13 @@ func (l *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 	for attempt := range strategies.CheckAndSetRetries {
 		// Check if context is cancelled or timed out
 		if ctx.Err() != nil {
-			return nil, fmt.Errorf("context cancelled or timed out: %w", ctx.Err())
+			return nil, NewContextCancelledError(ctx.Err())
 		}
 
 		// Get current bucket state
 		data, err := l.storage.Get(ctx, leakyConfig.Key)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get bucket state: %w", err)
+			return nil, NewStateRetrievalError(err)
 		}
 
 		var bucket LeakyBucket
@@ -220,7 +219,7 @@ func (l *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 			if b, ok := decodeLeakyBucket(data); ok {
 				bucket = b
 			} else {
-				return nil, fmt.Errorf("failed to parse bucket state: invalid encoding")
+				return nil, ErrStateParsing
 			}
 			oldValue = data // Current value for CheckAndSet
 
@@ -250,7 +249,7 @@ func (l *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 			// Use CheckAndSet for atomic update
 			success, err := l.storage.CheckAndSet(ctx, leakyConfig.Key, oldValue, newValue, expiration)
 			if err != nil {
-				return nil, fmt.Errorf("failed to save bucket state: %w", err)
+				return nil, NewStateSaveError(err)
 			}
 
 			if success {
@@ -281,7 +280,7 @@ func (l *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 			if oldValue == nil {
 				_, err := l.storage.CheckAndSet(ctx, leakyConfig.Key, oldValue, bucketData, expiration)
 				if err != nil {
-					return nil, fmt.Errorf("failed to initialize bucket state: %w", err)
+					return nil, NewStateSaveError(err)
 				}
 			}
 
@@ -296,5 +295,5 @@ func (l *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 	}
 
 	// CheckAndSet failed after checkAndSetRetries attempts
-	return nil, fmt.Errorf("failed to update bucket state after %d attempts due to concurrent access", strategies.CheckAndSetRetries)
+	return nil, ErrConcurrentAccess
 }

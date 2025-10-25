@@ -2,7 +2,6 @@ package gcra
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -40,7 +39,7 @@ func New(storage backends.Backend) *Strategy {
 func (g *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) (map[string]strategies.Result, error) {
 	gcraConfig, ok := config.(Config)
 	if !ok {
-		return nil, fmt.Errorf("GCRA strategy requires GCRAConfig")
+		return nil, ErrInvalidConfig
 	}
 
 	now := time.Now()
@@ -51,13 +50,13 @@ func (g *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 	for attempt := range strategies.CheckAndSetRetries {
 		// Check if context is cancelled or timed out
 		if ctx.Err() != nil {
-			return nil, fmt.Errorf("context cancelled or timed out: %w", ctx.Err())
+			return nil, NewContextCancelledError(ctx.Err())
 		}
 
 		// Get current state
 		data, err := g.storage.Get(ctx, gcraConfig.Key)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get GCRA state: %w", err)
+			return nil, NewStateRetrievalError(err)
 		}
 
 		var state GCRA
@@ -73,7 +72,7 @@ func (g *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 			if s, ok := decodeGCRAState(data); ok {
 				state = s
 			} else {
-				return nil, fmt.Errorf("failed to parse GCRA state: invalid encoding")
+				return nil, ErrStateParsing
 			}
 			oldValue = data
 		}
@@ -101,7 +100,7 @@ func (g *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 
 			success, err := g.storage.CheckAndSet(ctx, gcraConfig.Key, oldValue, newValue, expiration)
 			if err != nil {
-				return nil, fmt.Errorf("failed to save GCRA state: %w", err)
+				return nil, NewStateSaveError(err)
 			}
 
 			if success {
@@ -133,7 +132,7 @@ func (g *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 				expiration := strategies.CalcExpiration(gcraConfig.Burst, gcraConfig.Rate)
 				_, err := g.storage.CheckAndSet(ctx, gcraConfig.Key, oldValue, stateData, expiration)
 				if err != nil {
-					return nil, fmt.Errorf("failed to initialize GCRA state: %w", err)
+					return nil, NewStateSaveError(err)
 				}
 			}
 
@@ -148,14 +147,14 @@ func (g *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 	}
 
 	// CheckAndSet failed after checkAndSetRetries attempts
-	return nil, fmt.Errorf("failed to update GCRA state after %d attempts due to concurrent access", strategies.CheckAndSetRetries)
+	return nil, ErrConcurrentAccess
 }
 
 // Peek inspects current state without consuming quota
 func (g *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (map[string]strategies.Result, error) {
 	gcraConfig, ok := config.(Config)
 	if !ok {
-		return nil, fmt.Errorf("GCRA strategy requires GCRAConfig")
+		return nil, ErrInvalidConfig
 	}
 
 	now := time.Now()
@@ -165,7 +164,7 @@ func (g *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (
 	// Get current state
 	data, err := g.storage.Get(ctx, gcraConfig.Key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get GCRA state: %w", err)
+		return nil, NewStateRetrievalError(err)
 	}
 
 	if data == "" {
@@ -182,7 +181,7 @@ func (g *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (
 	// Parse existing state
 	state, ok := decodeGCRAState(data)
 	if !ok {
-		return nil, fmt.Errorf("failed to parse GCRA state: invalid encoding")
+		return nil, ErrStateParsing
 	}
 
 	// Calculate remaining requests based on current TAT
@@ -204,7 +203,7 @@ func (g *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (
 func (g *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) error {
 	gcraConfig, ok := config.(Config)
 	if !ok {
-		return fmt.Errorf("GCRA strategy requires GCRAConfig")
+		return ErrInvalidConfig
 	}
 
 	return g.storage.Delete(ctx, gcraConfig.Key)

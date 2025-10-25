@@ -2,7 +2,6 @@ package tokenbucket
 
 import (
 	"context"
-	"fmt"
 	"math"
 	"strconv"
 	"strings"
@@ -42,7 +41,7 @@ func (t *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (
 	// // Type assert to TokenBucketConfig
 	tokenConfig, ok := config.(Config)
 	if !ok {
-		return nil, fmt.Errorf("TokenBucket strategy requires TokenBucketConfig")
+		return nil, ErrInvalidConfig
 	}
 
 	now := time.Now()
@@ -50,7 +49,7 @@ func (t *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (
 	// Get current bucket state
 	data, err := t.storage.Get(ctx, tokenConfig.Key)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get bucket state: %w", err)
+		return nil, NewStateRetrievalError(err)
 	}
 
 	var bucket TokenBucket
@@ -69,7 +68,7 @@ func (t *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (
 	if b, ok := decodeTokenBucket(data); ok {
 		bucket = b
 	} else {
-		return nil, fmt.Errorf("failed to parse bucket state: invalid encoding")
+		return nil, ErrStateParsing
 	}
 
 	// Refill tokens based on time elapsed using config values
@@ -95,7 +94,7 @@ func (t *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) 
 	// Type assert to TokenBucketConfig
 	tokenConfig, ok := config.(Config)
 	if !ok {
-		return fmt.Errorf("TokenBucket strategy requires TokenBucketConfig")
+		return ErrInvalidConfig
 	}
 
 	// Delete the key from storage to reset the bucket
@@ -187,7 +186,7 @@ func (t *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 	// // Type assert to TokenBucketConfig
 	tokenConfig, ok := config.(Config)
 	if !ok {
-		return nil, fmt.Errorf("TokenBucket strategy requires TokenBucketConfig")
+		return nil, ErrInvalidConfig
 	}
 
 	capacity := float64(tokenConfig.BurstSize)
@@ -199,13 +198,13 @@ func (t *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 	for attempt := range strategies.CheckAndSetRetries {
 		// Check if context is cancelled or timed out
 		if ctx.Err() != nil {
-			return nil, fmt.Errorf("context cancelled or timed out: %w", ctx.Err())
+			return nil, NewContextCancelledError(ctx.Err())
 		}
 
 		// Get current bucket state
 		data, err := t.storage.Get(ctx, tokenConfig.Key)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get bucket state: %w", err)
+			return nil, NewStateRetrievalError(err)
 		}
 
 		var bucket TokenBucket
@@ -222,7 +221,7 @@ func (t *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 			if b, ok := decodeTokenBucket(data); ok {
 				bucket = b
 			} else {
-				return nil, fmt.Errorf("failed to parse bucket state: invalid encoding")
+				return nil, ErrStateParsing
 			}
 			oldValue = data // Current value for CheckAndSet
 
@@ -252,7 +251,7 @@ func (t *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 			// Use CheckAndSet for atomic update
 			success, err := t.storage.CheckAndSet(ctx, tokenConfig.Key, oldValue, newValue, expiration)
 			if err != nil {
-				return nil, fmt.Errorf("failed to save bucket state: %w", err)
+				return nil, NewStateSaveError(err)
 			}
 
 			if success {
@@ -283,7 +282,7 @@ func (t *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 			if oldValue == nil {
 				_, err := t.storage.CheckAndSet(ctx, tokenConfig.Key, oldValue, bucketData, expiration)
 				if err != nil {
-					return nil, fmt.Errorf("failed to initialize bucket state: %w", err)
+					return nil, NewStateSaveError(err)
 				}
 			}
 
@@ -298,5 +297,5 @@ func (t *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 	}
 
 	// CheckAndSet failed after checkAndSetRetries attempts
-	return nil, fmt.Errorf("failed to update bucket state after %d attempts due to concurrent access", strategies.CheckAndSetRetries)
+	return nil, ErrConcurrentAccess
 }

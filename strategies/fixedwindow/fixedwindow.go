@@ -2,7 +2,6 @@ package fixedwindow
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 	"sync"
@@ -67,7 +66,7 @@ func (f *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (
 	// Type assert to FixedWindowConfig
 	fixedConfig, ok := config.(Config)
 	if !ok {
-		return nil, fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
+		return nil, ErrInvalidConfig
 	}
 
 	now := time.Now()
@@ -81,7 +80,7 @@ func (f *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (
 		// Get current window state for this quota
 		data, err := f.storage.Get(ctx, quotaKey)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get window state for quota '%s': %w", quotaName, err)
+			return nil, NewStateRetrievalError(quotaName, err)
 		}
 
 		var window FixedWindow
@@ -99,7 +98,7 @@ func (f *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (
 		if w, ok := decodeFixedWindow(data); ok {
 			window = w
 		} else {
-			return nil, fmt.Errorf("failed to parse window state for quota '%s': invalid encoding", quotaName)
+			return nil, NewStateParsingError(quotaName)
 		}
 
 		// Check if current window has expired
@@ -132,7 +131,7 @@ func (f *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) 
 	// Type assert to FixedWindowConfig
 	fixedConfig, ok := config.(Config)
 	if !ok {
-		return fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
+		return ErrInvalidConfig
 	}
 
 	// Delete all quota keys from storage
@@ -207,7 +206,7 @@ func (f *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 	// Type assert to FixedWindowConfig
 	fixedConfig, ok := config.(Config)
 	if !ok {
-		return nil, fmt.Errorf("FixedWindow strategy requires FixedWindowConfig")
+		return nil, ErrInvalidConfig
 	}
 
 	now := time.Now()
@@ -290,7 +289,7 @@ func (f *Strategy) getQuotaStates(ctx context.Context, fixedConfig Config, now t
 		// Get current window state for this quota
 		data, err := f.storage.Get(ctx, quotaKey)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get window state for quota '%s': %w", quotaName, err)
+			return nil, NewStateRetrievalError(quotaName, err)
 		}
 
 		var window FixedWindow
@@ -307,7 +306,7 @@ func (f *Strategy) getQuotaStates(ctx context.Context, fixedConfig Config, now t
 			if w, ok := decodeFixedWindow(data); ok {
 				window = w
 			} else {
-				return nil, fmt.Errorf("failed to parse window state for quota '%s': invalid encoding", quotaName)
+				return nil, NewStateParsingError(quotaName)
 			}
 
 			// Check if current window has expired
@@ -345,7 +344,7 @@ func (f *Strategy) consumeQuota(ctx context.Context, state quotaState, now time.
 	for attempt := range strategies.CheckAndSetRetries {
 		// Check if context is cancelled or timed out
 		if ctx.Err() != nil {
-			return strategies.Result{}, fmt.Errorf("context cancelled or timed out: %w", ctx.Err())
+			return strategies.Result{}, NewContextCancelledError(ctx.Err())
 		}
 
 		// Increment request count
@@ -362,7 +361,7 @@ func (f *Strategy) consumeQuota(ctx context.Context, state quotaState, now time.
 		// Use CheckAndSet for atomic update
 		success, err := f.storage.CheckAndSet(ctx, state.key, state.oldValue, newValue, state.quota.Window)
 		if err != nil {
-			return strategies.Result{}, fmt.Errorf("failed to save window state for quota '%s': %w", state.name, err)
+			return strategies.Result{}, NewStateSaveError(state.name, err)
 		}
 
 		if success {
@@ -380,7 +379,7 @@ func (f *Strategy) consumeQuota(ctx context.Context, state quotaState, now time.
 			time.Sleep((19 * time.Nanosecond) << (time.Duration(attempt)))
 			data, err := f.storage.Get(ctx, state.key)
 			if err != nil {
-				return strategies.Result{}, fmt.Errorf("failed to re-read window state for quota '%s': %w", state.name, err)
+				return strategies.Result{}, NewStateRetrievalError(state.name, err)
 			}
 
 			if data == "" {
@@ -400,14 +399,14 @@ func (f *Strategy) consumeQuota(ctx context.Context, state quotaState, now time.
 						updatedWindow.Start = now
 					}
 				} else {
-					return strategies.Result{}, fmt.Errorf("failed to parse window state for quota '%s' during retry: invalid encoding", state.name)
+					return strategies.Result{}, NewStateParsingError(state.name)
 				}
 				state.oldValue = data
 			}
 			state.window = updatedWindow
 			continue
 		}
-		return strategies.Result{}, fmt.Errorf("failed to update window state for quota '%s' after %d attempts due to concurrent access", state.name, strategies.CheckAndSetRetries)
+		return strategies.Result{}, NewStateUpdateError(state.name, strategies.CheckAndSetRetries)
 	}
 	return strategies.Result{}, nil // This shouldn't happen due to the loop logic
 }
@@ -433,7 +432,7 @@ func (f *Strategy) getDenyResult(ctx context.Context, state quotaState, now time
 		newValue := encodeFixedWindow(resetWindow)
 		_, err := f.storage.CheckAndSet(ctx, state.key, state.oldValue, newValue, state.quota.Window)
 		if err != nil {
-			return strategies.Result{}, fmt.Errorf("failed to reset expired window for quota '%s': %w", state.name, err)
+			return strategies.Result{}, NewResetExpiredWindowError(state.name, err)
 		}
 	}
 
@@ -453,7 +452,7 @@ func (f *Strategy) initializeUnprocessedQuotas(ctx context.Context, fixedConfig 
 			quotaKey := keyBuilder.String()
 			data, err := f.storage.Get(ctx, quotaKey)
 			if err != nil {
-				return fmt.Errorf("failed to get window state for quota '%s': %w", quotaName, err)
+				return NewStateRetrievalError(quotaName, err)
 			}
 
 			if data == "" {
@@ -482,7 +481,7 @@ func (f *Strategy) initializeUnprocessedQuotas(ctx context.Context, fixedConfig 
 						}
 					}
 				} else {
-					return fmt.Errorf("failed to parse window state for quota '%s': invalid encoding", quotaName)
+					return NewStateParsingError(quotaName)
 				}
 			}
 		}
@@ -514,13 +513,13 @@ func (f *Strategy) allowSingleQuota(ctx context.Context, fixedConfig Config, now
 	for attempt := range strategies.CheckAndSetRetries {
 		// Check if context is cancelled or timed out
 		if ctx.Err() != nil {
-			return nil, fmt.Errorf("context cancelled or timed out: %w", ctx.Err())
+			return nil, NewContextCancelledError(ctx.Err())
 		}
 
 		// Get current window state for this quota
 		data, err := f.storage.Get(ctx, quotaKey)
 		if err != nil {
-			return nil, fmt.Errorf("failed to get window state for quota '%s': %w", quotaName, err)
+			return nil, NewStateRetrievalError(quotaName, err)
 		}
 
 		var window FixedWindow
@@ -537,7 +536,7 @@ func (f *Strategy) allowSingleQuota(ctx context.Context, fixedConfig Config, now
 			if w, ok := decodeFixedWindow(data); ok {
 				window = w
 			} else {
-				return nil, fmt.Errorf("failed to parse window state for quota '%s': invalid encoding", quotaName)
+				return nil, NewStateParsingError(quotaName)
 			}
 
 			// Check if current window has expired
@@ -566,7 +565,7 @@ func (f *Strategy) allowSingleQuota(ctx context.Context, fixedConfig Config, now
 			// Use CheckAndSet for atomic update
 			success, err := f.storage.CheckAndSet(ctx, quotaKey, oldValue, newValue, quota.Window)
 			if err != nil {
-				return nil, fmt.Errorf("failed to save window state for quota '%s': %w", quotaName, err)
+				return nil, NewStateSaveError(quotaName, err)
 			}
 
 			if success {
@@ -578,7 +577,7 @@ func (f *Strategy) allowSingleQuota(ctx context.Context, fixedConfig Config, now
 				time.Sleep((19 * time.Nanosecond) << (time.Duration(attempt)))
 				continue
 			}
-			return nil, fmt.Errorf("failed to update window state for quota '%s' after %d attempts due to concurrent access", quotaName, strategies.CheckAndSetRetries)
+			return nil, NewStateUpdateError(quotaName, strategies.CheckAndSetRetries)
 		} else {
 			// Request was denied, return original remaining count
 			remaining = max(quota.Limit-window.Count, 0)
@@ -593,7 +592,7 @@ func (f *Strategy) allowSingleQuota(ctx context.Context, fixedConfig Config, now
 				newValue := encodeFixedWindow(window)
 				_, err := f.storage.CheckAndSet(ctx, quotaKey, oldValue, newValue, quota.Window)
 				if err != nil {
-					return nil, fmt.Errorf("failed to reset expired window for quota '%s': %w", quotaName, err)
+					return nil, NewResetExpiredWindowError(quotaName, err)
 				}
 			}
 			break
