@@ -75,7 +75,8 @@ func TestFixedWindow_Allow(t *testing.T) {
 		defer storage.Close()
 		strategy := New(storage)
 
-		config := NewConfig("test-key").
+		config := NewConfig().
+			SetKey("test-key").
 			AddQuota("default", 5, time.Minute).
 			Build()
 
@@ -101,7 +102,8 @@ func TestFixedWindow_WindowReset(t *testing.T) {
 		defer storage.Close()
 		strategy := New(storage)
 
-		config := NewConfig("test-key").
+		config := NewConfig().
+			SetKey("test-key").
 			AddQuota("default", 2, time.Second).
 			Build()
 
@@ -136,11 +138,13 @@ func TestFixedWindow_MultipleKeys(t *testing.T) {
 		defer storage.Close()
 		strategy := New(storage)
 
-		config1 := NewConfig("user1").
+		config1 := NewConfig().
+			SetKey("user1").
 			AddQuota("default", 1, time.Minute).
 			Build()
 
-		config2 := NewConfig("user2").
+		config2 := NewConfig().
+			SetKey("user2").
 			AddQuota("default", 1, time.Minute).
 			Build()
 
@@ -169,7 +173,8 @@ func TestFixedWindow_ZeroLimit(t *testing.T) {
 		defer storage.Close()
 		strategy := New(storage)
 
-		config := NewConfig("test-key").
+		config := NewConfig().
+			SetKey("test-key").
 			AddQuota("default", 0, time.Minute).
 			Build()
 
@@ -188,7 +193,8 @@ func TestFixedWindow_GetResult(t *testing.T) {
 		defer storage.Close()
 		strategy := New(storage)
 
-		config := NewConfig("result-test-key").
+		config := NewConfig().
+			SetKey("result-test-key").
 			AddQuota("default", 5, time.Minute).
 			Build()
 
@@ -241,7 +247,8 @@ func TestFixedWindow_Reset(t *testing.T) {
 		defer storage.Close()
 		strategy := New(storage)
 
-		config := NewConfig("reset-test-key").
+		config := NewConfig().
+			SetKey("reset-test-key").
 			AddQuota("default", 2, time.Minute).
 			Build()
 
@@ -277,7 +284,8 @@ func TestFixedWindow_ConcurrentAccess(t *testing.T) {
 		defer storage.Close()
 		strategy := New(storage)
 
-		config := NewConfig("concurrent-key").
+		config := NewConfig().
+			SetKey("concurrent-key").
 			AddQuota("default", 5, time.Minute).
 			Build()
 
@@ -327,7 +335,8 @@ func TestFixedWindow_PreciseTiming(t *testing.T) {
 		defer storage.Close()
 		strategy := New(storage)
 
-		config := NewConfig("timing-key").
+		config := NewConfig().
+			SetKey("timing-key").
 			AddQuota("default", 3, 5*time.Second).
 			Build()
 
@@ -386,7 +395,8 @@ func TestFixedWindow_PreciseTiming(t *testing.T) {
 func TestFixedWindow_ValidationDuplicateRates(t *testing.T) {
 	// Test 1: Valid unique ratios
 	t.Run("valid unique ratios", func(t *testing.T) {
-		config := NewConfig("test").
+		config := NewConfig().
+			SetKey("test").
 			AddQuota("burst", 10, time.Minute).    // 0.166667 req/sec
 			AddQuota("sustained", 100, time.Hour). // 0.027778 req/sec
 			AddQuota("daily", 1000, 24*time.Hour). // 0.011574 req/sec
@@ -397,7 +407,8 @@ func TestFixedWindow_ValidationDuplicateRates(t *testing.T) {
 
 	// Test 2: Invalid - same ratio, different windows
 	t.Run("same ratio different windows", func(t *testing.T) {
-		config := NewConfig("test").
+		config := NewConfig().
+			SetKey("test").
 			AddQuota("per-minute", 1, time.Minute). // 1/60 = 0.016667 req/sec
 			AddQuota("per-hour", 60, time.Hour).    // 60/3600 = 0.016667 req/sec
 			Build()
@@ -410,7 +421,8 @@ func TestFixedWindow_ValidationDuplicateRates(t *testing.T) {
 
 	// Test 3: Invalid - different limits, same window
 	t.Run("different limits same window", func(t *testing.T) {
-		config := NewConfig("test").
+		config := NewConfig().
+			SetKey("test").
 			AddQuota("low", 10, time.Hour).   // 10/3600 = 0.002778 req/sec
 			AddQuota("high", 100, time.Hour). // 100/3600 = 0.027778 req/sec
 			Build()
@@ -420,7 +432,8 @@ func TestFixedWindow_ValidationDuplicateRates(t *testing.T) {
 
 	// Test 4: Valid - contradictory names but different rates
 	t.Run("contradictory names different rates", func(t *testing.T) {
-		config := NewConfig("test").
+		config := NewConfig().
+			SetKey("test").
 			AddQuota("slow", 1000, time.Hour). // 1000/3600 = 0.277778 req/sec
 			AddQuota("fast", 50, time.Minute). // 50/60 = 0.833333 req/sec
 			Build()
@@ -430,7 +443,8 @@ func TestFixedWindow_ValidationDuplicateRates(t *testing.T) {
 
 	// Test 5: Valid - very close but different ratios
 	t.Run("close but different ratios", func(t *testing.T) {
-		config := NewConfig("test").
+		config := NewConfig().
+			SetKey("test").
 			AddQuota("quota-a", 100, time.Hour). // 100/3600 = 0.027778 req/sec
 			AddQuota("quota-b", 101, time.Hour). // 101/3600 = 0.028056 req/sec
 			Build()
@@ -440,7 +454,8 @@ func TestFixedWindow_ValidationDuplicateRates(t *testing.T) {
 
 	// Test 6: Invalid - multiple duplicate ratios
 	t.Run("multiple duplicate ratios", func(t *testing.T) {
-		config := NewConfig("test").
+		config := NewConfig().
+			SetKey("test").
 			AddQuota("quota-a", 30, 30*time.Minute). // 30/1800 = 0.016667 req/sec
 			AddQuota("quota-b", 60, time.Hour).      // 60/3600 = 0.016667 req/sec
 			AddQuota("quota-c", 1440, 24*time.Hour). // 1440/86400 = 0.016667 req/sec
@@ -452,7 +467,8 @@ func TestFixedWindow_ValidationDuplicateRates(t *testing.T) {
 
 	// Test 7: Valid - single quota should always pass
 	t.Run("single quota", func(t *testing.T) {
-		config := NewConfig("test").
+		config := NewConfig().
+			SetKey("test").
 			AddQuota("single", 100, time.Hour).
 			Build()
 		err := config.Validate()
@@ -461,7 +477,8 @@ func TestFixedWindow_ValidationDuplicateRates(t *testing.T) {
 
 	// Test 8: Invalid - exact same limit and window
 	t.Run("identical quotas", func(t *testing.T) {
-		config := NewConfig("test").
+		config := NewConfig().
+			SetKey("test").
 			AddQuota("quota1", 100, time.Hour).
 			AddQuota("quota2", 100, time.Hour).
 			Build()

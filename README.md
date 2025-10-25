@@ -45,7 +45,8 @@ backend := memory.New()
 limiter, err := ratelimit.New(
     ratelimit.WithBackend(backend),
     ratelimit.WithPrimaryStrategy(
-        fixedwindow.NewConfig("user:123").
+        fixedwindow.NewConfig().
+            SetKey("user:123").
             AddQuota("default", 100, time.Hour).
             Build(),
     ),
@@ -172,7 +173,8 @@ limiter, err := ratelimit.New(
     ratelimit.WithBackend(backend),
     // Primary: strict rate limiting
     ratelimit.WithPrimaryStrategy(
-        fixedwindow.NewConfig("api:user").
+        fixedwindow.NewConfig().
+            SetKey("api:user").
             AddQuota("default", 100, time.Hour).
             Build(),
     ),
@@ -228,7 +230,7 @@ for strategy, result := range results {
 **Multi-quota support:**
 - Fixed Window strategy supports multiple quotas with independent limits and windows
 - All quotas must allow for a request to be accepted
-- Use the builder pattern with `fixedwindow.NewConfig(key).AddQuota(name, limit, window).Build()` for both single and multi-quota configurations
+- Use the builder pattern with `fixedwindow.NewConfig().SetKey(key).AddQuota(name, limit, window).Build()` for both single and multi-quota configurations
 - For single-quota configurations, add a single quota named "default"
 
 **Available functional options:**
@@ -443,7 +445,8 @@ backend := memory.New()
 strategy := fixedwindow.New(backend)
 
 // Configure rate limiting (single-quota)
-config := fixedwindow.NewConfig("user:123").
+config := fixedwindow.NewConfig().
+    SetKey("user:123").
     AddQuota("default", 100, time.Minute).
     Build()
 

@@ -18,7 +18,8 @@ func main() {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBackend(memory.New()),
 		ratelimit.WithPrimaryStrategy(
-			fixedwindow.NewConfig("client").
+			fixedwindow.NewConfig().
+				SetKey("client").
 				AddQuota("default", 10, time.Minute).
 				Build(),
 		),

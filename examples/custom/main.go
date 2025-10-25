@@ -113,7 +113,8 @@ func main() {
 	composer := newCustomStrategy(storage, "fixed_window", "token_bucket")
 
 	// Configure strategies
-	primaryConfig := fixedwindow.NewConfig("user:123").
+	primaryConfig := fixedwindow.NewConfig().
+		SetKey("user:123").
 		AddQuota("hourly", 100, time.Hour).
 		Build()
 

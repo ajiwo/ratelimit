@@ -19,9 +19,6 @@ type Config struct {
 }
 
 func (c Config) Validate() error {
-	if c.Key == "" {
-		return fmt.Errorf("fixed window key cannot be empty")
-	}
 	if len(c.Quotas) == 0 {
 		return fmt.Errorf("fixed window must have at least one quota")
 	}
@@ -94,11 +91,16 @@ type configBuilder struct {
 }
 
 // NewConfig creates a multi-quota FixedWindowConfig with a builder pattern
-func NewConfig(key string) *configBuilder {
+func NewConfig() *configBuilder {
 	return &configBuilder{
-		key:    key,
 		quotas: make(map[string]Quota),
 	}
+}
+
+// SetKey sets the key for the configuration
+func (b *configBuilder) SetKey(key string) *configBuilder {
+	b.key = key
+	return b
 }
 
 // AddQuota adds a new quota to the configuration

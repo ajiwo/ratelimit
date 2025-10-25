@@ -24,7 +24,8 @@ func main() {
 		ratelimit.WithBackend(mem),
 		// Primary strategy: strict rate limiting
 		ratelimit.WithPrimaryStrategy(
-			fixedwindow.NewConfig("user").
+			fixedwindow.NewConfig().
+				SetKey("user").
 				AddQuota("default", 100, time.Hour).
 				Build(),
 		),
