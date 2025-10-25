@@ -149,14 +149,22 @@ func (cs *compositeStrategy) Allow(ctx context.Context, config StrategyConfig) (
 	}
 
 	// Step 3: Both strategies allow, now consume quota from both
-	_, err = cs.primary.Allow(ctx, primaryConfig)
+	primaryAllowResults, err := cs.primary.Allow(ctx, primaryConfig)
 	if err != nil {
 		return nil, fmt.Errorf("primary strategy quota consumption failed: %w", err)
 	}
 
-	_, err = cs.secondary.Allow(ctx, secondaryConfig)
+	secondaryAllowResults, err := cs.secondary.Allow(ctx, secondaryConfig)
 	if err != nil {
 		return nil, fmt.Errorf("secondary strategy quota consumption failed: %w", err)
+	}
+
+	// Update results with the consumed values from Allow operations
+	for quotaName, result := range primaryAllowResults {
+		results["primary_"+quotaName] = result
+	}
+	for quotaName, result := range secondaryAllowResults {
+		results["secondary_"+quotaName] = result
 	}
 
 	return results, nil
