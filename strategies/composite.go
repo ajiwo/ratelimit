@@ -149,25 +149,7 @@ func (cs *compositeStrategy) Allow(ctx context.Context, config StrategyConfig) (
 	}
 
 	// Step 3: Both strategies allow, now consume quota from both
-	primaryAllowResults, err := cs.primary.Allow(ctx, primaryConfig)
-	if err != nil {
-		return nil, fmt.Errorf("primary strategy quota consumption failed: %w", err)
-	}
-
-	secondaryAllowResults, err := cs.secondary.Allow(ctx, secondaryConfig)
-	if err != nil {
-		return nil, fmt.Errorf("secondary strategy quota consumption failed: %w", err)
-	}
-
-	// Update results with the consumed values from Allow operations
-	for quotaName, result := range primaryAllowResults {
-		results["primary_"+quotaName] = result
-	}
-	for quotaName, result := range secondaryAllowResults {
-		results["secondary_"+quotaName] = result
-	}
-
-	return results, nil
+	return cs.consumeQuotas(ctx, primaryConfig, secondaryConfig, results)
 }
 
 // Peek inspects current state without consuming quota
@@ -240,4 +222,27 @@ func (cs *compositeStrategy) createPrimaryConfig(compositeConfig CompositeConfig
 // createSecondaryConfig creates a role-aware config for the secondary strategy
 func (cs *compositeStrategy) createSecondaryConfig(compositeConfig CompositeConfig) StrategyConfig {
 	return compositeConfig.Secondary.WithRole(RoleSecondary)
+}
+
+// consumeQuotas consumes quota from both primary and secondary strategies
+func (cs *compositeStrategy) consumeQuotas(ctx context.Context, primaryConfig, secondaryConfig StrategyConfig, results map[string]Result) (map[string]Result, error) {
+	primaryAllowResults, err := cs.primary.Allow(ctx, primaryConfig)
+	if err != nil {
+		return nil, fmt.Errorf("primary strategy quota consumption failed: %w", err)
+	}
+
+	secondaryAllowResults, err := cs.secondary.Allow(ctx, secondaryConfig)
+	if err != nil {
+		return nil, fmt.Errorf("secondary strategy quota consumption failed: %w", err)
+	}
+
+	// Update results with the consumed values from Allow operations
+	for quotaName, result := range primaryAllowResults {
+		results["primary_"+quotaName] = result
+	}
+	for quotaName, result := range secondaryAllowResults {
+		results["secondary_"+quotaName] = result
+	}
+
+	return results, nil
 }
