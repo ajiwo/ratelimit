@@ -2,6 +2,8 @@ package internal
 
 import (
 	"context"
+	"maps"
+	"slices"
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
@@ -121,13 +123,8 @@ func allowSingleQuota(ctx context.Context, storage backends.Backend, config Conf
 	results := make(map[string]Result)
 
 	// Get the single quota (there should be exactly one)
-	var quotaName string
-	var quota Quota
-	for name, q := range quotas {
-		quotaName = name
-		quota = q
-		break
-	}
+	quotaName := slices.Sorted(maps.Keys(quotas))[0]
+	quota := quotas[quotaName]
 
 	// Create quota-specific key
 	quotaKey := buildQuotaKey(config.GetKey(), quotaName)
