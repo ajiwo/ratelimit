@@ -1,6 +1,8 @@
 package internal
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -145,4 +147,99 @@ func TestBuildQuotaKey(t *testing.T) {
 			assert.Equal(t, tc.expected, result)
 		})
 	}
+}
+
+func TestGetQuotaStates(t *testing.T) {
+	t.Parallel()
+
+	ctx := context.Background()
+	key := "test-key"
+	quota := Quota{
+		Limit:  10,
+		Window: time.Minute,
+	}
+	quotas := map[string]Quota{"default": quota}
+	config := new(mockConfig)
+	config.On("GetKey").Return(key)
+	config.On("GetQuotas").Return(quotas)
+
+	t.Run("empty storage", func(t *testing.T) {
+		storage := new(mockBackend)
+		storage.On("Get", ctx, "test-key:default").Return("", nil)
+		now := time.Now()
+
+		states, err := getQuotaStates(ctx, storage, config, now, quotas)
+		assert.NoError(t, err)
+		assert.Len(t, states, 1)
+		state := states[0]
+		assert.Equal(t, "default", state.name)
+		assert.Equal(t, 0, state.window.Count)
+		assert.Equal(t, now.UnixNano(), state.window.Start.UnixNano())
+		assert.True(t, state.allowed)
+		assert.Nil(t, state.oldValue)
+	})
+
+	t.Run("existing state within window", func(t *testing.T) {
+		storage := new(mockBackend)
+		window := FixedWindow{
+			Count: 5,
+			Start: time.Now().Add(-30 * time.Second),
+		}
+		encodedState := encodeState(window)
+		storage.On("Get", ctx, "test-key:default").Return(encodedState, nil)
+		now := time.Now()
+
+		states, err := getQuotaStates(ctx, storage, config, now, quotas)
+		assert.NoError(t, err)
+		assert.Len(t, states, 1)
+		state := states[0]
+		assert.Equal(t, "default", state.name)
+		assert.Equal(t, window.Count, state.window.Count)
+		assert.Equal(t, window.Start.UnixNano(), state.window.Start.UnixNano())
+		assert.True(t, state.allowed)
+		assert.Equal(t, encodedState, state.oldValue)
+	})
+
+	t.Run("existing state window expired", func(t *testing.T) {
+		storage := new(mockBackend)
+		window := FixedWindow{
+			Count: 5,
+			Start: time.Now().Add(-2 * time.Minute), // Expired
+		}
+		encodedState := encodeState(window)
+		storage.On("Get", ctx, "test-key:default").Return(encodedState, nil)
+		now := time.Now()
+
+		states, err := getQuotaStates(ctx, storage, config, now, quotas)
+		assert.NoError(t, err)
+		assert.Len(t, states, 1)
+		state := states[0]
+		assert.Equal(t, "default", state.name)
+		assert.Equal(t, 0, state.window.Count)                         // Reset to zero
+		assert.Equal(t, now.UnixNano(), state.window.Start.UnixNano()) // Reset to now
+		assert.True(t, state.allowed)
+		assert.Equal(t, encodedState, state.oldValue)
+	})
+
+	t.Run("state retrieval error", func(t *testing.T) {
+		storage := new(mockBackend)
+		storage.On("Get", ctx, "test-key:default").Return("", errors.New("storage error"))
+		now := time.Now()
+
+		states, err := getQuotaStates(ctx, storage, config, now, quotas)
+		assert.Error(t, err)
+		assert.Nil(t, states)
+		assert.Contains(t, err.Error(), "failed to get fixed window state")
+	})
+
+	t.Run("state parsing error", func(t *testing.T) {
+		storage := new(mockBackend)
+		storage.On("Get", ctx, "test-key:default").Return("invalid-state", nil)
+		now := time.Now()
+
+		states, err := getQuotaStates(ctx, storage, config, now, quotas)
+		assert.Error(t, err)
+		assert.Nil(t, states)
+		assert.Contains(t, err.Error(), "failed to parse fixed window state")
+	})
 }
