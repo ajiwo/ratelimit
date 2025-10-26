@@ -33,7 +33,7 @@ func TestGCRA_MemoryBackend(t *testing.T) {
 	assert.Equal(t, 4, result["default"].Remaining, "Expected 4 remaining requests")
 
 	// Test burst consumption
-	for i := 0; i < 4; i++ {
+	for i := range 4 {
 		result, err := strategy.Allow(ctx, config)
 		require.NoError(t, err, "Unexpected error on burst request %d", i)
 		assert.True(t, result["default"].Allowed, "Expected burst request %d to be allowed", i+1)
@@ -95,7 +95,7 @@ func TestGCRA_Reset(t *testing.T) {
 	}
 
 	// Consume all burst
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		result, err := strategy.Allow(ctx, config)
 		require.NoError(t, err, "Unexpected error")
 		assert.True(t, result["default"].Allowed, "Expected request %d to be allowed", i+1)

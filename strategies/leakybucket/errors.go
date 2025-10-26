@@ -15,7 +15,7 @@ var (
 	ErrStateSave        = errors.New("failed to save bucket state")
 	ErrStateUpdate      = errors.New("failed to update bucket state")
 	ErrConcurrentAccess = errors.New("failed to update bucket state after max attempts due to concurrent access")
-	ErrContextCanceled = errors.New("context canceled or timed out")
+	ErrContextCanceled  = errors.New("context canceled or timed out")
 )
 
 // Configuration validation error functions
