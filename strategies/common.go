@@ -5,8 +5,8 @@ import (
 )
 
 const (
-	// CheckAndSetRetries is the maximum number of retry attempts for CheckAndSet operations
-	CheckAndSetRetries = 3000
+	// DefaultMaxRetries is the default maximum number of retry attempts for CheckAndSet operations
+	DefaultMaxRetries = 3000
 )
 
 // CheckV2Header validates that the string starts with "v2|"

@@ -68,6 +68,25 @@ func (c CompositeConfig) WithKey(key string) StrategyConfig {
 	return c
 }
 
+// MaxRetries returns the retry limit from the primary config
+func (c CompositeConfig) MaxRetries() int {
+	if c.Primary != nil {
+		return c.Primary.MaxRetries()
+	}
+	return 0
+}
+
+// WithMaxRetries applies the retry limit to both primary and secondary configs
+func (c CompositeConfig) WithMaxRetries(retries int) StrategyConfig {
+	if c.Primary != nil {
+		c.Primary = c.Primary.WithMaxRetries(retries)
+	}
+	if c.Secondary != nil {
+		c.Secondary = c.Secondary.WithMaxRetries(retries)
+	}
+	return c
+}
+
 // compositeStrategy implements dual-strategy behavior
 type compositeStrategy struct {
 	storage   backends.Backend

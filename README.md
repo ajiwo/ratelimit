@@ -100,7 +100,7 @@ When using dual strategy, the per-quota names in results are prefixed by `primar
 ## API overview
 
 - `ratelimit.New(opts ...Option) (*RateLimiter, error)`
-  - Options: `WithBackend(Backend)`, `WithPrimaryStrategy(StrategyConfig)`, `WithSecondaryStrategy(StrategyConfig)`, `WithBaseKey(string)`
+  - Options: `WithBackend(Backend)`, `WithPrimaryStrategy(StrategyConfig)`, `WithSecondaryStrategy(StrategyConfig)`, `WithBaseKey(string)`, `WithMaxRetries(int)`
 - `(*RateLimiter) Allow(ctx, AccessOptions) (bool, error)`
   - Consumes quota. If `AccessOptions.Result` is provided, receives `map[string]strategies.Result`.
 - `(*RateLimiter) Peek(ctx, AccessOptions) (bool, error)`

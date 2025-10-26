@@ -9,6 +9,7 @@ type Config struct {
 	BurstSize  int     // Maximum tokens the bucket can hold
 	RefillRate float64 // Tokens to add per second
 	role       strategies.StrategyRole
+	maxRetries int // Maximum retry attempts for atomic operations, 0 means use default
 }
 
 func (c Config) Validate() error {
@@ -43,16 +44,21 @@ func (c Config) WithKey(key string) strategies.StrategyConfig {
 	return c
 }
 
-// These 3 methods implement `internal.Config`
+func (c Config) WithMaxRetries(retries int) strategies.StrategyConfig {
+	c.maxRetries = retries
+	return c
+}
 
+// These 4 methods implement `internal.Config`
 func (c Config) GetKey() string {
 	return c.Key
 }
-
 func (c Config) GetBurstSize() int {
 	return c.BurstSize
 }
-
 func (c Config) GetRefillRate() float64 {
 	return c.RefillRate
+}
+func (c Config) MaxRetries() int {
+	return c.maxRetries
 }

@@ -54,6 +54,13 @@ type StrategyConfig interface {
 
 	// WithKey returns a copy of the config with the provided fully-qualified key applied
 	WithKey(key string) StrategyConfig
+
+	// MaxRetries returns the maximum retry attempts for atomic operations
+	// Returns 0 if not configured, which means use DefaultCheckAndSetRetries
+	MaxRetries() int
+
+	// WithMaxRetries returns a copy of the config with the provided retry limit
+	WithMaxRetries(retries int) StrategyConfig
 }
 
 // CapabilityFlags defines the capabilities and roles a strategy can fulfill

@@ -165,16 +165,28 @@ func (r *RateLimiter) buildStrategyConfig(dynamicKey string) strategies.Strategy
 	key1 := keyBuilder.String()
 
 	if r.config.SecondaryConfig == nil {
-		return r.config.PrimaryConfig.WithKey(key1)
+		config := r.config.PrimaryConfig.WithKey(key1)
+		if r.config.maxRetries > 0 {
+			config = config.WithMaxRetries(r.config.maxRetries)
+		}
+		return config
 	}
 
 	keyBuilder.WriteString("s")
 	key2 := keyBuilder.String()
 
+	primaryConfig := r.config.PrimaryConfig.WithKey(key1)
+	secondaryConfig := r.config.SecondaryConfig.WithKey(key2)
+
+	if r.config.maxRetries > 0 {
+		primaryConfig = primaryConfig.WithMaxRetries(r.config.maxRetries)
+		secondaryConfig = secondaryConfig.WithMaxRetries(r.config.maxRetries)
+	}
+
 	return strategies.CompositeConfig{
 		BaseKey:   r.config.BaseKey,
-		Primary:   r.config.PrimaryConfig.WithKey(key1),
-		Secondary: r.config.SecondaryConfig.WithKey(key2),
+		Primary:   primaryConfig,
+		Secondary: secondaryConfig,
 	}
 }
 

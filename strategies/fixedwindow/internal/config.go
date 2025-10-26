@@ -5,6 +5,7 @@ import "time"
 type Config interface {
 	GetKey() string
 	GetQuotas() map[string]Quota
+	MaxRetries() int
 }
 
 type Quota struct {

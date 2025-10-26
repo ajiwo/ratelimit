@@ -57,6 +57,7 @@ type Config struct {
 	Storage         backends.Backend          `json:"-"`
 	PrimaryConfig   strategies.StrategyConfig `json:"primary_config"`
 	SecondaryConfig strategies.StrategyConfig `json:"secondary_config,omitempty"`
+	maxRetries      int
 }
 
 // Validate validates the entire configuration

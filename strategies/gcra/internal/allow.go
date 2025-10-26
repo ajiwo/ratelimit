@@ -83,8 +83,13 @@ func allowReadOnly(ctx context.Context, storage backends.Backend, gcraConfig Con
 
 // allowTryAndUpdate implements try-and-update mode with retries
 func allowTryAndUpdate(ctx context.Context, storage backends.Backend, gcraConfig Config, now time.Time, emissionInterval, limit time.Duration) (Result, error) {
+	maxRetries := gcraConfig.MaxRetries()
+	if maxRetries <= 0 {
+		maxRetries = strategies.DefaultMaxRetries
+	}
+
 	// Try atomic CheckAndSet operations first
-	for attempt := range strategies.CheckAndSetRetries {
+	for attempt := range maxRetries {
 		// Check if context is cancelled or timed out
 		if ctx.Err() != nil {
 			return Result{}, NewContextCancelledError(ctx.Err())
@@ -151,7 +156,7 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, gcraConfig
 			}
 
 			// If CheckAndSet failed, retry if we haven't exhausted attempts
-			if attempt < strategies.CheckAndSetRetries-1 {
+			if attempt < maxRetries-1 {
 				time.Sleep((19 * time.Nanosecond) << (time.Duration(attempt)))
 				continue
 			}

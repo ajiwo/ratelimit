@@ -132,8 +132,13 @@ func allowSingleQuota(ctx context.Context, storage backends.Backend, config Conf
 	// Create quota-specific key
 	quotaKey := buildQuotaKey(config.GetKey(), quotaName)
 
+	maxRetries := config.MaxRetries()
+	if maxRetries <= 0 {
+		maxRetries = strategies.DefaultMaxRetries
+	}
+
 	// Try atomic CheckAndSet operations
-	for attempt := range strategies.CheckAndSetRetries {
+	for attempt := range maxRetries {
 		// Check if context is cancelled or timed out
 		if ctx.Err() != nil {
 			return nil, NewContextCancelledError(ctx.Err())
@@ -203,11 +208,11 @@ func allowSingleQuota(ctx context.Context, storage backends.Backend, config Conf
 			}
 
 			// If CheckAndSet failed, retry if we haven't exhausted attempts
-			if attempt < strategies.CheckAndSetRetries-1 {
+			if attempt < maxRetries-1 {
 				time.Sleep((19 * time.Nanosecond) << time.Duration(attempt))
 				continue
 			}
-			return nil, NewStateUpdateError(quotaName, strategies.CheckAndSetRetries)
+			return nil, NewStateUpdateError(quotaName, maxRetries)
 		}
 
 		// Request was denied, return original remaining count
@@ -290,7 +295,12 @@ func allowMultiQuota(ctx context.Context, storage backends.Backend, config Confi
 
 // consumeQuota consumes quota for a quota using atomic CheckAndSet
 func consumeQuota(ctx context.Context, storage backends.Backend, state quotaState, now time.Time) (Result, error) {
-	for attempt := range strategies.CheckAndSetRetries {
+	maxRetries := state.config.MaxRetries()
+	if maxRetries <= 0 {
+		maxRetries = strategies.DefaultMaxRetries
+	}
+
+	for attempt := range maxRetries {
 		// Check if context is cancelled or timed out
 		if ctx.Err() != nil {
 			return Result{}, NewContextCancelledError(ctx.Err())
@@ -324,7 +334,7 @@ func consumeQuota(ctx context.Context, storage backends.Backend, state quotaStat
 		}
 
 		// If CheckAndSet failed, retry if we haven't exhausted attempts
-		if attempt < strategies.CheckAndSetRetries-1 {
+		if attempt < maxRetries-1 {
 			// Re-read the current state and retry
 			time.Sleep((19 * time.Nanosecond) << time.Duration(attempt))
 			data, err := storage.Get(ctx, state.key)
@@ -356,7 +366,7 @@ func consumeQuota(ctx context.Context, storage backends.Backend, state quotaStat
 			state.window = updatedWindow
 			continue
 		}
-		return Result{}, NewStateUpdateError(state.name, strategies.CheckAndSetRetries)
+		return Result{}, NewStateUpdateError(state.name, maxRetries)
 	}
 	return Result{}, nil // This shouldn't happen due to the loop logic
 }

@@ -32,6 +32,7 @@ type quotaState struct {
 	window   FixedWindow
 	oldValue any
 	allowed  bool
+	config   Config
 }
 
 // buildQuotaKey builds a quota-specific key
@@ -158,6 +159,7 @@ func getQuotaStates(ctx context.Context, storage backends.Backend, config Config
 			window:   window,
 			oldValue: oldValue,
 			allowed:  allowed,
+			config:   config,
 		})
 
 		// If this quota doesn't allow, we can stop checking others

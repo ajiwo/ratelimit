@@ -11,8 +11,9 @@ import (
 type Quota = internal.Quota
 
 type Config struct {
-	Key    string
-	Quotas map[string]Quota
+	Key        string
+	Quotas     map[string]Quota
+	maxRetries int // Maximum retry attempts for atomic operations, 0 means use default
 }
 
 // GetKey implements internal.Config interface
@@ -88,6 +89,15 @@ func (c Config) WithRole(role strategies.StrategyRole) strategies.StrategyConfig
 func (c Config) WithKey(key string) strategies.StrategyConfig {
 	c.Key = key
 	return c
+}
+
+func (c Config) WithMaxRetries(retries int) strategies.StrategyConfig {
+	c.maxRetries = retries
+	return c
+}
+
+func (c Config) MaxRetries() int {
+	return c.maxRetries
 }
 
 // configBuilder provides a fluent interface for building multi-quota configurations

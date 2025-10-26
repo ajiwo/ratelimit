@@ -31,11 +31,12 @@ func (m *compMockStrategy) Reset(ctx context.Context, cfg StrategyConfig) error 
 // mock config implementing StrategyConfig
 
 type compMockConfig struct {
-	id    StrategyID
-	caps  CapabilityFlags
-	role  StrategyRole
-	key   string
-	valid error
+	id         StrategyID
+	caps       CapabilityFlags
+	role       StrategyRole
+	key        string
+	valid      error
+	maxRetries int
 }
 
 func (m compMockConfig) Validate() error                           { return m.valid }
@@ -44,6 +45,11 @@ func (m compMockConfig) Capabilities() CapabilityFlags             { return m.ca
 func (m compMockConfig) GetRole() StrategyRole                     { return m.role }
 func (m compMockConfig) WithRole(role StrategyRole) StrategyConfig { m.role = role; return m }
 func (m compMockConfig) WithKey(key string) StrategyConfig         { m.key = key; return m }
+func (m compMockConfig) MaxRetries() int                           { return m.maxRetries }
+func (m compMockConfig) WithMaxRetries(retries int) StrategyConfig {
+	m.maxRetries = retries
+	return m
+}
 
 func TestCompositeConfigValidate(t *testing.T) {
 	pri := compMockConfig{caps: CapPrimary}

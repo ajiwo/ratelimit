@@ -71,7 +71,12 @@ func allowReadOnly(ctx context.Context, storage backends.Backend, tbConfig Confi
 }
 
 func allowTryAndUpdate(ctx context.Context, storage backends.Backend, tbConfig Config, now time.Time, capacity float64, refillRate float64) (Result, error) {
-	for attempt := range strategies.CheckAndSetRetries {
+	maxRetries := tbConfig.MaxRetries()
+	if maxRetries <= 0 {
+		maxRetries = strategies.DefaultMaxRetries
+	}
+
+	for attempt := range maxRetries {
 		if ctx.Err() != nil {
 			return Result{}, NewContextCancelledError(ctx.Err())
 		}
@@ -126,7 +131,7 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, tbConfig C
 				}, nil
 			}
 
-			if attempt < strategies.CheckAndSetRetries-1 {
+			if attempt < maxRetries-1 {
 				time.Sleep((19 * time.Nanosecond) << time.Duration(attempt))
 				continue
 			}

@@ -310,6 +310,7 @@ func TestDualStrategy_ConcurrentAccess_Memory(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBackend(backend),
 		ratelimit.WithBaseKey(key),
+		ratelimit.WithMaxRetries(11),
 		ratelimit.WithPrimaryStrategy(
 			fixedwindow.NewConfig().
 				SetKey("user").
@@ -394,6 +395,7 @@ func TestDualStrategy_ConcurrentAccess_Postgres(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBackend(backend),
 		ratelimit.WithBaseKey(key),
+		ratelimit.WithMaxRetries(11),
 		ratelimit.WithPrimaryStrategy(
 			fixedwindow.NewConfig().
 				SetKey("user").
@@ -464,6 +466,7 @@ func TestDualStrategy_ConcurrentAccess_Redis(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBackend(backend),
 		ratelimit.WithBaseKey(key),
+		ratelimit.WithMaxRetries(11),
 		ratelimit.WithPrimaryStrategy(
 			fixedwindow.NewConfig().
 				SetKey("user").

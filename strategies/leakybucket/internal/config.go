@@ -4,4 +4,5 @@ type Config interface {
 	GetKey() string
 	GetCapacity() int
 	GetLeakRate() float64
+	MaxRetries() int
 }

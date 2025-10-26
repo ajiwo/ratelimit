@@ -5,10 +5,11 @@ import (
 )
 
 type Config struct {
-	Key      string
-	Capacity int     // Maximum requests the bucket can hold
-	LeakRate float64 // Requests to process per second
-	role     strategies.StrategyRole
+	Key        string
+	Capacity   int     // Maximum requests the bucket can hold
+	LeakRate   float64 // Requests to process per second
+	role       strategies.StrategyRole
+	maxRetries int // Maximum retry attempts for atomic operations, 0 means use default
 }
 
 func (c Config) Validate() error {
@@ -43,7 +44,12 @@ func (c Config) WithKey(key string) strategies.StrategyConfig {
 	return c
 }
 
-// These 3 methods implement `internal.Config`
+func (c Config) WithMaxRetries(retries int) strategies.StrategyConfig {
+	c.maxRetries = retries
+	return c
+}
+
+// These 4 methods implement `internal.Config`
 func (c Config) GetKey() string {
 	return c.Key
 }
@@ -52,4 +58,7 @@ func (c Config) GetCapacity() int {
 }
 func (c Config) GetLeakRate() float64 {
 	return c.LeakRate
+}
+func (c Config) MaxRetries() int {
+	return c.maxRetries
 }

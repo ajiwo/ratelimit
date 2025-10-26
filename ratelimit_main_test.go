@@ -89,11 +89,12 @@ func (m *mockStrategyOne) Reset(ctx context.Context, cfg strategies.StrategyConf
 // mockStrategyConfig implements strategies.StrategyConfig
 
 type mockStrategyConfig struct {
-	id    strategies.StrategyID
-	caps  strategies.CapabilityFlags
-	role  strategies.StrategyRole
-	key   string
-	valid error
+	id         strategies.StrategyID
+	caps       strategies.CapabilityFlags
+	role       strategies.StrategyRole
+	key        string
+	valid      error
+	maxRetries int
 }
 
 func (m mockStrategyConfig) Validate() error                          { return m.valid }
@@ -106,6 +107,11 @@ func (m mockStrategyConfig) WithRole(role strategies.StrategyRole) strategies.St
 }
 func (m mockStrategyConfig) WithKey(key string) strategies.StrategyConfig {
 	m.key = key
+	return m
+}
+func (m mockStrategyConfig) MaxRetries() int { return m.maxRetries }
+func (m mockStrategyConfig) WithMaxRetries(retries int) strategies.StrategyConfig {
+	m.maxRetries = retries
 	return m
 }
 

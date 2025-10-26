@@ -2,6 +2,7 @@ package ratelimit
 
 import (
 	"fmt"
+	"math"
 
 	"github.com/ajiwo/ratelimit/backends"
 	"github.com/ajiwo/ratelimit/strategies"
@@ -66,6 +67,33 @@ func WithBackend(backend backends.Backend) Option {
 			}
 		}
 		config.Storage = backend
+		return nil
+	}
+}
+
+// WithMaxRetries configures the maximum number of retry attempts for atomic CheckAndSet operations.
+// This is used by all strategies that perform optimistic locking (Fixed Window, Token Bucket, Leaky Bucket, GCRA).
+//
+// Under high concurrency, CheckAndSet operations may need to retry if the state changes between read and write.
+// The retry loop uses exponential backoff (starts at 19ns) and checks for context cancellation on each attempt.
+//
+// Recommended values:
+//   - Low contention (< 10 concurrent users): 10-15 retries
+//   - Medium contention (10-100 concurrent users): 100-175 retries
+//   - High contention (100+ concurrent users): (2 x concurrent users) retries
+//
+// Note: Context cancellation will stop retries early regardless of this limit.
+// If retries is 0 or not set, the default value (3000) will be used.
+func WithMaxRetries(retries int) Option {
+	return func(config *Config) error {
+		if retries < 0 {
+			return fmt.Errorf("check and set retries cannot be negative, got %d", retries)
+		}
+		maxRet := math.MaxInt
+		if retries > maxRet {
+			return fmt.Errorf("check and set retries cannot exceed %d, got %d", maxRet, retries)
+		}
+		config.maxRetries = retries
 		return nil
 	}
 }

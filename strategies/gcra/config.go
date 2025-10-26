@@ -5,9 +5,10 @@ import (
 )
 
 type Config struct {
-	Key   string
-	Rate  float64 // Requests per second
-	Burst int     // Maximum burst size
+	Key        string
+	Rate       float64 // Requests per second
+	Burst      int     // Maximum burst size
+	maxRetries int     // Maximum retry attempts for atomic operations, 0 means use default
 }
 
 func (c Config) Validate() error {
@@ -41,7 +42,12 @@ func (c Config) WithKey(key string) strategies.StrategyConfig {
 	return c
 }
 
-// These 3 methods implement `internal.Config`
+func (c Config) WithMaxRetries(retries int) strategies.StrategyConfig {
+	c.maxRetries = retries
+	return c
+}
+
+// These 4 methods implement `internal.Config`
 func (c Config) GetBurst() int {
 	return c.Burst
 }
@@ -50,4 +56,7 @@ func (c Config) GetKey() string {
 }
 func (c Config) GetRate() float64 {
 	return c.Rate
+}
+func (c Config) MaxRetries() int {
+	return c.maxRetries
 }
