@@ -4,6 +4,27 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [0.0.6] - 2025-10-26
+
+### Added
+- `RateLimiter.Peek` to inspect quota status without consuming allowance while still returning an overall allowed flag
+- `WithMaxRetries` option and `StrategyConfig.WithMaxRetries` support to tune optimistic locking retries across all strategies
+
+### Changed
+- Rate limiter call sites now pass `context.Context` explicitly along with an `AccessOptions` struct, replacing the previous variadic functional access options
+- Strategy interface replaces `GetResult` with `Peek`, and strategy packages adopt shared internal modules for reusable state management
+- Introduced `strategies.Results` type alias to standardize result maps across the codebase
+
+### Fixed
+- `Config.Validate` now applies the same key validation logic as dynamic keys, preventing invalid base keys from being accepted
+- Composite strategy derives distinct `:p`/`:s` suffixed keys for primary and secondary configurations to prevent key collisions
+- Memory backend operations bail out early when contexts are cancelled instead of blocking on per-key locks
+- Redis backend read/write helpers wrap underlying errors with contextual messages for easier diagnostics
+
+### Performance
+- Rate limiter and composite strategies reuse pooled string builders when constructing storage keys to reduce allocations
+- Memory backend reuses mutexes via a sync.Pool to cut per-key allocation overhead during high churn
+
 ## [0.0.5] - 2025-10-16
 
 ### Added
