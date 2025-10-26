@@ -89,7 +89,7 @@ func WithMaxRetries(retries int) Option {
 		if retries < 0 {
 			return fmt.Errorf("check and set retries cannot be negative, got %d", retries)
 		}
-		maxRet := math.MaxInt
+		maxRet := math.MaxInt - 32
 		if retries > maxRet {
 			return fmt.Errorf("check and set retries cannot exceed %d, got %d", maxRet, retries)
 		}
