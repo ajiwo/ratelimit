@@ -53,12 +53,15 @@ func (c Config) WithMaxRetries(retries int) strategies.StrategyConfig {
 func (c Config) GetKey() string {
 	return c.Key
 }
+
 func (c Config) GetCapacity() int {
 	return c.Capacity
 }
+
 func (c Config) GetLeakRate() float64 {
 	return c.LeakRate
 }
+
 func (c Config) MaxRetries() int {
 	return c.maxRetries
 }

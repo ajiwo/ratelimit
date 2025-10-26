@@ -23,7 +23,6 @@ func setupRedisTest(t *testing.T) (*Backend, func()) {
 		Password: redisPassword,
 		DB:       0,
 	})
-
 	if err != nil {
 		return nil, func() {}
 	}
@@ -217,7 +216,6 @@ func TestRedisStorage_Close(t *testing.T) {
 		Password: os.Getenv("REDIS_PASSWORD"),
 		DB:       0,
 	})
-
 	// If Redis is not available, skip the test
 	if err != nil {
 		t.Skipf("Redis not available, skipping Close test: %v", err)

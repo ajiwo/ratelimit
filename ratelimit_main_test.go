@@ -106,6 +106,7 @@ func (m mockStrategyConfig) WithRole(role strategies.StrategyRole) strategies.St
 	m.role = role
 	return m
 }
+
 func (m mockStrategyConfig) WithKey(key string) strategies.StrategyConfig {
 	m.key = key
 	return m
@@ -245,7 +246,6 @@ func TestConfigValidate(t *testing.T) {
 
 	retriesTooHigh := WithMaxRetries(math.MaxInt)(&config)
 	require.Error(t, retriesTooHigh, "expected error for max retries too high")
-
 }
 
 func TestAllowAndResultFlow_SingleStrategy(t *testing.T) {

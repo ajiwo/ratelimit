@@ -23,8 +23,8 @@ type customStrategy struct {
 
 // newCustomStrategy creates a new custom composer
 func newCustomStrategy(storage backends.Backend,
-	primaryName, secondaryName string) *customStrategy {
-
+	primaryName, secondaryName string,
+) *customStrategy {
 	composer := &customStrategy{
 		storage: storage,
 	}
@@ -46,8 +46,8 @@ func newCustomStrategy(storage backends.Backend,
 
 // Peek checks both strategies without consuming quota
 func (c *customStrategy) Peek(ctx context.Context,
-	primaryConfig, secondaryConfig strategies.StrategyConfig) (strategyResults, error) {
-
+	primaryConfig, secondaryConfig strategies.StrategyConfig,
+) (strategyResults, error) {
 	results := make(strategyResults)
 
 	// Check primary strategy without consuming quota
@@ -79,8 +79,8 @@ func (c *customStrategy) Peek(ctx context.Context,
 func (c *customStrategy) Allow(
 	ctx context.Context,
 	primaryConfig, secondaryConfig strategies.StrategyConfig,
-	logic func(strategyResults) bool) (bool, strategyResults, error) {
-
+	logic func(strategyResults) bool,
+) (bool, strategyResults, error) {
 	results, err := c.Peek(ctx, primaryConfig, secondaryConfig)
 	if err != nil {
 		return false, nil, err

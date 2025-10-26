@@ -13,7 +13,7 @@ type mockBackend struct{}
 
 func (d *mockBackend) Get(_ context.Context, _ string) (string, error)               { return "", nil }
 func (d *mockBackend) Set(_ context.Context, _ string, _ any, _ time.Duration) error { return nil }
-func (d *mockBackend) CheckAndSet(_ context.Context, _ string, _ any, _ any, _ time.Duration) (bool, error) {
+func (d *mockBackend) CheckAndSet(_ context.Context, _ string, _, _ any, _ time.Duration) (bool, error) {
 	return true, nil
 }
 func (d *mockBackend) Delete(_ context.Context, _ string) error { return nil }

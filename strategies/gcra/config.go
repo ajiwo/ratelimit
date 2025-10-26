@@ -51,12 +51,15 @@ func (c Config) WithMaxRetries(retries int) strategies.StrategyConfig {
 func (c Config) GetBurst() int {
 	return c.Burst
 }
+
 func (c Config) GetKey() string {
 	return c.Key
 }
+
 func (c Config) GetRate() float64 {
 	return c.Rate
 }
+
 func (c Config) MaxRetries() int {
 	return c.maxRetries
 }

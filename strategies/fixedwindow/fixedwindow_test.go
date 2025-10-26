@@ -237,7 +237,6 @@ func TestFixedWindow_Peek(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, result["default"].Allowed, "Result should not be allowed when at limit")
 		assert.Equal(t, 0, result["default"].Remaining, "Remaining should be 0 when at limit")
-
 	})
 }
 
@@ -274,7 +273,6 @@ func TestFixedWindow_Reset(t *testing.T) {
 		result, err = strategy.Allow(ctx, config)
 		require.NoError(t, err)
 		assert.True(t, result["default"].Allowed, "Request after reset should be allowed")
-
 	})
 }
 

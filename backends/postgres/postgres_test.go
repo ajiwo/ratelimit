@@ -24,7 +24,6 @@ func setupPostgresTest(t *testing.T) (*Backend, func()) {
 		MaxConns:   5,
 		MinConns:   1,
 	})
-
 	if err != nil {
 		return nil, func() {}
 	}
@@ -229,7 +228,6 @@ func TestPostgresStorage_Close(t *testing.T) {
 		MaxConns:   5,
 		MinConns:   1,
 	})
-
 	if err != nil {
 		t.Skipf("PostgreSQL not available, skipping Close test: %v", err)
 	}

@@ -80,7 +80,6 @@ func (p *Backend) Get(ctx context.Context, key string) (string, error) {
 		FROM ratelimit_kv
 		WHERE key = $1
 	`, key).Scan(&value, &expiresAt)
-
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", nil
@@ -111,7 +110,6 @@ func (p *Backend) Set(ctx context.Context, key string, value any, expiration tim
 			value = EXCLUDED.value,
 			expires_at = EXCLUDED.expires_at
 	`, key, valueStr, expiresAt)
-
 	if err != nil {
 		return NewSetFailedError(key, err)
 	}
@@ -179,7 +177,6 @@ func (p *Backend) CheckAndSet(ctx context.Context, key string, oldValue, newValu
 			AND value = $4
 			AND (expires_at IS NULL OR expires_at > NOW())
 	`, newStr, expiresAt, key, oldStr)
-
 	if err != nil {
 		return false, NewCheckAndSetFailedError(key, err)
 	}

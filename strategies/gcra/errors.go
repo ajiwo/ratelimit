@@ -5,10 +5,8 @@ import (
 	"fmt"
 )
 
-var (
-	// Configuration errors
-	ErrInvalidConfig = errors.New("gcra strategy requires gcra.Config")
-)
+// Configuration errors
+var ErrInvalidConfig = errors.New("gcra strategy requires gcra.Config")
 
 // Configuration validation error functions
 func NewInvalidRateError(rate float64) error {

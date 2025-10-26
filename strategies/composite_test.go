@@ -23,6 +23,7 @@ type compMockStrategy struct {
 func (m *compMockStrategy) Allow(ctx context.Context, cfg StrategyConfig) (map[string]Result, error) {
 	return m.allowRes, m.allowErr
 }
+
 func (m *compMockStrategy) Peek(ctx context.Context, cfg StrategyConfig) (map[string]Result, error) {
 	return m.getRes, m.getErr
 }
@@ -82,7 +83,6 @@ func TestCompositeConfigValidate(t *testing.T) {
 		noSecCap := compMockConfig{caps: CapPrimary}
 		err = (CompositeConfig{BaseKey: "k", Primary: pri, Secondary: noSecCap}).Validate()
 		require.Error(t, err, "expected error for secondary missing CapSecondary")
-
 	})
 }
 

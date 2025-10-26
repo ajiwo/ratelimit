@@ -25,7 +25,7 @@ func init() {
 // validateKey validates that a key meets the requirements:
 // - Maximum 64 bytes length
 // - Contains only alphanumeric ASCII characters, underscore (_), hyphen (-), and colon (:)
-func validateKey(key string, keyType string) error {
+func validateKey(key, keyType string) error {
 	if len(key) == 0 {
 		return fmt.Errorf("%s cannot be empty", keyType)
 	}

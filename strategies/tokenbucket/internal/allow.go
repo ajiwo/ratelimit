@@ -35,7 +35,7 @@ func Allow(ctx context.Context, storage backends.Backend, config Config, mode Al
 	return allowTryAndUpdate(ctx, storage, config, now, capacity, refillRate)
 }
 
-func allowReadOnly(ctx context.Context, storage backends.Backend, tbConfig Config, now time.Time, capacity float64, refillRate float64) (Result, error) {
+func allowReadOnly(ctx context.Context, storage backends.Backend, tbConfig Config, now time.Time, capacity, refillRate float64) (Result, error) {
 	data, err := storage.Get(ctx, tbConfig.GetKey())
 	if err != nil {
 		return Result{}, NewStateRetrievalError(err)
@@ -70,7 +70,7 @@ func allowReadOnly(ctx context.Context, storage backends.Backend, tbConfig Confi
 	}, nil
 }
 
-func allowTryAndUpdate(ctx context.Context, storage backends.Backend, tbConfig Config, now time.Time, capacity float64, refillRate float64) (Result, error) {
+func allowTryAndUpdate(ctx context.Context, storage backends.Backend, tbConfig Config, now time.Time, capacity, refillRate float64) (Result, error) {
 	maxRetries := tbConfig.MaxRetries()
 	if maxRetries <= 0 {
 		maxRetries = strategies.DefaultMaxRetries

@@ -103,7 +103,6 @@ func TestTokenBucket_Peek(t *testing.T) {
 		result, err = strategy.Allow(ctx, config)
 		require.NoError(t, err)
 		assert.False(t, result["default"].Allowed, "Request should be denied when no tokens")
-
 	})
 }
 

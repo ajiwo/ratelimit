@@ -167,7 +167,6 @@ func TestLeakyBucketPeek(t *testing.T) {
 	result, err = strategy.Allow(ctx, config)
 	assert.NoError(t, err)
 	assert.False(t, result["default"].Allowed, "Request should be denied when bucket is full")
-
 }
 
 func TestLeakyBucketReset(t *testing.T) {
@@ -202,5 +201,4 @@ func TestLeakyBucketReset(t *testing.T) {
 	result, err = strategy.Allow(ctx, config)
 	assert.NoError(t, err)
 	assert.True(t, result["default"].Allowed, "Request should be allowed after reset")
-
 }
