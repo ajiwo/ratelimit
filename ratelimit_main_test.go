@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"reflect"
 	"testing"
 	"time"
@@ -221,10 +222,29 @@ func TestConfigValidate(t *testing.T) {
 	err = cfg.Validate()
 	require.Error(t, err, "expected error for primary having CapSecondary when secondary provided")
 
+	// validate base key
+	cfg = Config{Storage: mb, PrimaryConfig: primary}
+	err = cfg.Validate()
+	require.Error(t, err, "expected error for missing base key")
+
+	withBaseKey := WithBaseKey("base")(&cfg)
+	require.NoError(t, withBaseKey, "unexpected error")
+
 	// valid minimal config
 	cfg = Config{BaseKey: "base", Storage: mb, PrimaryConfig: primary}
 	err = cfg.Validate()
 	require.NoError(t, err, "unexpected error")
+
+	// validate max retries
+	config := Config{BaseKey: "base", Storage: mb, PrimaryConfig: primary}
+	validRetries := WithMaxRetries(10)(&config)
+	require.NoError(t, validRetries, "unexpected error")
+
+	invalidRetries := WithMaxRetries(-1)(&config)
+	require.Error(t, invalidRetries, "expected error for invalid max retries")
+
+	retriesTooHigh := WithMaxRetries(math.MaxInt)(&config)
+	require.Error(t, retriesTooHigh, "expected error for max retries too high")
 
 }
 

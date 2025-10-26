@@ -35,6 +35,7 @@ func TestNew_And_Composites(t *testing.T) {
 	rl, err := New(
 		WithBackend(mb),
 		WithBaseKey("base"),
+		WithMaxRetries(3),
 		WithPrimaryStrategy(primCfg),
 		WithSecondaryStrategy(secCfg),
 	)
