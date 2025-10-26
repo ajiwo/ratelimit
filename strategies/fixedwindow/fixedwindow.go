@@ -25,7 +25,7 @@ func New(storage backends.Backend) *Strategy {
 type FixedWindow = internal.FixedWindow
 
 // Allow checks if a request is allowed and returns detailed statistics
-func (f *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) (map[string]strategies.Result, error) {
+func (f *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) (strategies.Results, error) {
 	fixedConfig, ok := config.(Config)
 	if !ok {
 		return nil, ErrInvalidConfig
@@ -40,7 +40,7 @@ func (f *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 }
 
 // Peek inspects current state without consuming quota
-func (f *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (map[string]strategies.Result, error) {
+func (f *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (strategies.Results, error) {
 	fixedConfig, ok := config.(Config)
 	if !ok {
 		return nil, ErrInvalidConfig
@@ -73,8 +73,8 @@ func (f *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) 
 }
 
 // convertResults converts internal.Result map to strategies.Result map
-func convertResults(internalResults map[string]internal.Result) map[string]strategies.Result {
-	results := make(map[string]strategies.Result, len(internalResults))
+func convertResults(internalResults map[string]internal.Result) strategies.Results {
+	results := make(strategies.Results, len(internalResults))
 	for name, res := range internalResults {
 		results[name] = strategies.Result{
 			Allowed:   res.Allowed,

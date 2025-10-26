@@ -12,8 +12,6 @@ import (
 	"github.com/ajiwo/ratelimit/strategies/tokenbucket"
 )
 
-type strategyResults = map[string]strategies.Result
-
 // customStrategy allows manual composition of strategies
 type customStrategy struct {
 	primary   strategies.Strategy
@@ -47,8 +45,8 @@ func newCustomStrategy(storage backends.Backend,
 // Peek checks both strategies without consuming quota
 func (c *customStrategy) Peek(ctx context.Context,
 	primaryConfig, secondaryConfig strategies.StrategyConfig,
-) (strategyResults, error) {
-	results := make(strategyResults)
+) (strategies.Results, error) {
+	results := make(strategies.Results)
 
 	// Check primary strategy without consuming quota
 	primaryResults, err := c.primary.Peek(ctx, primaryConfig)
@@ -79,8 +77,8 @@ func (c *customStrategy) Peek(ctx context.Context,
 func (c *customStrategy) Allow(
 	ctx context.Context,
 	primaryConfig, secondaryConfig strategies.StrategyConfig,
-	logic func(strategyResults) bool,
-) (bool, strategyResults, error) {
+	logic func(strategies.Results) bool,
+) (bool, strategies.Results, error) {
 	results, err := c.Peek(ctx, primaryConfig, secondaryConfig)
 	if err != nil {
 		return false, nil, err
@@ -142,7 +140,7 @@ func main() {
 	// Example 2: Custom AND logic (both must allow)
 	fmt.Println("\n=== Custom AND Logic ===")
 
-	andLogic := func(res strategyResults) bool {
+	andLogic := func(res strategies.Results) bool {
 		// Both primary and secondary must allow
 		primaryAllowed := res["primary_hourly"].Allowed
 		secondaryAllowed := res["secondary_default"].Allowed
@@ -159,7 +157,7 @@ func main() {
 	// Example 3: Custom OR logic (either can allow)
 	fmt.Println("\n=== Custom OR Logic ===")
 
-	orLogic := func(res strategyResults) bool {
+	orLogic := func(res strategies.Results) bool {
 		// At least one must allow
 		primaryAllowed := res["primary_hourly"].Allowed
 		secondaryAllowed := res["secondary_default"].Allowed

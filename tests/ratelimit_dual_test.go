@@ -46,7 +46,7 @@ func TestDualStrategy_FixedWindow1Quota_LeakyBucket_Memory(t *testing.T) {
 	userID := "testuser"
 
 	// Test that both strategies work together
-	var results map[string]strategies.Result
+	var results strategies.Results
 
 	// First few requests should be allowed (both strategies allow)
 	for i := range 3 {
@@ -107,7 +107,7 @@ func TestDualStrategy_FixedWindow1Quota_LeakyBucket_Postgres(t *testing.T) {
 	userID := "testuser"
 
 	// Test basic functionality
-	var results map[string]strategies.Result
+	var results strategies.Results
 	allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
 	require.NoError(t, err)
 	assert.True(t, allowed)
@@ -142,7 +142,7 @@ func TestDualStrategy_FixedWindow1Quota_LeakyBucket_Redis(t *testing.T) {
 	userID := "testuser"
 
 	// Test basic functionality
-	var results map[string]strategies.Result
+	var results strategies.Results
 	allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
 	require.NoError(t, err)
 	assert.True(t, allowed)
@@ -182,7 +182,7 @@ func TestDualStrategy_FixedWindow3Quota_TokenBucket_Memory(t *testing.T) {
 		userID := "testuser"
 
 		// Test that all 3 primary quotas work
-		var results map[string]strategies.Result
+		var results strategies.Results
 
 		// First request should be allowed
 		allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
@@ -251,7 +251,7 @@ func TestDualStrategy_FixedWindow3Quota_TokenBucket_Postgres(t *testing.T) {
 	userID := "testuser"
 
 	// Test that all 3 quotas work
-	var results map[string]strategies.Result
+	var results strategies.Results
 	allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
 	require.NoError(t, err)
 	assert.True(t, allowed)
@@ -291,7 +291,7 @@ func TestDualStrategy_FixedWindow3Quota_TokenBucket_Redis(t *testing.T) {
 	userID := "testuser"
 
 	// Test that all 3 quotas work
-	var results map[string]strategies.Result
+	var results strategies.Results
 	allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
 	require.NoError(t, err)
 	assert.True(t, allowed)
@@ -555,7 +555,7 @@ func TestDualStrategy_PeekBehavior(t *testing.T) {
 	userID := "testuser"
 
 	// Initial peek should show full capacity
-	var results map[string]strategies.Result
+	var results strategies.Results
 	allowed, err := limiter.Peek(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
 	require.NoError(t, err)
 	assert.True(t, allowed, "Peek should show request as allowed")
@@ -611,7 +611,7 @@ func TestDualStrategy_ResetBehavior(t *testing.T) {
 	userID := "testuser"
 
 	// Consume all quota
-	var results map[string]strategies.Result
+	var results strategies.Results
 	for i := range 2 {
 		allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID})
 		require.NoError(t, err)

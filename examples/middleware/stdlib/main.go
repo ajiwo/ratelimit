@@ -68,7 +68,7 @@ func middleware(limiter *ratelimit.RateLimiter, next http.Handler) http.Handler 
 
 		if !allowed {
 			// Get rate limit info for response headers
-			var stats map[string]strategies.Result
+			var stats strategies.Results
 			_, err := limiter.Peek(
 				r.Context(),
 				ratelimit.AccessOptions{

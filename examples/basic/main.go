@@ -44,7 +44,7 @@ func main() {
 
 	// Simulate 8 requests to demonstrate rate limiting
 	for i := 1; i <= 8; i++ {
-		var results map[string]strategies.Result
+		var results strategies.Results
 
 		// Check if request is allowed with results
 		allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{
@@ -72,7 +72,7 @@ func main() {
 
 	// Demonstrate getting statistics without consuming quota
 	fmt.Println("=== Getting Statistics Without Consuming Quota ===")
-	var stats map[string]strategies.Result
+	var stats strategies.Results
 	_, err = limiter.Peek(ctx, ratelimit.AccessOptions{
 		Key:    userID,
 		Result: &stats,
@@ -91,7 +91,7 @@ func main() {
 	time.Sleep(time.Until(result.Reset))
 
 	// Try another request after reset
-	var results map[string]strategies.Result
+	var results strategies.Results
 	// allowed, err := limiter.Allow(ctx, &userID, &results)
 	allowed, err := limiter.Peek(ctx, ratelimit.AccessOptions{
 		Key:    userID,

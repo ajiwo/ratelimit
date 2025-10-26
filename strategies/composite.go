@@ -112,7 +112,7 @@ func (cs *compositeStrategy) SetSecondaryStrategy(strategy Strategy) {
 }
 
 // Allow implements the dual-strategy logic
-func (cs *compositeStrategy) Allow(ctx context.Context, config StrategyConfig) (map[string]Result, error) {
+func (cs *compositeStrategy) Allow(ctx context.Context, config StrategyConfig) (Results, error) {
 	compositeConfig, ok := config.(CompositeConfig)
 	if !ok {
 		return nil, fmt.Errorf("composite strategy requires CompositeConfig")
@@ -123,7 +123,7 @@ func (cs *compositeStrategy) Allow(ctx context.Context, config StrategyConfig) (
 		return nil, fmt.Errorf("composite strategy requires both primary and secondary strategies to be set")
 	}
 
-	results := make(map[string]Result)
+	results := make(Results)
 
 	// Step 1: Check primary strategy (no consumption yet)
 	primaryConfig := cs.createPrimaryConfig(compositeConfig)
@@ -172,7 +172,7 @@ func (cs *compositeStrategy) Allow(ctx context.Context, config StrategyConfig) (
 }
 
 // Peek inspects current state without consuming quota
-func (cs *compositeStrategy) Peek(ctx context.Context, config StrategyConfig) (map[string]Result, error) {
+func (cs *compositeStrategy) Peek(ctx context.Context, config StrategyConfig) (Results, error) {
 	compositeConfig, ok := config.(CompositeConfig)
 	if !ok {
 		return nil, fmt.Errorf("composite strategy requires CompositeConfig")
@@ -182,7 +182,7 @@ func (cs *compositeStrategy) Peek(ctx context.Context, config StrategyConfig) (m
 		return nil, fmt.Errorf("composite strategy requires both primary and secondary strategies to be set")
 	}
 
-	results := make(map[string]Result)
+	results := make(Results)
 
 	// Get primary results
 	primaryConfig := cs.createPrimaryConfig(compositeConfig)
@@ -244,7 +244,7 @@ func (cs *compositeStrategy) createSecondaryConfig(compositeConfig CompositeConf
 }
 
 // consumeQuotas consumes quota from both primary and secondary strategies
-func (cs *compositeStrategy) consumeQuotas(ctx context.Context, primaryConfig, secondaryConfig StrategyConfig, results map[string]Result) (map[string]Result, error) {
+func (cs *compositeStrategy) consumeQuotas(ctx context.Context, primaryConfig, secondaryConfig StrategyConfig, results Results) (Results, error) {
 	primaryAllowResults, err := cs.primary.Allow(ctx, primaryConfig)
 	if err != nil {
 		return nil, fmt.Errorf("primary strategy quota consumption failed: %w", err)

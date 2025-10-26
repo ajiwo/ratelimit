@@ -122,7 +122,7 @@ func (r *RateLimiter) Close() error {
 }
 
 // allowWithResult1 checks if a request is allowed and returns detailed results
-func (r *RateLimiter) allowWithResult(ctx context.Context, dynamicKey string) (bool, map[string]strategies.Result, error) {
+func (r *RateLimiter) allowWithResult(ctx context.Context, dynamicKey string) (bool, strategies.Results, error) {
 	strategyConfig := r.buildStrategyConfig(dynamicKey)
 
 	// Use the strategy (composite or single)

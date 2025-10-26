@@ -13,18 +13,18 @@ import (
 // mockStrategy for composite tests
 
 type compMockStrategy struct {
-	allowRes map[string]Result
+	allowRes Results
 	allowErr error
-	getRes   map[string]Result
+	getRes   Results
 	getErr   error
 	resetErr error
 }
 
-func (m *compMockStrategy) Allow(ctx context.Context, cfg StrategyConfig) (map[string]Result, error) {
+func (m *compMockStrategy) Allow(ctx context.Context, cfg StrategyConfig) (Results, error) {
 	return m.allowRes, m.allowErr
 }
 
-func (m *compMockStrategy) Peek(ctx context.Context, cfg StrategyConfig) (map[string]Result, error) {
+func (m *compMockStrategy) Peek(ctx context.Context, cfg StrategyConfig) (Results, error) {
 	return m.getRes, m.getErr
 }
 func (m *compMockStrategy) Reset(ctx context.Context, cfg StrategyConfig) error { return m.resetErr }
@@ -126,8 +126,8 @@ func TestCompositeStrategyFlows(t *testing.T) {
 	})
 	require.True(t, ok, "composite does not expose setters")
 
-	pri := &compMockStrategy{getRes: map[string]Result{"p": {Allowed: true}}, allowRes: map[string]Result{"p": {Allowed: true}}}
-	sec := &compMockStrategy{getRes: map[string]Result{"s": {Allowed: true}}, allowRes: map[string]Result{"s": {Allowed: true}}}
+	pri := &compMockStrategy{getRes: Results{"p": {Allowed: true}}, allowRes: Results{"p": {Allowed: true}}}
+	sec := &compMockStrategy{getRes: Results{"s": {Allowed: true}}, allowRes: Results{"s": {Allowed: true}}}
 
 	setter.SetPrimaryStrategy(pri)
 	setter.SetSecondaryStrategy(sec)
@@ -145,15 +145,15 @@ func TestCompositeStrategyFlows(t *testing.T) {
 	require.NoError(t, err, "Allow error: %v", err)
 
 	// Deny via primary
-	primDeny := &compMockStrategy{getRes: map[string]Result{"p": {Allowed: false}}}
+	primDeny := &compMockStrategy{getRes: Results{"p": {Allowed: false}}}
 	setter.SetPrimaryStrategy(primDeny)
 	res, err = comp.Allow(context.Background(), cfg)
 	require.NoError(t, err, "Allow error: %v", err)
 	require.Contains(t, res, "primary_p", "expected primary results present on denial")
 
 	// Primary allows, secondary denies
-	setter.SetPrimaryStrategy(&compMockStrategy{getRes: map[string]Result{"p": {Allowed: true}}})
-	setter.SetSecondaryStrategy(&compMockStrategy{getRes: map[string]Result{"s": {Allowed: false}}})
+	setter.SetPrimaryStrategy(&compMockStrategy{getRes: Results{"p": {Allowed: true}}})
+	setter.SetSecondaryStrategy(&compMockStrategy{getRes: Results{"s": {Allowed: false}}})
 	res, err = comp.Allow(context.Background(), cfg)
 	require.NoError(t, err, "Allow error: %v", err)
 	require.Contains(t, res, "secondary_s", "expected secondary results present on denial")
@@ -163,7 +163,7 @@ func TestCompositeStrategyFlows(t *testing.T) {
 	_, err = comp.Allow(context.Background(), cfg)
 	require.Error(t, err, "expected primary get error")
 
-	setter.SetPrimaryStrategy(&compMockStrategy{getRes: map[string]Result{"p": {Allowed: true}}})
+	setter.SetPrimaryStrategy(&compMockStrategy{getRes: Results{"p": {Allowed: true}}})
 	setter.SetSecondaryStrategy(&compMockStrategy{getErr: errors.New("bad secondary")})
 	_, err = comp.Allow(context.Background(), cfg)
 	require.Error(t, err, "expected secondary get error")

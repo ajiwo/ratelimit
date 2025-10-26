@@ -26,8 +26,8 @@ func TestNew_And_Composites(t *testing.T) {
 	primCfg := mockStrategyConfig{id: strategies.StrategyTokenBucket, caps: strategies.CapPrimary}
 	secCfg := mockStrategyConfig{id: strategies.StrategyGCRA, caps: strategies.CapSecondary}
 
-	primary := &mockStrategyOne{getRes: map[string]strategies.Result{"p": {Allowed: true}}, allowRes: map[string]strategies.Result{"p": {Allowed: true}}}
-	secondary := &mockStrategyOne{getRes: map[string]strategies.Result{"s": {Allowed: true}}, allowRes: map[string]strategies.Result{"s": {Allowed: true}}}
+	primary := &mockStrategyOne{getRes: strategies.Results{"p": {Allowed: true}}, allowRes: strategies.Results{"p": {Allowed: true}}}
+	secondary := &mockStrategyOne{getRes: strategies.Results{"s": {Allowed: true}}, allowRes: strategies.Results{"s": {Allowed: true}}}
 
 	registerMockStrategy(t, primCfg.id, primary)
 	registerMockStrategy(t, secCfg.id, secondary)
@@ -84,7 +84,7 @@ func TestAllow_ErrorAndDenialPaths(t *testing.T) {
 	assert.False(t, ok, "expected ok to be false when strategy errors")
 
 	// Now make it return mixed results (one false) so Allow returns false
-	denying := &mockStrategyOne{allowRes: map[string]strategies.Result{"a": {Allowed: true}, "b": {Allowed: false}}}
+	denying := &mockStrategyOne{allowRes: strategies.Results{"a": {Allowed: true}, "b": {Allowed: false}}}
 	registerMockStrategy(t, primCfg.id, denying)
 
 	rl, err = New(WithBackend(mb), WithBaseKey("base"), WithPrimaryStrategy(primCfg))

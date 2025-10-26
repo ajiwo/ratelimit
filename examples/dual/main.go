@@ -52,7 +52,7 @@ func main() {
 	// First, demonstrate normal usage within limits
 	fmt.Println("=== Normal Usage Within Limits ===")
 	for i := 1; i <= 5; i++ {
-		var results map[string]strategies.Result
+		var results strategies.Results
 
 		allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
 		if err != nil {
@@ -81,7 +81,7 @@ func main() {
 	burstAllowed := 0
 	burstDenied := 0
 	for i := 1; i <= 12; i++ {
-		var results map[string]strategies.Result
+		var results strategies.Results
 
 		allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{
 			Key:    userID,
@@ -112,7 +112,7 @@ func main() {
 	time.Sleep(3 * time.Second)
 
 	// Try again after refill
-	var results map[string]strategies.Result
+	var results strategies.Results
 	allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{
 		Key:    userID,
 		Result: &results,
@@ -143,7 +143,7 @@ func main() {
 			time.Sleep(2 * time.Second)
 		}
 
-		var results map[string]strategies.Result
+		var results strategies.Results
 		allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{
 			Key:    userID,
 			Result: &results,

@@ -85,7 +85,7 @@ func RateLimitMiddleware(limiter *ratelimit.RateLimiter) echo.MiddlewareFunc {
 			// If rate limit exceeded, return 429 with rate limit headers
 			if !allowed {
 				// Get rate limit statistics to include in the response
-				var stats map[string]strategies.Result
+				var stats strategies.Results
 				statsOK, err := limiter.Peek(
 					c.Request().Context(),
 					ratelimit.AccessOptions{

@@ -65,19 +65,19 @@ var _ strategies.Strategy = (*mockStrategyOne)(nil)
 // strategy that records the last config and returns preconfigured results/errors.
 type mockStrategyOne struct {
 	lastConfig strategies.StrategyConfig
-	allowRes   map[string]strategies.Result
+	allowRes   strategies.Results
 	allowErr   error
-	getRes     map[string]strategies.Result
+	getRes     strategies.Results
 	getErr     error
 	resetErr   error
 }
 
-func (m *mockStrategyOne) Allow(ctx context.Context, cfg strategies.StrategyConfig) (map[string]strategies.Result, error) {
+func (m *mockStrategyOne) Allow(ctx context.Context, cfg strategies.StrategyConfig) (strategies.Results, error) {
 	m.lastConfig = cfg
 	return m.allowRes, m.allowErr
 }
 
-func (m *mockStrategyOne) Peek(ctx context.Context, cfg strategies.StrategyConfig) (map[string]strategies.Result, error) {
+func (m *mockStrategyOne) Peek(ctx context.Context, cfg strategies.StrategyConfig) (strategies.Results, error) {
 	m.lastConfig = cfg
 	return m.getRes, m.getErr
 }
@@ -253,7 +253,7 @@ func TestAllowAndResultFlow_SingleStrategy(t *testing.T) {
 	mb := &mockBackendOne{}
 	primCfg := mockStrategyConfig{id: strategies.StrategyTokenBucket, caps: strategies.CapPrimary}
 
-	ms := &mockStrategyOne{allowRes: map[string]strategies.Result{
+	ms := &mockStrategyOne{allowRes: strategies.Results{
 		"q1": {Allowed: true},
 		"q2": {Allowed: true},
 	}}
@@ -278,7 +278,7 @@ func TestAllowAndResultFlow_SingleStrategy(t *testing.T) {
 	}
 
 	// request with result map capture
-	resHolder := map[string]strategies.Result{}
+	resHolder := strategies.Results{}
 	allowed, err = rl.Allow(context.Background(), AccessOptions{Result: &resHolder})
 	require.NoError(t, err, "expected allowed with result")
 	require.True(t, allowed, "expected allowed to be true")
@@ -290,7 +290,7 @@ func TestPeekAndReset_DualStrategy_PassesCompositeConfig(t *testing.T) {
 	primCfg := mockStrategyConfig{caps: strategies.CapPrimary}
 	secCfg := mockStrategyConfig{caps: strategies.CapSecondary}
 
-	ms := &mockStrategyOne{getRes: map[string]strategies.Result{"p": {Allowed: true}}}
+	ms := &mockStrategyOne{getRes: strategies.Results{"p": {Allowed: true}}}
 
 	rl := &RateLimiter{
 		config:          Config{BaseKey: "base", Storage: &mockBackendOne{}, PrimaryConfig: primCfg, SecondaryConfig: secCfg},

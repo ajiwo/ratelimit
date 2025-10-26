@@ -626,7 +626,7 @@ func TestFixedWindow_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			var res map[string]strategies.Result
+			var res strategies.Results
 			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
@@ -696,7 +696,7 @@ func TestFixedWindow_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			var res map[string]strategies.Result
+			var res strategies.Results
 			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
@@ -766,7 +766,7 @@ func TestFixedWindow_ConcurrentAccessRedisWithResult(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			var res map[string]strategies.Result
+			var res strategies.Results
 			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
@@ -828,7 +828,7 @@ func TestLeakyBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			var res map[string]strategies.Result
+			var res strategies.Results
 			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
@@ -890,7 +890,7 @@ func TestLeakyBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			var res map[string]strategies.Result
+			var res strategies.Results
 			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
@@ -952,7 +952,7 @@ func TestLeakyBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			var res map[string]strategies.Result
+			var res strategies.Results
 			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
@@ -1014,7 +1014,7 @@ func TestTokenBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			var res map[string]strategies.Result
+			var res strategies.Results
 			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
@@ -1076,7 +1076,7 @@ func TestTokenBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			var res map[string]strategies.Result
+			var res strategies.Results
 			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
@@ -1138,7 +1138,7 @@ func TestTokenBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			var res map[string]strategies.Result
+			var res strategies.Results
 			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
@@ -1383,7 +1383,7 @@ func TestGCRA_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			var res map[string]strategies.Result
+			var res strategies.Results
 			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
@@ -1445,7 +1445,7 @@ func TestGCRA_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			var res map[string]strategies.Result
+			var res strategies.Results
 			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
@@ -1507,7 +1507,7 @@ func TestGCRA_ConcurrentAccessRedisWithResult(t *testing.T) {
 	// Launch 20 goroutines
 	for range 20 {
 		go func() {
-			var res map[string]strategies.Result
+			var res strategies.Results
 			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
 			if err != nil {
 				errors <- err
