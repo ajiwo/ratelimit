@@ -109,10 +109,10 @@ func TestCompositeConfigHelpers_WithKey(t *testing.T) {
 	sec := compMockConfig{caps: CapSecondary}
 	cc := CompositeConfig{BaseKey: "k", Primary: pri, Secondary: sec}
 	applied := cc.WithKey("fully:qualified").(CompositeConfig)
-	if p, ok := applied.Primary.(compMockConfig); !ok || p.key != "fully:qualified" {
+	if p, ok := applied.Primary.(compMockConfig); !ok || p.key != "k:fully:qualified:p" {
 		t.Fatalf("primary key not applied")
 	}
-	if s, ok := applied.Secondary.(compMockConfig); !ok || s.key != "fully:qualified" {
+	if s, ok := applied.Secondary.(compMockConfig); !ok || s.key != "k:fully:qualified:s" {
 		t.Fatalf("secondary key not applied")
 	}
 }

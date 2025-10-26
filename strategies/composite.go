@@ -3,9 +3,17 @@ package strategies
 import (
 	"context"
 	"fmt"
+	"strings"
+	"sync"
 
 	"github.com/ajiwo/ratelimit/backends"
 )
+
+var keyBuilderPool = sync.Pool{
+	New: func() any {
+		return &strings.Builder{}
+	},
+}
 
 // CompositeConfig represents a dual-strategy configuration
 type CompositeConfig struct {
@@ -61,10 +69,42 @@ func (c CompositeConfig) WithRole(role StrategyRole) StrategyConfig {
 	return c
 }
 
-// WithKey applies the provided fully-qualified key to both primary and secondary configs
+// WithKey applies a new fully-qualified-key to both primary and secondary
+// configs derived from the supplied key.
+//
+// The new key is then prefixed with BaseKey and suffixed with ":p" for
+// primary and ":s" for secondary.
 func (c CompositeConfig) WithKey(key string) StrategyConfig {
-	c.Primary = c.Primary.WithKey(key)
-	c.Secondary = c.Secondary.WithKey(key)
+	var wg sync.WaitGroup
+
+	wg.Go(func() {
+		builder := keyBuilderPool.Get().(*strings.Builder)
+		defer func() {
+			builder.Reset()
+			keyBuilderPool.Put(builder)
+		}()
+		builder.Grow(64)
+		builder.WriteString(c.BaseKey)
+		builder.WriteString(":")
+		builder.WriteString(key)
+		builder.WriteString(":p")
+		c.Primary = c.Primary.WithKey(builder.String())
+	})
+	wg.Go(func() {
+		builder := keyBuilderPool.Get().(*strings.Builder)
+		defer func() {
+			builder.Reset()
+			keyBuilderPool.Put(builder)
+		}()
+		builder.Grow(64)
+		builder.WriteString(c.BaseKey)
+		builder.WriteString(":")
+		builder.WriteString(key)
+		builder.WriteString(":s")
+		c.Secondary = c.Secondary.WithKey(builder.String())
+	})
+	wg.Wait()
+
 	return c
 }
 
