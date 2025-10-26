@@ -259,8 +259,8 @@ func TestAllowAndResultFlow_SingleStrategy(t *testing.T) {
 	}}
 
 	rl := &RateLimiter{
-		config:          Config{BaseKey: "base", Storage: mb, PrimaryConfig: primCfg},
-		primaryStrategy: ms,
+		config:   Config{BaseKey: "base", Storage: mb, PrimaryConfig: primCfg},
+		strategy: ms,
 	}
 
 	// request without explicit result
@@ -293,8 +293,8 @@ func TestPeekAndReset_DualStrategy_PassesCompositeConfig(t *testing.T) {
 	ms := &mockStrategyOne{getRes: strategies.Results{"p": {Allowed: true}}}
 
 	rl := &RateLimiter{
-		config:          Config{BaseKey: "base", Storage: &mockBackendOne{}, PrimaryConfig: primCfg, SecondaryConfig: secCfg},
-		primaryStrategy: ms,
+		config:   Config{BaseKey: "base", Storage: &mockBackendOne{}, PrimaryConfig: primCfg, SecondaryConfig: secCfg},
+		strategy: ms,
 	}
 
 	// Peek should forward CompositeConfig to strategy

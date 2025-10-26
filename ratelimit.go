@@ -20,9 +20,9 @@ var keyBuilderPool = sync.Pool{
 
 // RateLimiter implements single or dual strategy rate limiting
 type RateLimiter struct {
-	config          Config
-	primaryStrategy strategies.Strategy
-	basePrefix      string // cached BaseKey + ":" for fast key construction
+	config     Config
+	strategy   strategies.Strategy
+	basePrefix string // cached BaseKey + ":" for fast key construction
 }
 
 func Ptr[T any](val T) *T {
@@ -77,7 +77,7 @@ func (r *RateLimiter) Peek(ctx context.Context, options AccessOptions) (bool, er
 	strategyConfig := r.buildStrategyConfig(dynamicKey)
 
 	// Get stats from the strategy (composite or single)
-	results, err := r.primaryStrategy.Peek(ctx, strategyConfig)
+	results, err := r.strategy.Peek(ctx, strategyConfig)
 	if err != nil {
 		return false, fmt.Errorf("failed to get stats: %w", err)
 	}
@@ -105,7 +105,7 @@ func (r *RateLimiter) Reset(ctx context.Context, options AccessOptions) error {
 	strategyConfig := r.buildStrategyConfig(dynamicKey)
 
 	// Reset the strategy (composite or single)
-	if err := r.primaryStrategy.Reset(ctx, strategyConfig); err != nil {
+	if err := r.strategy.Reset(ctx, strategyConfig); err != nil {
 		return fmt.Errorf("failed to reset strategy: %w", err)
 	}
 
@@ -126,7 +126,7 @@ func (r *RateLimiter) allowWithResult(ctx context.Context, dynamicKey string) (b
 	strategyConfig := r.buildStrategyConfig(dynamicKey)
 
 	// Use the strategy (composite or single)
-	results, err := r.primaryStrategy.Allow(ctx, strategyConfig)
+	results, err := r.strategy.Allow(ctx, strategyConfig)
 	if err != nil {
 		return false, nil, fmt.Errorf("strategy check failed: %w", err)
 	}
@@ -219,7 +219,7 @@ func newRateLimiter(config Config) (*RateLimiter, error) {
 	if config.SecondaryConfig != nil {
 		// Use composite strategy for dual-strategy behavior
 		compositeStrategy := strategies.NewComposite(config.Storage)
-		limiter.primaryStrategy = compositeStrategy
+		limiter.strategy = compositeStrategy
 
 		// Create and configure the individual strategies
 		primaryStrategy, err := strategies.Create(config.PrimaryConfig.ID(), config.Storage)
@@ -252,7 +252,7 @@ func newRateLimiter(config Config) (*RateLimiter, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to create primary strategy: %w", err)
 	}
-	limiter.primaryStrategy = primaryStrategy
+	limiter.strategy = primaryStrategy
 
 	return limiter, nil
 }
