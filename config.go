@@ -62,8 +62,8 @@ type Config struct {
 
 // Validate validates the entire configuration
 func (c Config) Validate() error {
-	if c.BaseKey == "" {
-		return fmt.Errorf("base key cannot be empty")
+	if err := validateKey(c.BaseKey, "base key"); err != nil {
+		return err
 	}
 	if c.Storage == nil {
 		return fmt.Errorf("storage backend cannot be nil")
