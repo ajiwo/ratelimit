@@ -133,24 +133,29 @@ func TestWithPrimaryAndSecondaryStrategyOptions(t *testing.T) {
 }
 
 func TestWithBackend_ClosesPrevious(t *testing.T) {
+	var err error
 	cfg := &Config{}
 
 	mb1 := &mockBackendOne{}
-	require.NoError(t, WithBackend(mb1)(cfg), "unexpected error")
+	err = WithBackend(mb1)(cfg)
+	require.NoError(t, err, "unexpected error")
 	assert.Equal(t, mb1, cfg.Storage, "backend not set")
 
 	// swapping should close previous
 	mb2 := &mockBackendOne{}
-	require.NoError(t, WithBackend(mb2)(cfg), "unexpected error")
+	err = WithBackend(mb2)(cfg)
+	require.NoError(t, err, "unexpected error")
 	assert.True(t, mb1.closed, "expected previous backend closed")
 	assert.Equal(t, mb2, cfg.Storage, "backend not swapped")
 
 	// nil backend should error
-	require.Error(t, WithBackend(nil)(cfg), "expected error for nil backend")
+	err = WithBackend(nil)(cfg)
+	require.Error(t, err, "expected error for nil backend")
 
 	// closing error propagates
 	cfg = &Config{Storage: &mockBackendOne{closeErr: errors.New("boom")}}
-	require.Error(t, WithBackend(&mockBackendOne{})(cfg), "expected error when closing existing backend fails")
+	err = WithBackend(&mockBackendOne{})(cfg)
+	require.Error(t, err, "expected error when closing existing backend fails")
 }
 
 func TestValidateKey(t *testing.T) {
@@ -176,32 +181,51 @@ func TestValidateKey(t *testing.T) {
 }
 
 func TestConfigValidate(t *testing.T) {
+	var err error
+	var cfg Config
 	mb := &mockBackendOne{}
-	primary := mockStrategyConfig{id: strategies.StrategyTokenBucket, caps: strategies.CapPrimary}
+	primary := mockStrategyConfig{
+		id:   strategies.StrategyTokenBucket,
+		caps: strategies.CapPrimary,
+	}
 
 	// missing fields
-	require.Error(t, (Config{}).Validate(), "expected error for empty config")
+	err = (Config{}).Validate()
+	require.Error(t, err, "expected error for empty config")
 
 	// missing storage
-	require.Error(t, (Config{BaseKey: "base"}).Validate(), "expected error for missing storage")
+	cfg = Config{BaseKey: "base"}
+	err = cfg.Validate()
+	require.Error(t, err, "expected error for missing storage")
 
 	// missing primary config
-	require.Error(t, (Config{BaseKey: "base", Storage: mb}).Validate(), "expected error for missing primary config")
+	cfg = Config{BaseKey: "base", Storage: mb}
+	err = cfg.Validate()
+	require.Error(t, err, "expected error for missing primary config")
 
 	// invalid primary config validate error
-	require.Error(t, (Config{BaseKey: "base", Storage: mb, PrimaryConfig: mockStrategyConfig{valid: errors.New("bad")}}).Validate(), "expected error for invalid primary config")
+	cfg = Config{BaseKey: "base", Storage: mb, PrimaryConfig: mockStrategyConfig{valid: errors.New("bad")}}
+	err = cfg.Validate()
+	require.Error(t, err, "expected error for invalid primary config")
 
 	// secondary present but lacks CapSecondary
 	secBad := mockStrategyConfig{caps: strategies.CapPrimary}
-	require.Error(t, (Config{BaseKey: "base", Storage: mb, PrimaryConfig: primary, SecondaryConfig: secBad}).Validate(), "expected error for secondary without CapSecondary")
+	cfg = Config{BaseKey: "base", Storage: mb, PrimaryConfig: primary, SecondaryConfig: secBad}
+	err = cfg.Validate()
+	require.Error(t, err, "expected error for secondary without CapSecondary")
 
 	// primary cannot have CapSecondary when secondary provided
 	primWithSecondary := mockStrategyConfig{caps: strategies.CapPrimary | strategies.CapSecondary}
 	secGood := mockStrategyConfig{caps: strategies.CapSecondary}
-	require.Error(t, (Config{BaseKey: "base", Storage: mb, PrimaryConfig: primWithSecondary, SecondaryConfig: secGood}).Validate(), "expected error for primary having CapSecondary when secondary provided")
+	cfg = Config{BaseKey: "base", Storage: mb, PrimaryConfig: primWithSecondary, SecondaryConfig: secGood}
+	err = cfg.Validate()
+	require.Error(t, err, "expected error for primary having CapSecondary when secondary provided")
 
 	// valid minimal config
-	require.NoError(t, (Config{BaseKey: "base", Storage: mb, PrimaryConfig: primary}).Validate(), "unexpected error")
+	cfg = Config{BaseKey: "base", Storage: mb, PrimaryConfig: primary}
+	err = cfg.Validate()
+	require.NoError(t, err, "unexpected error")
+
 }
 
 func TestAllowAndResultFlow_SingleStrategy(t *testing.T) {
