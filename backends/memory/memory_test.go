@@ -47,6 +47,16 @@ func TestMemoryStorage_Get(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "", val)
 	})
+
+	t.Run("Canceled Get", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		val, err := storage.Get(ctx, "testkey")
+		require.Error(t, err)
+		require.Equal(t, context.Canceled, err)
+		require.Equal(t, "", val)
+	})
 }
 
 func TestMemoryStorage_Set(t *testing.T) {
@@ -80,6 +90,15 @@ func TestMemoryStorage_Set(t *testing.T) {
 		require.NoError(t, err)
 		require.Equal(t, "", val)
 	})
+
+	t.Run("Canceled Set", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		err := storage.Set(ctx, "testkey", "testvalue", time.Hour)
+		require.Error(t, err)
+		require.Equal(t, context.Canceled, err)
+	})
 }
 
 func TestMemoryStorage_Delete(t *testing.T) {
@@ -101,6 +120,15 @@ func TestMemoryStorage_Delete(t *testing.T) {
 	t.Run("Delete non-existent key", func(t *testing.T) {
 		err := storage.Delete(ctx, "nonexistent")
 		require.NoError(t, err)
+	})
+
+	t.Run("Canceled Delete", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		err := storage.Delete(ctx, "testkey")
+		require.Error(t, err)
+		require.Equal(t, context.Canceled, err)
 	})
 }
 
@@ -293,5 +321,15 @@ func TestMemoryStorage_cleanup(t *testing.T) {
 		val, err := storage.Get(ctx, "nonexistent")
 		require.NoError(t, err)
 		require.Equal(t, "", val)
+	})
+
+	t.Run("Canceled CheckAndSet", func(t *testing.T) {
+		ctx, cancel := context.WithCancel(context.Background())
+		cancel() // Cancel immediately
+
+		success, err := storage.CheckAndSet(ctx, "testkey", nil, "testvalue", time.Hour)
+		require.Error(t, err)
+		require.Equal(t, context.Canceled, err)
+		require.False(t, success)
 	})
 }

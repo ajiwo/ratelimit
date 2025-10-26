@@ -68,6 +68,10 @@ func (m *Backend) getLock(key string) *sync.Mutex {
 }
 
 func (m *Backend) Get(ctx context.Context, key string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
+
 	lock := m.getLock(key)
 	lock.Lock()
 	defer lock.Unlock()
@@ -94,6 +98,10 @@ func (m *Backend) Get(ctx context.Context, key string) (string, error) {
 }
 
 func (m *Backend) Set(ctx context.Context, key string, value any, expiration time.Duration) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	lock := m.getLock(key)
 	lock.Lock()
 	defer lock.Unlock()
@@ -108,6 +116,10 @@ func (m *Backend) Set(ctx context.Context, key string, value any, expiration tim
 }
 
 func (m *Backend) Delete(ctx context.Context, key string) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+
 	lock := m.getLock(key)
 	lock.Lock()
 	defer lock.Unlock()
@@ -188,6 +200,10 @@ func (m *Backend) Close() error {
 // Returns true if the set was successful, false if value didn't match or key expired
 // oldValue=nil means "only set if key doesn't exist"
 func (m *Backend) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, expiration time.Duration) (bool, error) {
+	if err := ctx.Err(); err != nil {
+		return false, err
+	}
+
 	lock := m.getLock(key)
 	lock.Lock()
 	defer lock.Unlock()
