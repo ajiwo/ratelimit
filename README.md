@@ -54,7 +54,7 @@ func main() {
     userID := "user123"
 
     for i := 1; i <= 7; i++ {
-        var results map[string]strategies.Result
+        var results strategies.Results
         allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
         if err != nil { log.Fatal(err) }
         res := results["default"]
@@ -94,7 +94,7 @@ When using dual strategy, the per-quota names in results are prefixed by `primar
 - Base key: global prefix applied to all rate-limiting keys (e.g., `api:`)
 - Dynamic key: runtime dimension like user ID, client IP, or API key
 - Strategy config: algorithm-specific configuration implementing `strategies.StrategyConfig`
-- Results: per-quota map[string]Result with `Allowed`, `Remaining`, `Reset`
+- Results: per-quota `strategies.Results` entries with `Allowed`, `Remaining`, `Reset`
 
 
 ## API overview
@@ -102,7 +102,7 @@ When using dual strategy, the per-quota names in results are prefixed by `primar
 - `ratelimit.New(opts ...Option) (*RateLimiter, error)`
   - Options: `WithBackend(Backend)`, `WithPrimaryStrategy(StrategyConfig)`, `WithSecondaryStrategy(StrategyConfig)`, `WithBaseKey(string)`, `WithMaxRetries(int)`
 - `(*RateLimiter) Allow(ctx, AccessOptions) (bool, error)`
-  - Consumes quota. If `AccessOptions.Result` is provided, receives `map[string]strategies.Result`.
+  - Consumes quota. If `AccessOptions.Result` is provided, receives `strategies.Results`.
 - `(*RateLimiter) Peek(ctx, AccessOptions) (bool, error)`
   - Read the current rate limit state without consuming quota; also populates results when provided.
 - `(*RateLimiter) Reset(ctx, AccessOptions) error`
@@ -116,7 +116,7 @@ When using dual strategy, the per-quota names in results are prefixed by `primar
 type AccessOptions struct {
     Key            string                        // dynamic key (e.g., user ID)
     SkipValidation bool                          // skip key validation if true
-    Result         *map[string]strategies.Result // optional results pointer
+    Result         *strategies.Results           // optional results pointer
 }
 ```
 
