@@ -128,4 +128,7 @@ func TestConfig_Properties(t *testing.T) {
 
 	require.Equal(t, 5.0, updatedConfig.(Config).Rate,
 		"WithKey should not change other config properties")
+
+	require.Equal(t, 10, config.WithMaxRetries(10).MaxRetries(),
+		"WithMaxRetries should update the max retries")
 }
