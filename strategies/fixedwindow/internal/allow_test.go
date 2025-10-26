@@ -280,19 +280,19 @@ func TestAllow(t *testing.T) {
 			assert.Contains(t, err.Error(), "failed to update fixed window state for quota 'default' after 3 attempts due to concurrent access")
 		})
 
-		t.Run("context cancelled", func(t *testing.T) {
+		t.Run("context canceled", func(t *testing.T) {
 			storage := new(mockBackend)
 			config := new(mockConfig)
-			cancelledCtx, cancel := context.WithCancel(ctx)
+			canceledCtx, cancel := context.WithCancel(ctx)
 			cancel()
 
 			config.On("GetKey").Return(key)
 			config.On("GetQuotas").Return(quotas)
 			config.On("MaxRetries").Return(maxRetries)
 
-			_, err := Allow(cancelledCtx, storage, config, TryUpdate)
+			_, err := Allow(canceledCtx, storage, config, TryUpdate)
 			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "context cancelled")
+			assert.Contains(t, err.Error(), "context canceled")
 		})
 	})
 

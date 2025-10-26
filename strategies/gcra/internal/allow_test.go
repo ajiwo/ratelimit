@@ -271,10 +271,10 @@ func TestAllow(t *testing.T) {
 			assert.Equal(t, ErrConcurrentAccess, err)
 		})
 
-		t.Run("context cancelled", func(t *testing.T) {
+		t.Run("context canceled", func(t *testing.T) {
 			storage := new(mockBackend)
 			config := new(mockConfig)
-			cancelledCtx, cancel := context.WithCancel(ctx)
+			canceledCtx, cancel := context.WithCancel(ctx)
 			cancel()
 
 			config.On("GetKey").Return(key)
@@ -282,9 +282,9 @@ func TestAllow(t *testing.T) {
 			config.On("GetRate").Return(rate)
 			config.On("MaxRetries").Return(maxRetries)
 
-			_, err := Allow(cancelledCtx, storage, config, TryUpdate)
+			_, err := Allow(canceledCtx, storage, config, TryUpdate)
 			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "context cancelled")
+			assert.Contains(t, err.Error(), "context canceled")
 		})
 	})
 }

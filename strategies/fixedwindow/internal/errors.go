@@ -27,8 +27,8 @@ func NewStateUpdateError(quotaName string, attempts int) error {
 	return fmt.Errorf("failed to update fixed window state for quota '%s' after %d attempts due to concurrent access", quotaName, attempts)
 }
 
-func NewContextCancelledError(err error) error {
-	return fmt.Errorf("context cancelled or timed out: %w", err)
+func NewContextCanceledError(err error) error {
+	return fmt.Errorf("context canceled or timed out: %w", err)
 }
 
 func NewResetExpiredWindowError(quotaName string, err error) error {

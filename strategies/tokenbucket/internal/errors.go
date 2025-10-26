@@ -18,6 +18,6 @@ func NewStateSaveError(err error) error {
 	return fmt.Errorf("failed to save token bucket state: %w", err)
 }
 
-func NewContextCancelledError(err error) error {
-	return fmt.Errorf("context cancelled or timed out: %w", err)
+func NewContextCanceledError(err error) error {
+	return fmt.Errorf("context canceled or timed out: %w", err)
 }

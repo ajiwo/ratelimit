@@ -30,6 +30,10 @@ type Result struct {
 // Allow provides a unified implementation for both Allow and Peek operations
 // mode determines whether to perform read-only inspection or actual quota consumption
 func Allow(ctx context.Context, storage backends.Backend, config Config, mode AllowMode) (Result, error) {
+	if ctx.Err() != nil {
+		return Result{}, NewContextCanceledError(ctx.Err())
+	}
+
 	now := time.Now()
 	leakRate := config.GetLeakRate()
 	capacity := config.GetCapacity()
@@ -95,9 +99,9 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, lbConfig C
 
 	// Try atomic CheckAndSet operations first
 	for attempt := range maxRetries {
-		// Check if context is cancelled or timed out
+		// Check if context is canceled or timed out
 		if ctx.Err() != nil {
-			return Result{}, NewContextCancelledError(ctx.Err())
+			return Result{}, NewContextCanceledError(ctx.Err())
 		}
 
 		// Get current bucket state

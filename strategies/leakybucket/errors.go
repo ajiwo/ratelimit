@@ -15,7 +15,7 @@ var (
 	ErrStateSave        = errors.New("failed to save bucket state")
 	ErrStateUpdate      = errors.New("failed to update bucket state")
 	ErrConcurrentAccess = errors.New("failed to update bucket state after max attempts due to concurrent access")
-	ErrContextCancelled = errors.New("context cancelled or timed out")
+	ErrContextCanceled = errors.New("context canceled or timed out")
 )
 
 // Configuration validation error functions
@@ -36,6 +36,6 @@ func NewStateSaveError(err error) error {
 	return fmt.Errorf("failed to save bucket state: %w", err)
 }
 
-func NewContextCancelledError(err error) error {
-	return fmt.Errorf("context cancelled or timed out: %w", err)
+func NewContextCanceledError(err error) error {
+	return fmt.Errorf("context canceled or timed out: %w", err)
 }

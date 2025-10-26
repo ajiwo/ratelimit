@@ -30,6 +30,10 @@ type Result struct {
 // Allow provides a unified implementation for both Allow and Peek operations
 // mode determines whether to perform read-only inspection or actual quota consumption
 func Allow(ctx context.Context, storage backends.Backend, config Config, mode AllowMode) (Result, error) {
+	if ctx.Err() != nil {
+		return Result{}, NewContextCanceledError(ctx.Err())
+	}
+
 	now := time.Now()
 	emissionInterval := time.Duration(1e9/config.GetRate()) * time.Nanosecond
 	limit := time.Duration(float64(config.GetBurst()) * float64(emissionInterval))
@@ -90,9 +94,9 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, gcraConfig
 
 	// Try atomic CheckAndSet operations first
 	for attempt := range maxRetries {
-		// Check if context is cancelled or timed out
+		// Check if context is canceled or timed out
 		if ctx.Err() != nil {
-			return Result{}, NewContextCancelledError(ctx.Err())
+			return Result{}, NewContextCanceledError(ctx.Err())
 		}
 
 		// Get current state

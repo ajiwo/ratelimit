@@ -32,6 +32,10 @@ type Result struct {
 // Allow provides a unified implementation for both Allow and Peek operations
 // mode determines whether to perform read-only inspection or actual quota consumption
 func Allow(ctx context.Context, storage backends.Backend, config Config, mode AllowMode) (map[string]Result, error) {
+	if ctx.Err() != nil {
+		return nil, NewContextCanceledError(ctx.Err())
+	}
+
 	now := time.Now()
 	quotas := config.GetQuotas()
 
@@ -136,9 +140,9 @@ func allowSingleQuota(ctx context.Context, storage backends.Backend, config Conf
 
 	// Try atomic CheckAndSet operations
 	for attempt := range maxRetries {
-		// Check if context is cancelled or timed out
+		// Check if context is canceled or timed out
 		if ctx.Err() != nil {
-			return nil, NewContextCancelledError(ctx.Err())
+			return nil, NewContextCanceledError(ctx.Err())
 		}
 
 		// Get current window state for this quota
@@ -298,9 +302,9 @@ func consumeQuota(ctx context.Context, storage backends.Backend, state quotaStat
 	}
 
 	for attempt := range maxRetries {
-		// Check if context is cancelled or timed out
+		// Check if context is canceled or timed out
 		if ctx.Err() != nil {
-			return Result{}, NewContextCancelledError(ctx.Err())
+			return Result{}, NewContextCanceledError(ctx.Err())
 		}
 
 		// Increment request count

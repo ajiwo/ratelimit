@@ -24,6 +24,10 @@ type Result struct {
 }
 
 func Allow(ctx context.Context, storage backends.Backend, config Config, mode AllowMode) (Result, error) {
+	if ctx.Err() != nil {
+		return Result{}, NewContextCanceledError(ctx.Err())
+	}
+
 	now := time.Now()
 	capacity := float64(config.GetBurstSize())
 	refillRate := config.GetRefillRate()
@@ -78,7 +82,7 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, tbConfig C
 
 	for attempt := range maxRetries {
 		if ctx.Err() != nil {
-			return Result{}, NewContextCancelledError(ctx.Err())
+			return Result{}, NewContextCanceledError(ctx.Err())
 		}
 
 		data, err := storage.Get(ctx, tbConfig.GetKey())
