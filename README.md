@@ -114,8 +114,8 @@ When using dual strategy, the per-quota names in results are prefixed by `primar
 
 ```go
 type AccessOptions struct {
-    Key            string                        // dynamic key (e.g., user ID)
-    SkipValidation bool                          // skip key validation if true
+    Key            string                        // dynamic-key (e.g., user ID)
+    SkipValidation bool                          // skip dynamic-key validation if true
     Result         *strategies.Results           // optional results pointer
 }
 ```
@@ -168,10 +168,10 @@ Use them with `ratelimit.WithBackend(...)`. Example (memory):
 ```go
 limiter, err := ratelimit.New(
     ratelimit.WithBackend(memory.New()),
+    ratelimit.WithBaseKey("api"),
     ratelimit.WithPrimaryStrategy(
         fixedwindow.NewConfig().SetKey("user").AddQuota("default", 10, time.Minute).Build(),
     ),
-    ratelimit.WithBaseKey("api"),
 )
 ```
 
@@ -247,15 +247,18 @@ Both demonstrate:
 
 ## Examples directory
 
+The `examples` directory is a Go submodule. Available examples:
+
 - `examples/basic`: single strategy fixed-window limiting
 - `examples/dual`: composite fixed-window + token-bucket
 - `examples/middleware/echo`, `examples/middleware/stdlib`: ready-to-run middleware
 - `examples/custom`: shows custom composition/decision logic
 
-Run an example:
+Run an example from the `examples` directory:
 
 ```bash
-go run ./examples/basic
+cd examples
+go run ./basic
 ```
 
 
@@ -264,11 +267,8 @@ go run ./examples/basic
 Run the full test suite (root + strategies/backends/tests):
 
 ```bash
-go test ./...
+./test.sh
 ```
-
-There are focused tests for concurrency, strategy behavior, and backend correctness.
-
 
 ## License
 
