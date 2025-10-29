@@ -20,7 +20,7 @@ func (m *mockBackend) Get(ctx context.Context, key string) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
-func (m *mockBackend) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, ttl time.Duration) (bool, error) {
+func (m *mockBackend) CheckAndSet(ctx context.Context, key string, oldValue, newValue string, ttl time.Duration) (bool, error) {
 	args := m.Called(ctx, key, oldValue, newValue, ttl)
 	return args.Bool(0), args.Error(1)
 }
@@ -30,7 +30,7 @@ func (m *mockBackend) Delete(ctx context.Context, key string) error {
 	return args.Error(0)
 }
 
-func (m *mockBackend) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+func (m *mockBackend) Set(ctx context.Context, key string, value string, ttl time.Duration) error {
 	args := m.Called(ctx, key, value, ttl)
 	return args.Error(0)
 }
@@ -158,8 +158,8 @@ func TestAllow(t *testing.T) {
 			config.On("MaxRetries").Return(maxRetries)
 			storage.On("Get", ctx, key).Return("", nil)
 
-			// Mock CheckAndSet to succeed
-			storage.On("CheckAndSet", ctx, key, nil, mock.AnythingOfType("string"), mock.AnythingOfType("time.Duration")).Return(true, nil)
+			// Mock CheckAndSet with empty oldValue to succeed
+			storage.On("CheckAndSet", ctx, key, "", mock.AnythingOfType("string"), mock.AnythingOfType("time.Duration")).Return(true, nil)
 
 			result, err := Allow(ctx, storage, config, TryUpdate)
 			assert.NoError(t, err)
@@ -228,7 +228,7 @@ func TestAllow(t *testing.T) {
 			// First Get returns empty
 			storage.On("Get", ctx, key).Return("", nil).Once()
 			// First CheckAndSet fails
-			storage.On("CheckAndSet", ctx, key, nil, mock.AnythingOfType("string"), mock.AnythingOfType("time.Duration")).Return(false, nil).Once()
+			storage.On("CheckAndSet", ctx, key, "", mock.AnythingOfType("string"), mock.AnythingOfType("time.Duration")).Return(false, nil).Once()
 
 			// Second Get returns some state
 			lastLeak := time.Now()
@@ -254,7 +254,7 @@ func TestAllow(t *testing.T) {
 			config.On("MaxRetries").Return(maxRetries)
 
 			storage.On("Get", ctx, key).Return("", nil)
-			storage.On("CheckAndSet", ctx, key, nil, mock.AnythingOfType("string"), mock.AnythingOfType("time.Duration")).Return(false, nil)
+			storage.On("CheckAndSet", ctx, key, "", mock.AnythingOfType("string"), mock.AnythingOfType("time.Duration")).Return(false, nil)
 
 			_, err := Allow(ctx, storage, config, TryUpdate)
 			assert.Error(t, err)

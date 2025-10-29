@@ -2,7 +2,6 @@ package memory
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"time"
 )
@@ -28,7 +27,7 @@ type Backend struct {
 }
 
 type memoryValue struct {
-	value      any
+	value      string
 	expiration time.Time
 }
 
@@ -87,17 +86,10 @@ func (m *Backend) Get(ctx context.Context, key string) (string, error) {
 		return "", nil
 	}
 
-	switch v := val.value.(type) {
-	case string:
-		return v, nil
-	case int:
-		return fmt.Sprintf("%d", v), nil
-	default:
-		return fmt.Sprintf("%v", v), nil
-	}
+	return val.value, nil
 }
 
-func (m *Backend) Set(ctx context.Context, key string, value any, expiration time.Duration) error {
+func (m *Backend) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
@@ -198,8 +190,8 @@ func (m *Backend) Close() error {
 
 // CheckAndSet atomically sets key to newValue only if current value matches oldValue
 // Returns true if the set was successful, false if value didn't match or key expired
-// oldValue=nil means "only set if key doesn't exist"
-func (m *Backend) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, expiration time.Duration) (bool, error) {
+// Empty oldValue means "only set if key doesn't exist"
+func (m *Backend) CheckAndSet(ctx context.Context, key string, oldValue, newValue string, expiration time.Duration) (bool, error) {
 	if err := ctx.Err(); err != nil {
 		return false, err
 	}
@@ -220,7 +212,7 @@ func (m *Backend) CheckAndSet(ctx context.Context, key string, oldValue, newValu
 		}
 	}
 
-	if oldValue == nil {
+	if oldValue == "" {
 		// Only set if key doesn't exist
 		if exists {
 			return false, nil
@@ -240,11 +232,7 @@ func (m *Backend) CheckAndSet(ctx context.Context, key string, oldValue, newValu
 		return false, nil
 	}
 
-	// Convert both values to strings for comparison
-	currentStr := fmt.Sprintf("%v", val.value)
-	oldStr := fmt.Sprintf("%v", oldValue)
-
-	if currentStr != oldStr {
+	if val.value != oldValue {
 		return false, nil
 	}
 

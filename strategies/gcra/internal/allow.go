@@ -106,13 +106,13 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, gcraConfig
 		}
 
 		var state GCRA
-		var oldValue any
+		var oldValue string
 		if data == "" {
 			// Initialize new state
 			state = GCRA{
 				TAT: now,
 			}
-			oldValue = nil // Key doesn't exist
+			oldValue = "" // Key doesn't exist
 		} else {
 			// Parse existing state
 			if s, ok := decodeState(data); ok {
@@ -172,7 +172,7 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, gcraConfig
 
 			// Update the state even when denying to ensure proper TAT progression
 			// Only if this was a new state (rare case)
-			if oldValue == nil {
+			if oldValue == "" {
 				stateData := encodeState(state)
 				expiration := strategies.CalcExpiration(gcraConfig.GetBurst(), gcraConfig.GetRate())
 				_, err := storage.CheckAndSet(ctx, gcraConfig.GetKey(), oldValue, stateData, expiration)
@@ -185,7 +185,7 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, gcraConfig
 				Allowed:      false,
 				Remaining:    remaining,
 				Reset:        resetTime,
-				stateUpdated: oldValue == nil,
+				stateUpdated: oldValue == "",
 			}, nil
 		}
 	}

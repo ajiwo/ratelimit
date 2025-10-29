@@ -30,7 +30,7 @@ type quotaState struct {
 	quota    Quota
 	key      string
 	window   FixedWindow
-	oldValue any
+	oldValue string
 	allowed  bool
 	config   Config
 }
@@ -124,14 +124,14 @@ func getQuotaStates(ctx context.Context, storage backends.Backend, config Config
 		}
 
 		var window FixedWindow
-		var oldValue any
+		var oldValue string
 		if data == "" {
 			// Initialize new window
 			window = FixedWindow{
 				Count: 0,
 				Start: now,
 			}
-			oldValue = nil // Key doesn't exist
+			oldValue = "" // Key doesn't exist
 		} else {
 			// Parse existing window state
 			if w, ok := decodeState(data); ok {

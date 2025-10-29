@@ -3,7 +3,6 @@ package postgres
 import (
 	"context"
 	"errors"
-	"fmt"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -94,14 +93,12 @@ func (p *Backend) Get(ctx context.Context, key string) (string, error) {
 	return value, nil
 }
 
-func (p *Backend) Set(ctx context.Context, key string, value any, expiration time.Duration) error {
+func (p *Backend) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
 	var expiresAt *time.Time
 	if expiration > 0 {
 		t := time.Now().Add(expiration)
 		expiresAt = &t
 	}
-
-	valueStr := fmt.Sprintf("%v", value)
 
 	_, err := p.pool.Exec(ctx, `
 		INSERT INTO ratelimit_kv (key, value, expires_at)
@@ -109,7 +106,7 @@ func (p *Backend) Set(ctx context.Context, key string, value any, expiration tim
 		ON CONFLICT (key) DO UPDATE SET
 			value = EXCLUDED.value,
 			expires_at = EXCLUDED.expires_at
-	`, key, valueStr, expiresAt)
+	`, key, value, expiresAt)
 	if err != nil {
 		return NewSetFailedError(key, err)
 	}
@@ -133,17 +130,15 @@ func (p *Backend) Close() error {
 
 // CheckAndSet atomically sets key to newValue only if current value matches oldValue
 // Returns true if the set was successful, false if value didn't match or key expired
-// oldValue=nil means "only set if key doesn't exist"
-func (p *Backend) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, expiration time.Duration) (bool, error) {
+// Empty oldValue means "only set if key doesn't exist"
+func (p *Backend) CheckAndSet(ctx context.Context, key string, oldValue, newValue string, expiration time.Duration) (bool, error) {
 	var expiresAt *time.Time
 	if expiration > 0 {
 		t := time.Now().Add(expiration)
 		expiresAt = &t
 	}
 
-	newStr := fmt.Sprintf("%v", newValue)
-
-	if oldValue == nil {
+	if oldValue == "" {
 		// First, delete any expired entries for this key
 		_, err := p.pool.Exec(ctx, `
 			DELETE FROM ratelimit_kv
@@ -158,7 +153,7 @@ func (p *Backend) CheckAndSet(ctx context.Context, key string, oldValue, newValu
 			INSERT INTO ratelimit_kv (key, value, expires_at)
 			VALUES ($1, $2, $3)
 			ON CONFLICT (key) DO NOTHING
-		`, key, newStr, expiresAt)
+		`, key, newValue, expiresAt)
 		if err != nil {
 			return false, NewCheckAndSetFailedError(key, err)
 		}
@@ -167,8 +162,6 @@ func (p *Backend) CheckAndSet(ctx context.Context, key string, oldValue, newValu
 		return result.RowsAffected() > 0, nil
 	}
 
-	oldStr := fmt.Sprintf("%v", oldValue)
-
 	// Update only if current value matches oldValue
 	result, err := p.pool.Exec(ctx, `
 		UPDATE ratelimit_kv
@@ -176,7 +169,7 @@ func (p *Backend) CheckAndSet(ctx context.Context, key string, oldValue, newValu
 		WHERE key = $3
 			AND value = $4
 			AND (expires_at IS NULL OR expires_at > NOW())
-	`, newStr, expiresAt, key, oldStr)
+	`, newValue, expiresAt, key, oldValue)
 	if err != nil {
 		return false, NewCheckAndSetFailedError(key, err)
 	}

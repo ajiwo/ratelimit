@@ -91,13 +91,13 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, tbConfig C
 		}
 
 		var bucket TokenBucket
-		var oldValue any
+		var oldValue string
 		if data == "" {
 			bucket = TokenBucket{
 				Tokens:     capacity,
 				LastRefill: now,
 			}
-			oldValue = nil
+			oldValue = ""
 		} else {
 			if b, ok := decodeState(data); ok {
 				bucket = b
@@ -146,7 +146,7 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, tbConfig C
 		bucketData := encodeState(bucket)
 		expiration := strategies.CalcExpiration(tbConfig.GetBurstSize(), tbConfig.GetRefillRate())
 
-		if oldValue == nil {
+		if oldValue == "" {
 			_, err := storage.CheckAndSet(ctx, tbConfig.GetKey(), oldValue, bucketData, expiration)
 			if err != nil {
 				return Result{}, NewStateSaveError(err)
@@ -157,7 +157,7 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, tbConfig C
 			Allowed:      false,
 			Remaining:    remaining,
 			Reset:        calculateResetTime(now, bucket, refillRate),
-			stateUpdated: oldValue == nil,
+			stateUpdated: oldValue == "",
 		}, nil
 	}
 

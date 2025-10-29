@@ -50,7 +50,7 @@ func (r *Backend) Get(ctx context.Context, key string) (string, error) {
 	return val, nil
 }
 
-func (r *Backend) Set(ctx context.Context, key string, value any, expiration time.Duration) error {
+func (r *Backend) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
 	if err := r.client.Set(ctx, key, value, expiration).Err(); err != nil {
 		return NewSetFailedError(key, err)
 	}
@@ -73,13 +73,13 @@ func (r *Backend) Close() error {
 
 // CheckAndSet atomically sets key to newValue only if current value matches oldValue
 // Returns true if the set was successful, false if value didn't match or key expired
-// oldValue=nil means "only set if key doesn't exist"
-func (r *Backend) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, expiration time.Duration) (bool, error) {
+// Empty oldValue means "only set if key doesn't exist"
+func (r *Backend) CheckAndSet(ctx context.Context, key string, oldValue, newValue string, expiration time.Duration) (bool, error) {
 	// Use Lua script for atomicity
 	luaScript := `
 	local current = redis.call('GET', KEYS[1])
 
-	-- If oldValue is nil, only set if key doesn't exist
+	-- If oldValue is empty, only set if key doesn't exist
 	if ARGV[1] == '' then
 		if current == false then
 			if ARGV[3] == '0' then
@@ -105,14 +105,8 @@ func (r *Backend) CheckAndSet(ctx context.Context, key string, oldValue, newValu
 	return 0
 	`
 
-	var oldStr string
-	if oldValue == nil {
-		oldStr = ""
-	} else {
-		oldStr = fmt.Sprintf("%v", oldValue)
-	}
-
-	newStr := fmt.Sprintf("%v", newValue)
+	oldStr := oldValue
+	newStr := newValue
 	var expMs string
 	if expiration == 0 {
 		expMs = "0"

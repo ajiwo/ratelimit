@@ -3,7 +3,6 @@ package ratelimit
 import (
 	"context"
 	"errors"
-	"fmt"
 	"math"
 	"reflect"
 	"testing"
@@ -35,16 +34,16 @@ func (m *mockBackendOne) Get(ctx context.Context, key string) (string, error) {
 	return "", nil
 }
 
-func (m *mockBackendOne) Set(ctx context.Context, key string, value any, expiration time.Duration) error {
+func (m *mockBackendOne) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
 	m.setCalls++
 	if m.data == nil {
 		m.data = make(map[string]string)
 	}
-	m.data[key] = fmt.Sprintf("%v", value)
+	m.data[key] = value
 	return nil
 }
 
-func (m *mockBackendOne) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, expiration time.Duration) (bool, error) {
+func (m *mockBackendOne) CheckAndSet(ctx context.Context, key string, oldValue, newValue string, expiration time.Duration) (bool, error) {
 	m.casCalls++
 	return true, nil
 }

@@ -176,7 +176,7 @@ func TestGetQuotaStates(t *testing.T) {
 		assert.Equal(t, 0, state.window.Count)
 		assert.Equal(t, now.UnixNano(), state.window.Start.UnixNano())
 		assert.True(t, state.allowed)
-		assert.Nil(t, state.oldValue)
+		assert.Equal(t, "", state.oldValue)
 	})
 
 	t.Run("existing state within window", func(t *testing.T) {

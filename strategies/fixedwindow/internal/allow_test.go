@@ -20,7 +20,7 @@ func (m *mockBackend) Get(ctx context.Context, key string) (string, error) {
 	return args.String(0), args.Error(1)
 }
 
-func (m *mockBackend) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, ttl time.Duration) (bool, error) {
+func (m *mockBackend) CheckAndSet(ctx context.Context, key string, oldValue, newValue string, ttl time.Duration) (bool, error) {
 	args := m.Called(ctx, key, oldValue, newValue, ttl)
 	return args.Bool(0), args.Error(1)
 }
@@ -30,7 +30,7 @@ func (m *mockBackend) Delete(ctx context.Context, key string) error {
 	return args.Error(0)
 }
 
-func (m *mockBackend) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+func (m *mockBackend) Set(ctx context.Context, key string, value string, ttl time.Duration) error {
 	args := m.Called(ctx, key, value, ttl)
 	return args.Error(0)
 }
@@ -173,7 +173,7 @@ func TestAllow(t *testing.T) {
 			config.On("GetQuotas").Return(quotas)
 			config.On("MaxRetries").Return(maxRetries)
 			storage.On("Get", ctx, "test-key:default").Return("", nil)
-			storage.On("CheckAndSet", ctx, "test-key:default", nil, mock.AnythingOfType("string"), quota.Window).Return(true, nil)
+			storage.On("CheckAndSet", ctx, "test-key:default", "", mock.AnythingOfType("string"), quota.Window).Return(true, nil)
 
 			results, err := Allow(ctx, storage, config, TryUpdate)
 			assert.NoError(t, err)
@@ -245,8 +245,8 @@ func TestAllow(t *testing.T) {
 
 			// First Get returns empty
 			storage.On("Get", ctx, "test-key:default").Return("", nil).Once()
-			// First CheckAndSet fails
-			storage.On("CheckAndSet", ctx, "test-key:default", nil, mock.AnythingOfType("string"), quota.Window).Return(false, nil).Once()
+			// First CheckAndSet fails for empty oldValue
+			storage.On("CheckAndSet", ctx, "test-key:default", "", mock.AnythingOfType("string"), quota.Window).Return(false, nil).Once()
 
 			// Second Get returns some state
 			window := FixedWindow{Count: 5, Start: time.Now().Add(-30 * time.Second)}
@@ -273,7 +273,7 @@ func TestAllow(t *testing.T) {
 			config.On("MaxRetries").Return(maxRetries)
 
 			storage.On("Get", ctx, "test-key:default").Return("", nil)
-			storage.On("CheckAndSet", ctx, "test-key:default", nil, mock.AnythingOfType("string"), quota.Window).Return(false, nil)
+			storage.On("CheckAndSet", ctx, "test-key:default", "", mock.AnythingOfType("string"), quota.Window).Return(false, nil)
 
 			_, err := Allow(ctx, storage, config, TryUpdate)
 			assert.Error(t, err)
@@ -313,8 +313,8 @@ func TestAllow(t *testing.T) {
 			// Setup storage responses for both quotas
 			storage.On("Get", ctx, "test-key:requests").Return("", nil)
 			storage.On("Get", ctx, "test-key:writes").Return("", nil)
-			storage.On("CheckAndSet", ctx, "test-key:requests", nil, mock.AnythingOfType("string"), multiQuotas["requests"].Window).Return(true, nil)
-			storage.On("CheckAndSet", ctx, "test-key:writes", nil, mock.AnythingOfType("string"), multiQuotas["writes"].Window).Return(true, nil)
+			storage.On("CheckAndSet", ctx, "test-key:requests", "", mock.AnythingOfType("string"), multiQuotas["requests"].Window).Return(true, nil)
+			storage.On("CheckAndSet", ctx, "test-key:writes", "", mock.AnythingOfType("string"), multiQuotas["writes"].Window).Return(true, nil)
 
 			results, err := Allow(ctx, storage, config, TryUpdate)
 			assert.NoError(t, err)

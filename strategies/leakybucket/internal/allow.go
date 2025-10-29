@@ -111,14 +111,14 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, lbConfig C
 		}
 
 		var bucket LeakyBucket
-		var oldValue any
+		var oldValue string
 		if data == "" {
 			// Initialize new bucket
 			bucket = LeakyBucket{
 				Requests: 0,
 				LastLeak: now,
 			}
-			oldValue = nil // Key doesn't exist
+			oldValue = "" // Key doesn't exist
 		} else {
 			// Parse existing bucket state
 			if b, ok := decodeState(data); ok {
@@ -179,7 +179,7 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, lbConfig C
 			expiration := strategies.CalcExpiration(capacity, leakRate)
 
 			// If this was a new bucket (rare case), set it
-			if oldValue == nil {
+			if oldValue == "" {
 				_, err := storage.CheckAndSet(ctx, lbConfig.GetKey(), oldValue, bucketData, expiration)
 				if err != nil {
 					return Result{}, NewStateSaveError(err)
@@ -190,7 +190,7 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, lbConfig C
 				Allowed:      false,
 				Remaining:    remaining,
 				Reset:        calculateResetTime(now, bucket, capacity, leakRate),
-				stateUpdated: oldValue == nil,
+				stateUpdated: oldValue == "",
 			}, nil
 		}
 	}

@@ -59,15 +59,6 @@ func TestRedisStorage_Get(t *testing.T) {
 		require.Equalf(t, "testvalue", val, "Expected %q, got %q", "testvalue", val)
 	})
 
-	t.Run("Get existing int value", func(t *testing.T) {
-		err := storage.Set(ctx, "intkey", 42, time.Hour)
-		require.NoError(t, err)
-
-		val, err := storage.Get(ctx, "intkey")
-		require.NoError(t, err)
-		require.Equal(t, "42", val)
-	})
-
 	t.Run("Get expired value", func(t *testing.T) {
 		err := storage.Set(ctx, "expiredkey", "expiredvalue", time.Millisecond*10)
 		require.NoError(t, err)
@@ -95,15 +86,6 @@ func TestRedisStorage_Set(t *testing.T) {
 		val, err := storage.Get(ctx, "stringkey")
 		require.NoError(t, err)
 		require.Equal(t, "testvalue", val)
-	})
-
-	t.Run("Set int value", func(t *testing.T) {
-		err := storage.Set(ctx, "intkey", 123, time.Hour)
-		require.NoError(t, err)
-
-		val, err := storage.Get(ctx, "intkey")
-		require.NoError(t, err)
-		require.Equal(t, "123", val)
 	})
 
 	t.Run("Set with zero expiration", func(t *testing.T) {
@@ -250,8 +232,8 @@ func TestRedisStorage_CheckAndSet(t *testing.T) {
 		t.Skip("Redis not available, skipping CheckAndSet tests")
 	}
 
-	t.Run("CheckAndSet with nil oldValue - key doesn't exist", func(t *testing.T) {
-		success, err := storage.CheckAndSet(ctx, "newkey", nil, "newvalue", time.Hour)
+	t.Run("CheckAndSet with empty oldValue - key doesn't exist", func(t *testing.T) {
+		success, err := storage.CheckAndSet(ctx, "newkey", "", "newvalue", time.Hour)
 		require.NoError(t, err)
 		require.True(t, success)
 
@@ -260,11 +242,11 @@ func TestRedisStorage_CheckAndSet(t *testing.T) {
 		require.Equal(t, "newvalue", val)
 	})
 
-	t.Run("CheckAndSet with nil oldValue - key exists", func(t *testing.T) {
+	t.Run("CheckAndSet with empty oldValue - key exists", func(t *testing.T) {
 		err := storage.Set(ctx, "existingkey", "oldvalue", time.Hour)
 		require.NoError(t, err)
 
-		success, err := storage.CheckAndSet(ctx, "existingkey", nil, "newvalue", time.Hour)
+		success, err := storage.CheckAndSet(ctx, "existingkey", "", "newvalue", time.Hour)
 		require.NoError(t, err)
 		require.False(t, success)
 
@@ -310,7 +292,7 @@ func TestRedisStorage_CheckAndSet(t *testing.T) {
 	})
 
 	t.Run("CheckAndSet with no expiration", func(t *testing.T) {
-		success, err := storage.CheckAndSet(ctx, "noexpkey", nil, "noexpvalue", 0)
+		success, err := storage.CheckAndSet(ctx, "noexpkey", "", "noexpvalue", 0)
 		require.NoError(t, err)
 		require.True(t, success)
 

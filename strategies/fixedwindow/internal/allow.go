@@ -152,14 +152,14 @@ func allowSingleQuota(ctx context.Context, storage backends.Backend, config Conf
 		}
 
 		var window FixedWindow
-		var oldValue any
+		var oldValue string
 		if data == "" {
 			// Initialize new window
 			window = FixedWindow{
 				Count: 0,
 				Start: now,
 			}
-			oldValue = nil // Key doesn't exist
+			oldValue = "" // Key doesn't exist
 		} else {
 			// Parse existing window state
 			if w, ok := decodeState(data); ok {
@@ -236,7 +236,7 @@ func allowSingleQuota(ctx context.Context, storage backends.Backend, config Conf
 			Allowed:      false,
 			Remaining:    remaining,
 			Reset:        resetTime,
-			stateUpdated: oldValue == nil,
+			stateUpdated: oldValue == "",
 		}
 		return results, nil
 	}
@@ -349,7 +349,7 @@ func consumeQuota(ctx context.Context, storage backends.Backend, state quotaStat
 					Count: 0,
 					Start: now,
 				}
-				state.oldValue = nil
+				state.oldValue = ""
 			} else {
 				// Parse updated state
 				if w, ok := decodeState(data); ok {

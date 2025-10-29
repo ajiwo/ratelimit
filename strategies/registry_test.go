@@ -11,9 +11,11 @@ import (
 
 type regMockBackend struct{}
 
-func (d *regMockBackend) Get(_ context.Context, _ string) (string, error)               { return "", nil }
-func (d *regMockBackend) Set(_ context.Context, _ string, _ any, _ time.Duration) error { return nil }
-func (d *regMockBackend) CheckAndSet(_ context.Context, _ string, _, _ any, _ time.Duration) (bool, error) {
+func (d *regMockBackend) Get(_ context.Context, _ string) (string, error) { return "", nil }
+func (d *regMockBackend) Set(_ context.Context, _ string, _ string, _ time.Duration) error {
+	return nil
+}
+func (d *regMockBackend) CheckAndSet(_ context.Context, _ string, _, _ string, _ time.Duration) (bool, error) {
 	return true, nil
 }
 func (d *regMockBackend) Delete(_ context.Context, _ string) error { return nil }

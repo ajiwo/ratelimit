@@ -32,26 +32,26 @@ func (m *mockBackend) Get(ctx context.Context, key string) (string, error) {
 	return "", nil
 }
 
-func (m *mockBackend) Set(ctx context.Context, key string, value any, expiration time.Duration) error {
+func (m *mockBackend) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.store[key] = value.(string)
+	m.store[key] = value
 	return nil
 }
 
-func (m *mockBackend) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, expiration time.Duration) (bool, error) {
+func (m *mockBackend) CheckAndSet(ctx context.Context, key string, oldValue, newValue string, expiration time.Duration) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
 	current, exists := m.store[key]
-	if oldValue == nil && !exists {
+	if oldValue == "" && !exists {
 		// Set only if key doesn't exist
-		m.store[key] = newValue.(string)
+		m.store[key] = newValue
 		return true, nil
 	}
 
-	if exists && current == oldValue.(string) {
-		m.store[key] = newValue.(string)
+	if exists && current == oldValue {
+		m.store[key] = newValue
 		return true, nil
 	}
 

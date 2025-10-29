@@ -2,7 +2,6 @@ package tokenbucket
 
 import (
 	"context"
-	"fmt"
 	"sync"
 	"testing"
 	"testing/synctest"
@@ -24,28 +23,24 @@ func (m *mockBackend) Get(ctx context.Context, key string) (string, error) {
 	return m.store[key], nil
 }
 
-func (m *mockBackend) Set(ctx context.Context, key string, value any, expiration time.Duration) error {
+func (m *mockBackend) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
-	m.store[key] = fmt.Sprintf("%v", value)
+	m.store[key] = value
 	return nil
 }
 
-func (m *mockBackend) CheckAndSet(ctx context.Context, key string, oldValue, newValue any, expiration time.Duration) (bool, error) {
+func (m *mockBackend) CheckAndSet(ctx context.Context, key string, oldValue, newValue string, expiration time.Duration) (bool, error) {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	current, exists := m.store[key]
-	oldStr := ""
-	if oldValue != nil {
-		oldStr = fmt.Sprintf("%v", oldValue)
-	}
-	if oldValue == nil && exists {
+	if oldValue == "" && exists {
 		return false, nil
 	}
-	if oldValue != nil && (!exists || current != oldStr) {
+	if oldValue != "" && (!exists || current != oldValue) {
 		return false, nil
 	}
-	m.store[key] = fmt.Sprintf("%v", newValue)
+	m.store[key] = newValue
 	return true, nil
 }
 
