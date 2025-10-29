@@ -2,11 +2,11 @@ package fixedwindow
 
 import (
 	"context"
-	"strings"
 
 	"github.com/ajiwo/ratelimit/backends"
 	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/ajiwo/ratelimit/strategies/fixedwindow/internal"
+	"github.com/ajiwo/ratelimit/utils/builderpool"
 )
 
 // Strategy implements the fixed window rate limiting algorithm
@@ -87,10 +87,12 @@ func convertResults(internalResults map[string]internal.Result) strategies.Resul
 
 // buildQuotaKey builds a quota-specific key
 func buildQuotaKey(baseKey, quotaName string) string {
-	var keyBuilder strings.Builder
-	keyBuilder.Grow(len(baseKey) + len(quotaName) + 1)
-	keyBuilder.WriteString(baseKey)
-	keyBuilder.WriteByte(':')
-	keyBuilder.WriteString(quotaName)
-	return keyBuilder.String()
+	sb := builderpool.Get()
+	defer func() {
+		builderpool.Put(sb)
+	}()
+	sb.WriteString(baseKey)
+	sb.WriteByte(':')
+	sb.WriteString(quotaName)
+	return sb.String()
 }

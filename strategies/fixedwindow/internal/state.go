@@ -3,25 +3,17 @@ package internal
 import (
 	"context"
 	"strconv"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
 	"github.com/ajiwo/ratelimit/strategies"
+	"github.com/ajiwo/ratelimit/utils/builderpool"
 )
 
 // FixedWindow represents the state of a fixed window
 type FixedWindow struct {
 	Count int       `json:"count"` // Current request count in the window
 	Start time.Time `json:"start"` // Window start time
-}
-
-// builderPool reduces allocations in string operations for fixed window strategy
-var builderPool = sync.Pool{
-	New: func() any {
-		return &strings.Builder{}
-	},
 }
 
 // quotaState represents the state of a single quota during processing
@@ -37,12 +29,10 @@ type quotaState struct {
 
 // buildQuotaKey builds a quota-specific key
 func buildQuotaKey(baseKey, quotaName string) string {
-	sb := builderPool.Get().(*strings.Builder)
+	sb := builderpool.Get()
 	defer func() {
-		sb.Reset()
-		builderPool.Put(sb)
+		builderpool.Put(sb)
 	}()
-	sb.Grow(len(baseKey) + len(quotaName) + 1)
 	sb.WriteString(baseKey)
 	sb.WriteByte(':')
 	sb.WriteString(quotaName)
@@ -52,13 +42,11 @@ func buildQuotaKey(baseKey, quotaName string) string {
 // encodeState serializes FixedWindow into a compact ASCII format:
 // v2|count|start_unix_nano
 func encodeState(w FixedWindow) string {
-	sb := builderPool.Get().(*strings.Builder)
+	sb := builderpool.Get()
 	defer func() {
-		sb.Reset()
-		builderPool.Put(sb)
+		builderpool.Put(sb)
 	}()
 
-	sb.Grow(2 + 1 + 20 + 1 + 20) // rough capacity
 	sb.WriteString("v2|")
 	sb.WriteString(strconv.Itoa(w.Count))
 	sb.WriteByte('|')

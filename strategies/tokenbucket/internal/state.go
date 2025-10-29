@@ -2,11 +2,10 @@ package internal
 
 import (
 	"strconv"
-	"strings"
-	"sync"
 	"time"
 
 	"github.com/ajiwo/ratelimit/strategies"
+	"github.com/ajiwo/ratelimit/utils/builderpool"
 )
 
 type TokenBucket struct {
@@ -14,20 +13,12 @@ type TokenBucket struct {
 	LastRefill time.Time `json:"last_refill"`
 }
 
-var builderPool = sync.Pool{
-	New: func() any {
-		return &strings.Builder{}
-	},
-}
-
 func encodeState(b TokenBucket) string {
-	sb := builderPool.Get().(*strings.Builder)
+	sb := builderpool.Get()
 	defer func() {
-		sb.Reset()
-		builderPool.Put(sb)
+		builderpool.Put(sb)
 	}()
 
-	sb.Grow(2 + 1 + 24 + 1 + 20)
 	sb.WriteString("v2|")
 	sb.WriteString(strconv.FormatFloat(b.Tokens, 'g', -1, 64))
 	sb.WriteByte('|')

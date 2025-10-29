@@ -2,10 +2,10 @@ package internal
 
 import (
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/ajiwo/ratelimit/strategies"
+	"github.com/ajiwo/ratelimit/utils/builderpool"
 )
 
 // LeakyBucket represents the state of a leaky bucket
@@ -17,8 +17,7 @@ type LeakyBucket struct {
 // encodeState serializes LeakyBucket into a compact ASCII format:
 // v2|requests|lastleak_unix_nano
 func encodeState(b LeakyBucket) string {
-	sb := &strings.Builder{}
-	sb.Grow(2 + 1 + 24 + 1 + 20)
+	sb := builderpool.Get()
 	sb.WriteString("v2|")
 	sb.WriteString(strconv.FormatFloat(b.Requests, 'g', -1, 64))
 	sb.WriteByte('|')

@@ -3,17 +3,11 @@ package strategies
 import (
 	"context"
 	"fmt"
-	"strings"
 	"sync"
 
 	"github.com/ajiwo/ratelimit/backends"
+	"github.com/ajiwo/ratelimit/utils/builderpool"
 )
-
-var keyBuilderPool = sync.Pool{
-	New: func() any {
-		return &strings.Builder{}
-	},
-}
 
 // CompositeConfig represents a dual-strategy configuration
 type CompositeConfig struct {
@@ -78,25 +72,21 @@ func (c CompositeConfig) WithKey(key string) StrategyConfig {
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
-		builder := keyBuilderPool.Get().(*strings.Builder)
+		sb := builderpool.Get()
 		defer func() {
-			builder.Reset()
-			keyBuilderPool.Put(builder)
+			builderpool.Put(sb)
 		}()
-		builder.Grow(64)
-		builder.WriteString(c.BaseKey)
-		builder.WriteString(":")
-		builder.WriteString(key)
-		builder.WriteString(":p")
-		c.Primary = c.Primary.WithKey(builder.String())
+		sb.WriteString(c.BaseKey)
+		sb.WriteString(":")
+		sb.WriteString(key)
+		sb.WriteString(":p")
+		c.Primary = c.Primary.WithKey(sb.String())
 	})
 	wg.Go(func() {
-		builder := keyBuilderPool.Get().(*strings.Builder)
+		builder := builderpool.Get()
 		defer func() {
-			builder.Reset()
-			keyBuilderPool.Put(builder)
+			builderpool.Put(builder)
 		}()
-		builder.Grow(64)
 		builder.WriteString(c.BaseKey)
 		builder.WriteString(":")
 		builder.WriteString(key)
