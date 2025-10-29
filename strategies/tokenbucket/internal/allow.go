@@ -23,24 +23,51 @@ type Result struct {
 	stateUpdated bool
 }
 
-func Allow(ctx context.Context, storage backends.Backend, config Config, mode AllowMode) (Result, error) {
+type parameter struct {
+	burstSize  int
+	capacity   float64
+	key        string
+	now        time.Time
+	maxRetries int
+	refillRate float64
+	storage    backends.Backend
+}
+
+func Allow(
+	ctx context.Context,
+	storage backends.Backend,
+	config Config,
+	mode AllowMode,
+
+) (Result, error) {
 	if ctx.Err() != nil {
 		return Result{}, NewContextCanceledError(ctx.Err())
 	}
 
-	now := time.Now()
-	capacity := float64(config.GetBurstSize())
-	refillRate := config.GetRefillRate()
-
-	if mode == ReadOnly {
-		return allowReadOnly(ctx, storage, config, now, capacity, refillRate)
+	maxRetries := config.MaxRetries()
+	if maxRetries <= 0 {
+		maxRetries = strategies.DefaultMaxRetries
 	}
 
-	return allowTryAndUpdate(ctx, storage, config, now, capacity, refillRate)
+	p := &parameter{
+		burstSize:  config.GetBurstSize(),
+		capacity:   float64(config.GetBurstSize()),
+		key:        config.GetKey(),
+		maxRetries: maxRetries,
+		now:        time.Now(),
+		refillRate: config.GetRefillRate(),
+		storage:    storage,
+	}
+
+	if mode == ReadOnly {
+		return p.allowReadOnly(ctx)
+	}
+
+	return p.allowTryAndUpdate(ctx)
 }
 
-func allowReadOnly(ctx context.Context, storage backends.Backend, tbConfig Config, now time.Time, capacity, refillRate float64) (Result, error) {
-	data, err := storage.Get(ctx, tbConfig.GetKey())
+func (p *parameter) allowReadOnly(ctx context.Context) (Result, error) {
+	data, err := p.storage.Get(ctx, p.key)
 	if err != nil {
 		return Result{}, NewStateRetrievalError(err)
 	}
@@ -48,8 +75,8 @@ func allowReadOnly(ctx context.Context, storage backends.Backend, tbConfig Confi
 	if data == "" {
 		return Result{
 			Allowed:      true,
-			Remaining:    tbConfig.GetBurstSize(),
-			Reset:        now,
+			Remaining:    p.burstSize,
+			Reset:        p.now,
 			stateUpdated: false,
 		}, nil
 	}
@@ -59,33 +86,28 @@ func allowReadOnly(ctx context.Context, storage backends.Backend, tbConfig Confi
 		return Result{}, ErrStateParsing
 	}
 
-	timeElapsed := now.Sub(bucket.LastRefill).Seconds()
-	tokensToAdd := timeElapsed * refillRate
-	bucket.Tokens = math.Min(bucket.Tokens+tokensToAdd, capacity)
-	bucket.LastRefill = now
+	timeElapsed := p.now.Sub(bucket.LastRefill).Seconds()
+	tokensToAdd := timeElapsed * p.refillRate
+	bucket.Tokens = math.Min(bucket.Tokens+tokensToAdd, p.capacity)
+	bucket.LastRefill = p.now
 
 	remaining := max(int(bucket.Tokens), 0)
 
 	return Result{
 		Allowed:      remaining > 0,
 		Remaining:    remaining,
-		Reset:        now,
+		Reset:        p.now,
 		stateUpdated: false,
 	}, nil
 }
 
-func allowTryAndUpdate(ctx context.Context, storage backends.Backend, tbConfig Config, now time.Time, capacity, refillRate float64) (Result, error) {
-	maxRetries := tbConfig.MaxRetries()
-	if maxRetries <= 0 {
-		maxRetries = strategies.DefaultMaxRetries
-	}
-
-	for attempt := range maxRetries {
+func (p *parameter) allowTryAndUpdate(ctx context.Context) (Result, error) {
+	for attempt := range p.maxRetries {
 		if ctx.Err() != nil {
 			return Result{}, NewContextCanceledError(ctx.Err())
 		}
 
-		data, err := storage.Get(ctx, tbConfig.GetKey())
+		data, err := p.storage.Get(ctx, p.key)
 		if err != nil {
 			return Result{}, NewStateRetrievalError(err)
 		}
@@ -94,8 +116,8 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, tbConfig C
 		var oldValue string
 		if data == "" {
 			bucket = TokenBucket{
-				Tokens:     capacity,
-				LastRefill: now,
+				Tokens:     p.capacity,
+				LastRefill: p.now,
 			}
 			oldValue = ""
 		} else {
@@ -106,10 +128,10 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, tbConfig C
 			}
 			oldValue = data
 
-			elapsed := now.Sub(bucket.LastRefill)
-			tokensToAdd := float64(elapsed.Nanoseconds()) * refillRate / 1e9
-			bucket.Tokens = math.Min(bucket.Tokens+tokensToAdd, capacity)
-			bucket.LastRefill = now
+			elapsed := p.now.Sub(bucket.LastRefill)
+			tokensToAdd := float64(elapsed.Nanoseconds()) * p.refillRate / 1e9
+			bucket.Tokens = math.Min(bucket.Tokens+tokensToAdd, p.capacity)
+			bucket.LastRefill = p.now
 		}
 
 		allowed := math.Floor(bucket.Tokens) >= 1.0
@@ -119,9 +141,9 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, tbConfig C
 			remaining := max(int(bucket.Tokens), 0)
 
 			newValue := encodeState(bucket)
-			expiration := strategies.CalcExpiration(tbConfig.GetBurstSize(), tbConfig.GetRefillRate())
+			expiration := strategies.CalcExpiration(p.burstSize, p.refillRate)
 
-			success, err := storage.CheckAndSet(ctx, tbConfig.GetKey(), oldValue, newValue, expiration)
+			success, err := p.storage.CheckAndSet(ctx, p.key, oldValue, newValue, expiration)
 			if err != nil {
 				return Result{}, NewStateSaveError(err)
 			}
@@ -130,12 +152,12 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, tbConfig C
 				return Result{
 					Allowed:      true,
 					Remaining:    remaining,
-					Reset:        now,
+					Reset:        p.now,
 					stateUpdated: true,
 				}, nil
 			}
 
-			if attempt < maxRetries-1 {
+			if attempt < p.maxRetries-1 {
 				time.Sleep((19 * time.Nanosecond) << time.Duration(attempt))
 				continue
 			}
@@ -144,10 +166,10 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, tbConfig C
 
 		remaining := max(int(bucket.Tokens), 0)
 		bucketData := encodeState(bucket)
-		expiration := strategies.CalcExpiration(tbConfig.GetBurstSize(), tbConfig.GetRefillRate())
+		expiration := strategies.CalcExpiration(p.burstSize, p.refillRate)
 
 		if oldValue == "" {
-			_, err := storage.CheckAndSet(ctx, tbConfig.GetKey(), oldValue, bucketData, expiration)
+			_, err := p.storage.CheckAndSet(ctx, p.key, oldValue, bucketData, expiration)
 			if err != nil {
 				return Result{}, NewStateSaveError(err)
 			}
@@ -156,7 +178,7 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, tbConfig C
 		return Result{
 			Allowed:      false,
 			Remaining:    remaining,
-			Reset:        calculateResetTime(now, bucket, refillRate),
+			Reset:        calculateResetTime(p.now, bucket, p.refillRate),
 			stateUpdated: oldValue == "",
 		}, nil
 	}
@@ -164,7 +186,12 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, tbConfig C
 	return Result{}, ErrConcurrentAccess
 }
 
-func calculateResetTime(now time.Time, bucket TokenBucket, refillRate float64) time.Time {
+func calculateResetTime(
+	now time.Time,
+	bucket TokenBucket,
+	refillRate float64,
+
+) time.Time {
 	if bucket.Tokens >= 1.0 {
 		return now
 	}

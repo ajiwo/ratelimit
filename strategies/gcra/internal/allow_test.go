@@ -80,6 +80,7 @@ func TestAllow(t *testing.T) {
 			config.On("GetKey").Return(key)
 			config.On("GetBurst").Return(burst)
 			config.On("GetRate").Return(rate)
+			config.On("MaxRetries").Return(maxRetries)
 			storage.On("Get", ctx, key).Return("", nil)
 
 			result, err := Allow(ctx, storage, config, ReadOnly)
@@ -101,6 +102,7 @@ func TestAllow(t *testing.T) {
 			config.On("GetKey").Return(key)
 			config.On("GetBurst").Return(burst)
 			config.On("GetRate").Return(rate)
+			config.On("MaxRetries").Return(maxRetries)
 			storage.On("Get", ctx, key).Return(encodedState, nil)
 
 			result, err := Allow(ctx, storage, config, ReadOnly)
@@ -122,6 +124,7 @@ func TestAllow(t *testing.T) {
 			config.On("GetKey").Return(key)
 			config.On("GetBurst").Return(burst)
 			config.On("GetRate").Return(rate)
+			config.On("MaxRetries").Return(maxRetries)
 			storage.On("Get", ctx, key).Return(encodedState, nil)
 
 			result, err := Allow(ctx, storage, config, ReadOnly)
@@ -138,6 +141,7 @@ func TestAllow(t *testing.T) {
 			config.On("GetKey").Return(key)
 			config.On("GetBurst").Return(burst)
 			config.On("GetRate").Return(rate)
+			config.On("MaxRetries").Return(maxRetries)
 			storage.On("Get", ctx, key).Return("", errors.New("storage error"))
 
 			_, err := Allow(ctx, storage, config, ReadOnly)
@@ -152,11 +156,12 @@ func TestAllow(t *testing.T) {
 			config.On("GetKey").Return(key)
 			config.On("GetBurst").Return(burst)
 			config.On("GetRate").Return(rate)
+			config.On("MaxRetries").Return(maxRetries)
 			storage.On("Get", ctx, key).Return("invalid-state", nil)
 
 			_, err := Allow(ctx, storage, config, ReadOnly)
 			assert.Error(t, err)
-			assert.Equal(t, ErrStateParsing, err)
+			assert.Equal(t, NewStateParsingError(), err)
 		})
 	})
 
@@ -268,7 +273,7 @@ func TestAllow(t *testing.T) {
 
 			_, err := Allow(ctx, storage, config, TryUpdate)
 			assert.Error(t, err)
-			assert.Equal(t, ErrConcurrentAccess, err)
+			assert.Equal(t, NewStateUpdateError(maxRetries), err)
 		})
 
 		t.Run("context canceled", func(t *testing.T) {
@@ -294,17 +299,26 @@ func TestCalculateRemaining(t *testing.T) {
 	emissionInterval := 100 * time.Millisecond // 10 requests per second
 	limit := time.Second                       // 1 second limit
 	burst := 10
+	rate := 10.0 // 10 requests per second
+
+	p := &parameter{
+		burst:            burst,
+		emissionInterval: emissionInterval,
+		limit:            limit,
+		now:              now,
+		rate:             rate,
+	}
 
 	t.Run("full burst available - TAT in past", func(t *testing.T) {
 		tat := now.Add(-1 * time.Second)
-		remaining := calculateRemaining(now, tat, emissionInterval, limit, burst)
+		remaining := p.calculateRemaining(tat)
 		assert.Equal(t, burst, remaining)
 	})
 
 	t.Run("partial burst available", func(t *testing.T) {
 		// TAT is 300ms in the future, so we're 300ms behind
 		tat := now.Add(300 * time.Millisecond)
-		remaining := calculateRemaining(now, tat, emissionInterval, limit, burst)
+		remaining := p.calculateRemaining(tat)
 
 		// We should have (1000ms - 300ms) / 100ms = 7 requests remaining
 		expected := 7
@@ -314,21 +328,21 @@ func TestCalculateRemaining(t *testing.T) {
 	t.Run("no requests available - at limit", func(t *testing.T) {
 		// TAT is exactly at the limit
 		tat := now.Add(limit)
-		remaining := calculateRemaining(now, tat, emissionInterval, limit, burst)
+		remaining := p.calculateRemaining(tat)
 		assert.Equal(t, 0, remaining)
 	})
 
 	t.Run("no requests available - over limit", func(t *testing.T) {
 		// TAT exceeds the limit
 		tat := now.Add(limit + 100*time.Millisecond)
-		remaining := calculateRemaining(now, tat, emissionInterval, limit, burst)
+		remaining := p.calculateRemaining(tat)
 		assert.Equal(t, 0, remaining)
 	})
 
 	t.Run("burst cap", func(t *testing.T) {
 		// Even if calculation would exceed burst, cap it at burst
 		tat := now.Add(-5 * time.Second) // Way in the past
-		remaining := calculateRemaining(now, tat, emissionInterval, limit, burst)
+		remaining := p.calculateRemaining(tat)
 		assert.Equal(t, burst, remaining)
 	})
 }

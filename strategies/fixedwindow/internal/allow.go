@@ -29,36 +29,60 @@ type Result struct {
 	stateUpdated bool
 }
 
+type parameter struct {
+	key        string
+	maxRetries int
+	now        time.Time
+	quotas     map[string]Quota
+	storage    backends.Backend
+}
+
 // Allow provides a unified implementation for both Allow and Peek operations
 // mode determines whether to perform read-only inspection or actual quota consumption
-func Allow(ctx context.Context, storage backends.Backend, config Config, mode AllowMode) (map[string]Result, error) {
+func Allow(
+	ctx context.Context,
+	storage backends.Backend,
+	config Config,
+	mode AllowMode,
+
+) (map[string]Result, error) {
 	if ctx.Err() != nil {
 		return nil, NewContextCanceledError(ctx.Err())
 	}
 
-	now := time.Now()
-	quotas := config.GetQuotas()
+	maxRetries := config.MaxRetries()
+	if maxRetries <= 0 {
+		maxRetries = strategies.DefaultMaxRetries
+	}
+
+	p := &parameter{
+		storage:    storage,
+		key:        config.GetKey(),
+		now:        time.Now(),
+		quotas:     config.GetQuotas(),
+		maxRetries: maxRetries,
+	}
 
 	// Read-only mode: just get current state and calculate results
 	if mode == ReadOnly {
-		return allowReadOnly(ctx, storage, config, now, quotas)
+		return p.allowReadOnly(ctx)
 	}
 
 	// Try-and-update mode: attempt to consume quota with retries
-	return allowTryAndUpdate(ctx, storage, config, now, quotas)
+	return p.allowTryAndUpdate(ctx)
 }
 
 // allowReadOnly implements read-only mode
-func allowReadOnly(ctx context.Context, storage backends.Backend, config Config, now time.Time, quotas map[string]Quota) (map[string]Result, error) {
-	results := make(map[string]Result, len(quotas))
+func (p *parameter) allowReadOnly(ctx context.Context) (map[string]Result, error) {
+	results := make(map[string]Result, len(p.quotas))
 
 	// Process each quota
-	for quotaName, quota := range quotas {
+	for quotaName, quota := range p.quotas {
 		// Create quota-specific key
-		quotaKey := buildQuotaKey(config.GetKey(), quotaName)
+		quotaKey := buildQuotaKey(p.key, quotaName)
 
 		// Get current window state for this quota
-		data, err := storage.Get(ctx, quotaKey)
+		data, err := p.storage.Get(ctx, quotaKey)
 		if err != nil {
 			return nil, NewStateRetrievalError(quotaName, err)
 		}
@@ -69,7 +93,7 @@ func allowReadOnly(ctx context.Context, storage backends.Backend, config Config,
 			results[quotaName] = Result{
 				Allowed:      true,
 				Remaining:    quota.Limit,
-				Reset:        now.Add(quota.Window),
+				Reset:        p.now.Add(quota.Window),
 				stateUpdated: false,
 			}
 			continue
@@ -83,12 +107,12 @@ func allowReadOnly(ctx context.Context, storage backends.Backend, config Config,
 		}
 
 		// Check if current window has expired
-		if now.Sub(window.Start) >= quota.Window {
+		if p.now.Sub(window.Start) >= quota.Window {
 			// Window has expired, return fresh state
 			results[quotaName] = Result{
 				Allowed:      true,
 				Remaining:    quota.Limit,
-				Reset:        now.Add(quota.Window),
+				Reset:        p.now.Add(quota.Window),
 				stateUpdated: false,
 			}
 			continue
@@ -110,43 +134,38 @@ func allowReadOnly(ctx context.Context, storage backends.Backend, config Config,
 }
 
 // allowTryAndUpdate implements try-and-update mode with retries
-func allowTryAndUpdate(ctx context.Context, storage backends.Backend, config Config, now time.Time, quotas map[string]Quota) (map[string]Result, error) {
+func (p *parameter) allowTryAndUpdate(ctx context.Context) (map[string]Result, error) {
 	// Check if this is a multi-quota configuration
-	isMultiQuota := len(quotas) > 1
+	isMultiQuota := len(p.quotas) > 1
 
 	if isMultiQuota {
 		// Multi-quota: Use two-phase commit for proper atomicity
-		return allowMultiQuota(ctx, storage, config, now, quotas)
+		return p.allowMultiQuota(ctx)
 	}
 	// Single-quota: Use original optimized approach
-	return allowSingleQuota(ctx, storage, config, now, quotas)
+	return p.allowSingleQuota(ctx)
 }
 
 // allowSingleQuota handles single-quota configurations with the original optimized approach
-func allowSingleQuota(ctx context.Context, storage backends.Backend, config Config, now time.Time, quotas map[string]Quota) (map[string]Result, error) {
+func (p *parameter) allowSingleQuota(ctx context.Context) (map[string]Result, error) {
 	results := make(map[string]Result)
 
 	// Get the single quota (there should be exactly one)
-	quotaName := slices.Sorted(maps.Keys(quotas))[0]
-	quota := quotas[quotaName]
+	quotaName := slices.Sorted(maps.Keys(p.quotas))[0]
+	quota := p.quotas[quotaName]
 
 	// Create quota-specific key
-	quotaKey := buildQuotaKey(config.GetKey(), quotaName)
-
-	maxRetries := config.MaxRetries()
-	if maxRetries <= 0 {
-		maxRetries = strategies.DefaultMaxRetries
-	}
+	quotaKey := buildQuotaKey(p.key, quotaName)
 
 	// Try atomic CheckAndSet operations
-	for attempt := range maxRetries {
+	for attempt := range p.maxRetries {
 		// Check if context is canceled or timed out
 		if ctx.Err() != nil {
 			return nil, NewContextCanceledError(ctx.Err())
 		}
 
 		// Get current window state for this quota
-		data, err := storage.Get(ctx, quotaKey)
+		data, err := p.storage.Get(ctx, quotaKey)
 		if err != nil {
 			return nil, NewStateRetrievalError(quotaName, err)
 		}
@@ -157,7 +176,7 @@ func allowSingleQuota(ctx context.Context, storage backends.Backend, config Conf
 			// Initialize new window
 			window = FixedWindow{
 				Count: 0,
-				Start: now,
+				Start: p.now,
 			}
 			oldValue = "" // Key doesn't exist
 		} else {
@@ -169,10 +188,10 @@ func allowSingleQuota(ctx context.Context, storage backends.Backend, config Conf
 			}
 
 			// Check if current window has expired
-			if now.Sub(window.Start) >= quota.Window {
+			if p.now.Sub(window.Start) >= quota.Window {
 				// Start new window
 				window.Count = 0
-				window.Start = now
+				window.Start = p.now
 			}
 			oldValue = data
 		}
@@ -192,7 +211,7 @@ func allowSingleQuota(ctx context.Context, storage backends.Backend, config Conf
 			newValue := encodeState(window)
 
 			// Use CheckAndSet for atomic update
-			success, err := storage.CheckAndSet(ctx, quotaKey, oldValue, newValue, quota.Window)
+			success, err := p.storage.CheckAndSet(ctx, quotaKey, oldValue, newValue, quota.Window)
 			if err != nil {
 				return nil, NewStateSaveError(quotaName, err)
 			}
@@ -209,24 +228,24 @@ func allowSingleQuota(ctx context.Context, storage backends.Backend, config Conf
 			}
 
 			// If CheckAndSet failed, retry if we haven't exhausted attempts
-			if attempt < maxRetries-1 {
+			if attempt < p.maxRetries-1 {
 				time.Sleep((19 * time.Nanosecond) << time.Duration(attempt))
 				continue
 			}
-			return nil, NewStateUpdateError(quotaName, maxRetries)
+			return nil, NewStateUpdateError(quotaName, p.maxRetries)
 		}
 
 		// Request was denied, return original remaining count
 		remaining := max(quota.Limit-window.Count, 0)
 
 		// For denied requests, only update if window expired
-		if now.Sub(window.Start) >= quota.Window {
+		if p.now.Sub(window.Start) >= quota.Window {
 			// Window expired, reset it
 			window.Count = 0
-			window.Start = now
+			window.Start = p.now
 
 			newValue := encodeState(window)
-			_, err := storage.CheckAndSet(ctx, quotaKey, oldValue, newValue, quota.Window)
+			_, err := p.storage.CheckAndSet(ctx, quotaKey, oldValue, newValue, quota.Window)
 			if err != nil {
 				return nil, NewResetExpiredWindowError(quotaName, err)
 			}
@@ -245,11 +264,11 @@ func allowSingleQuota(ctx context.Context, storage backends.Backend, config Conf
 }
 
 // allowMultiQuota handles multi-quota configurations with two-phase commit
-func allowMultiQuota(ctx context.Context, storage backends.Backend, config Config, now time.Time, quotas map[string]Quota) (map[string]Result, error) {
-	results := make(map[string]Result, len(quotas))
+func (p *parameter) allowMultiQuota(ctx context.Context) (map[string]Result, error) {
+	results := make(map[string]Result, len(p.quotas))
 
 	// Phase 1: Check all quotas without consuming quota
-	quotaStates, err := getQuotaStates(ctx, storage, config, now, quotas)
+	quotaStates, err := p.getQuotaStates(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -267,14 +286,14 @@ func allowMultiQuota(ctx context.Context, storage backends.Backend, config Confi
 	for _, state := range quotaStates {
 		if allAllowed {
 			// All quotas allowed, so consume quota from this quota
-			result, err := consumeQuota(ctx, storage, state, now)
+			result, err := p.consumeQuota(ctx, state)
 			if err != nil {
 				return nil, err
 			}
 			results[state.name] = result
 		} else {
 			// At least one quota denied, so don't consume quota from any quota
-			result, err := getDenyResult(ctx, storage, state, now)
+			result, err := p.getDenyResult(ctx, state)
 			if err != nil {
 				return nil, err
 			}
@@ -285,7 +304,7 @@ func allowMultiQuota(ctx context.Context, storage backends.Backend, config Confi
 	// If some quotas weren't processed because an earlier quota denied,
 	// we need to initialize their results
 	if !allAllowed {
-		err = initializeUnprocessedQuotas(ctx, storage, config, now, quotas, results)
+		err = p.initializeUnprocessedQuotas(ctx, results)
 		if err != nil {
 			return nil, err
 		}
@@ -295,13 +314,8 @@ func allowMultiQuota(ctx context.Context, storage backends.Backend, config Confi
 }
 
 // consumeQuota consumes quota for a quota using atomic CheckAndSet
-func consumeQuota(ctx context.Context, storage backends.Backend, state quotaState, now time.Time) (Result, error) {
-	maxRetries := state.config.MaxRetries()
-	if maxRetries <= 0 {
-		maxRetries = strategies.DefaultMaxRetries
-	}
-
-	for attempt := range maxRetries {
+func (p *parameter) consumeQuota(ctx context.Context, state quotaState) (Result, error) {
+	for attempt := range p.maxRetries {
 		// Check if context is canceled or timed out
 		if ctx.Err() != nil {
 			return Result{}, NewContextCanceledError(ctx.Err())
@@ -319,7 +333,7 @@ func consumeQuota(ctx context.Context, storage backends.Backend, state quotaStat
 		newValue := encodeState(updatedWindow)
 
 		// Use CheckAndSet for atomic update
-		success, err := storage.CheckAndSet(ctx, state.key, state.oldValue, newValue, state.quota.Window)
+		success, err := p.storage.CheckAndSet(ctx, state.key, state.oldValue, newValue, state.quota.Window)
 		if err != nil {
 			return Result{}, NewStateSaveError(state.name, err)
 		}
@@ -335,10 +349,10 @@ func consumeQuota(ctx context.Context, storage backends.Backend, state quotaStat
 		}
 
 		// If CheckAndSet failed, retry if we haven't exhausted attempts
-		if attempt < maxRetries-1 {
+		if attempt < p.maxRetries-1 {
 			// Re-read the current state and retry
 			time.Sleep((19 * time.Nanosecond) << time.Duration(attempt))
-			data, err := storage.Get(ctx, state.key)
+			data, err := p.storage.Get(ctx, state.key)
 			if err != nil {
 				return Result{}, NewStateRetrievalError(state.name, err)
 			}
@@ -347,7 +361,7 @@ func consumeQuota(ctx context.Context, storage backends.Backend, state quotaStat
 				// Window disappeared, start fresh
 				updatedWindow = FixedWindow{
 					Count: 0,
-					Start: now,
+					Start: p.now,
 				}
 				state.oldValue = ""
 			} else {
@@ -355,9 +369,9 @@ func consumeQuota(ctx context.Context, storage backends.Backend, state quotaStat
 				if w, ok := decodeState(data); ok {
 					updatedWindow = w
 					// Check if window expired during retry
-					if now.Sub(updatedWindow.Start) >= state.quota.Window {
+					if p.now.Sub(updatedWindow.Start) >= state.quota.Window {
 						updatedWindow.Count = 0
-						updatedWindow.Start = now
+						updatedWindow.Start = p.now
 					}
 				} else {
 					return Result{}, NewStateParsingError(state.name)
@@ -367,13 +381,13 @@ func consumeQuota(ctx context.Context, storage backends.Backend, state quotaStat
 			state.window = updatedWindow
 			continue
 		}
-		return Result{}, NewStateUpdateError(state.name, maxRetries)
+		return Result{}, NewStateUpdateError(state.name, p.maxRetries)
 	}
 	return Result{}, nil // This shouldn't happen due to the loop logic
 }
 
 // getDenyResult returns results for a quota when the request is denied
-func getDenyResult(ctx context.Context, storage backends.Backend, state quotaState, now time.Time) (Result, error) {
+func (p *parameter) getDenyResult(ctx context.Context, state quotaState) (Result, error) {
 	remaining := max(state.quota.Limit-state.window.Count, 0)
 	resetTime := state.window.Start.Add(state.quota.Window)
 
@@ -385,14 +399,14 @@ func getDenyResult(ctx context.Context, storage backends.Backend, state quotaSta
 	}
 
 	// For denied requests, handle window reset if expired
-	if !state.allowed && now.Sub(state.window.Start) >= state.quota.Window {
+	if !state.allowed && p.now.Sub(state.window.Start) >= state.quota.Window {
 		// Window expired, reset it
 		resetWindow := FixedWindow{
 			Count: 0,
-			Start: now,
+			Start: p.now,
 		}
 		newValue := encodeState(resetWindow)
-		_, err := storage.CheckAndSet(ctx, state.key, state.oldValue, newValue, state.quota.Window)
+		_, err := p.storage.CheckAndSet(ctx, state.key, state.oldValue, newValue, state.quota.Window)
 		if err != nil {
 			return Result{}, NewResetExpiredWindowError(state.name, err)
 		}
@@ -403,12 +417,12 @@ func getDenyResult(ctx context.Context, storage backends.Backend, state quotaSta
 }
 
 // initializeUnprocessedQuotas initializes results for quotas that weren't processed
-func initializeUnprocessedQuotas(ctx context.Context, storage backends.Backend, config Config, now time.Time, quotas map[string]Quota, results map[string]Result) error {
-	for quotaName, quota := range quotas {
+func (p *parameter) initializeUnprocessedQuotas(ctx context.Context, results map[string]Result) error {
+	for quotaName, quota := range p.quotas {
 		if _, exists := results[quotaName]; !exists {
 			// This quota wasn't processed, initialize it without consuming quota
-			quotaKey := buildQuotaKey(config.GetKey(), quotaName)
-			data, err := storage.Get(ctx, quotaKey)
+			quotaKey := buildQuotaKey(p.key, quotaName)
+			data, err := p.storage.Get(ctx, quotaKey)
 			if err != nil {
 				return NewStateRetrievalError(quotaName, err)
 			}
@@ -418,18 +432,18 @@ func initializeUnprocessedQuotas(ctx context.Context, storage backends.Backend, 
 				results[quotaName] = Result{
 					Allowed:      true,
 					Remaining:    quota.Limit,
-					Reset:        now.Add(quota.Window),
+					Reset:        p.now.Add(quota.Window),
 					stateUpdated: false,
 				}
 			} else {
 				// Get current state without modifying
 				if w, ok := decodeState(data); ok {
-					if now.Sub(w.Start) >= quota.Window {
+					if p.now.Sub(w.Start) >= quota.Window {
 						// Window expired
 						results[quotaName] = Result{
 							Allowed:      true,
 							Remaining:    quota.Limit,
-							Reset:        now.Add(quota.Window),
+							Reset:        p.now.Add(quota.Window),
 							stateUpdated: false,
 						}
 					} else {
@@ -448,4 +462,64 @@ func initializeUnprocessedQuotas(ctx context.Context, storage backends.Backend, 
 		}
 	}
 	return nil
+}
+
+// getQuotaStates gets the current state for all quotas without consuming quota
+func (p *parameter) getQuotaStates(ctx context.Context) ([]quotaState, error) {
+	quotaStates := make([]quotaState, 0, len(p.quotas))
+
+	for quotaName, quota := range p.quotas {
+		quotaKey := buildQuotaKey(p.key, quotaName)
+
+		// Get current window state for this quota
+		data, err := p.storage.Get(ctx, quotaKey)
+		if err != nil {
+			return nil, NewStateRetrievalError(quotaName, err)
+		}
+
+		var window FixedWindow
+		var oldValue string
+		if data == "" {
+			// Initialize new window
+			window = FixedWindow{
+				Count: 0,
+				Start: p.now,
+			}
+			oldValue = "" // Key doesn't exist
+		} else {
+			// Parse existing window state
+			if w, ok := decodeState(data); ok {
+				window = w
+			} else {
+				return nil, NewStateParsingError(quotaName)
+			}
+
+			// Check if current window has expired
+			if p.now.Sub(window.Start) >= quota.Window {
+				// Start new window
+				window.Count = 0
+				window.Start = p.now
+			}
+			oldValue = data
+		}
+
+		// Determine if request is allowed based on current count
+		allowed := window.Count < quota.Limit
+
+		quotaStates = append(quotaStates, quotaState{
+			name:     quotaName,
+			quota:    quota,
+			key:      quotaKey,
+			window:   window,
+			oldValue: oldValue,
+			allowed:  allowed,
+		})
+
+		// If this quota doesn't allow, we can stop checking others
+		if !allowed {
+			break
+		}
+	}
+
+	return quotaStates, nil
 }

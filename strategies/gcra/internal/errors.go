@@ -15,8 +15,16 @@ func NewStateRetrievalError(err error) error {
 	return fmt.Errorf("failed to get GCRA state: %w", err)
 }
 
+func NewStateParsingError() error {
+	return fmt.Errorf("failed to parse GCRA state: invalid encoding")
+}
+
 func NewStateSaveError(err error) error {
 	return fmt.Errorf("failed to save GCRA state: %w", err)
+}
+
+func NewStateUpdateError(attempts int) error {
+	return fmt.Errorf("failed to update GCRA state after %d attempts due to concurrent access", attempts)
 }
 
 func NewContextCanceledError(err error) error {

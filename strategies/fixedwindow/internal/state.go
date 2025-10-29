@@ -1,11 +1,9 @@
 package internal
 
 import (
-	"context"
 	"strconv"
 	"time"
 
-	"github.com/ajiwo/ratelimit/backends"
 	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/ajiwo/ratelimit/utils/builderpool"
 )
@@ -24,7 +22,6 @@ type quotaState struct {
 	window   FixedWindow
 	oldValue string
 	allowed  bool
-	config   Config
 }
 
 // buildQuotaKey builds a quota-specific key
@@ -96,65 +93,4 @@ func parseStateFields(data string) (int, int64, bool) {
 	}
 
 	return count, startNS, true
-}
-
-// getQuotaStates gets the current state for all quotas without consuming quota
-func getQuotaStates(ctx context.Context, storage backends.Backend, config Config, now time.Time, quotas map[string]Quota) ([]quotaState, error) {
-	quotaStates := make([]quotaState, 0, len(quotas))
-
-	for quotaName, quota := range quotas {
-		quotaKey := buildQuotaKey(config.GetKey(), quotaName)
-
-		// Get current window state for this quota
-		data, err := storage.Get(ctx, quotaKey)
-		if err != nil {
-			return nil, NewStateRetrievalError(quotaName, err)
-		}
-
-		var window FixedWindow
-		var oldValue string
-		if data == "" {
-			// Initialize new window
-			window = FixedWindow{
-				Count: 0,
-				Start: now,
-			}
-			oldValue = "" // Key doesn't exist
-		} else {
-			// Parse existing window state
-			if w, ok := decodeState(data); ok {
-				window = w
-			} else {
-				return nil, NewStateParsingError(quotaName)
-			}
-
-			// Check if current window has expired
-			if now.Sub(window.Start) >= quota.Window {
-				// Start new window
-				window.Count = 0
-				window.Start = now
-			}
-			oldValue = data
-		}
-
-		// Determine if request is allowed based on current count
-		allowed := window.Count < quota.Limit
-
-		quotaStates = append(quotaStates, quotaState{
-			name:     quotaName,
-			quota:    quota,
-			key:      quotaKey,
-			window:   window,
-			oldValue: oldValue,
-			allowed:  allowed,
-			config:   config,
-		})
-
-		// If this quota doesn't allow, we can stop checking others
-		if !allowed {
-			break
-		}
-	}
-
-	return quotaStates, nil
 }

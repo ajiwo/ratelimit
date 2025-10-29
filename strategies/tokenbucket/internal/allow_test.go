@@ -80,7 +80,9 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetBurstSize").Return(burstSize)
+			config.On("MaxRetries").Return(maxRetries)
 			config.On("GetRefillRate").Return(refillRate)
+			config.On("MaxRetries").Return(maxRetries)
 			storage.On("Get", ctx, key).Return("", nil)
 
 			res, err := Allow(ctx, storage, config, ReadOnly)
@@ -103,7 +105,9 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetBurstSize").Return(burstSize)
+			config.On("MaxRetries").Return(maxRetries)
 			config.On("GetRefillRate").Return(refillRate)
+			config.On("MaxRetries").Return(maxRetries)
 			storage.On("Get", ctx, key).Return(encodedState, nil)
 
 			res, err := Allow(ctx, storage, config, ReadOnly)
@@ -124,7 +128,9 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetBurstSize").Return(burstSize)
+			config.On("MaxRetries").Return(maxRetries)
 			config.On("GetRefillRate").Return(refillRate)
+			config.On("MaxRetries").Return(maxRetries)
 			storage.On("Get", ctx, key).Return("", errors.New("storage error"))
 
 			_, err := Allow(ctx, storage, config, ReadOnly)
@@ -138,7 +144,9 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetBurstSize").Return(burstSize)
+			config.On("MaxRetries").Return(maxRetries)
 			config.On("GetRefillRate").Return(refillRate)
+			config.On("MaxRetries").Return(maxRetries)
 			storage.On("Get", ctx, key).Return("invalid-state", nil)
 
 			_, err := Allow(ctx, storage, config, ReadOnly)
@@ -154,7 +162,9 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetBurstSize").Return(burstSize)
+			config.On("MaxRetries").Return(maxRetries)
 			config.On("GetRefillRate").Return(refillRate)
+			config.On("MaxRetries").Return(maxRetries)
 			config.On("MaxRetries").Return(maxRetries)
 			storage.On("Get", ctx, key).Return("", nil)
 
@@ -189,7 +199,9 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetBurstSize").Return(burstSize)
+			config.On("MaxRetries").Return(maxRetries)
 			config.On("GetRefillRate").Return(refillRate)
+			config.On("MaxRetries").Return(maxRetries)
 			config.On("MaxRetries").Return(maxRetries)
 			storage.On("Get", ctx, key).Return(encodedState, nil)
 
@@ -214,7 +226,9 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetBurstSize").Return(burstSize)
+			config.On("MaxRetries").Return(maxRetries)
 			config.On("GetRefillRate").Return(refillRate)
+			config.On("MaxRetries").Return(maxRetries)
 			config.On("MaxRetries").Return(maxRetries)
 			storage.On("Get", ctx, key).Return(encodedState, nil)
 
@@ -231,7 +245,9 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetBurstSize").Return(burstSize)
+			config.On("MaxRetries").Return(maxRetries)
 			config.On("GetRefillRate").Return(refillRate)
+			config.On("MaxRetries").Return(maxRetries)
 			config.On("MaxRetries").Return(maxRetries)
 
 			// First Get returns empty
@@ -259,7 +275,9 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetBurstSize").Return(burstSize)
+			config.On("MaxRetries").Return(maxRetries)
 			config.On("GetRefillRate").Return(refillRate)
+			config.On("MaxRetries").Return(maxRetries)
 			config.On("MaxRetries").Return(maxRetries)
 
 			storage.On("Get", ctx, key).Return("", nil)
@@ -278,7 +296,9 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetBurstSize").Return(burstSize)
+			config.On("MaxRetries").Return(maxRetries)
 			config.On("GetRefillRate").Return(refillRate)
+			config.On("MaxRetries").Return(maxRetries)
 			config.On("MaxRetries").Return(maxRetries)
 
 			_, err := Allow(canceledCtx, storage, config, TryUpdate)

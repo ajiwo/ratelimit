@@ -168,7 +168,14 @@ func TestGetQuotaStates(t *testing.T) {
 		storage.On("Get", ctx, "test-key:default").Return("", nil)
 		now := time.Now()
 
-		states, err := getQuotaStates(ctx, storage, config, now, quotas)
+		p := &parameter{
+
+			storage: storage,
+			key:     key,
+			now:     now,
+			quotas:  quotas,
+		}
+		states, err := p.getQuotaStates(ctx)
 		assert.NoError(t, err)
 		assert.Len(t, states, 1)
 		state := states[0]
@@ -189,7 +196,14 @@ func TestGetQuotaStates(t *testing.T) {
 		storage.On("Get", ctx, "test-key:default").Return(encodedState, nil)
 		now := time.Now()
 
-		states, err := getQuotaStates(ctx, storage, config, now, quotas)
+		p := &parameter{
+
+			storage: storage,
+			key:     key,
+			now:     now,
+			quotas:  quotas,
+		}
+		states, err := p.getQuotaStates(ctx)
 		assert.NoError(t, err)
 		assert.Len(t, states, 1)
 		state := states[0]
@@ -210,7 +224,14 @@ func TestGetQuotaStates(t *testing.T) {
 		storage.On("Get", ctx, "test-key:default").Return(encodedState, nil)
 		now := time.Now()
 
-		states, err := getQuotaStates(ctx, storage, config, now, quotas)
+		p := &parameter{
+
+			storage: storage,
+			key:     key,
+			now:     now,
+			quotas:  quotas,
+		}
+		states, err := p.getQuotaStates(ctx)
 		assert.NoError(t, err)
 		assert.Len(t, states, 1)
 		state := states[0]
@@ -226,7 +247,14 @@ func TestGetQuotaStates(t *testing.T) {
 		storage.On("Get", ctx, "test-key:default").Return("", errors.New("storage error"))
 		now := time.Now()
 
-		states, err := getQuotaStates(ctx, storage, config, now, quotas)
+		p := &parameter{
+
+			storage: storage,
+			key:     key,
+			now:     now,
+			quotas:  quotas,
+		}
+		states, err := p.getQuotaStates(ctx)
 		assert.Error(t, err)
 		assert.Nil(t, states)
 		assert.Contains(t, err.Error(), "failed to get fixed window state")
@@ -237,7 +265,14 @@ func TestGetQuotaStates(t *testing.T) {
 		storage.On("Get", ctx, "test-key:default").Return("invalid-state", nil)
 		now := time.Now()
 
-		states, err := getQuotaStates(ctx, storage, config, now, quotas)
+		p := &parameter{
+
+			storage: storage,
+			key:     key,
+			now:     now,
+			quotas:  quotas,
+		}
+		states, err := p.getQuotaStates(ctx)
 		assert.Error(t, err)
 		assert.Nil(t, states)
 		assert.Contains(t, err.Error(), "failed to parse fixed window state")

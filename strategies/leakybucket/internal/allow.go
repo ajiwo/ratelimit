@@ -27,30 +27,55 @@ type Result struct {
 	stateUpdated bool
 }
 
+type parameter struct {
+	capacity   int
+	key        string
+	leakRate   float64
+	maxRetries int
+	now        time.Time
+	storage    backends.Backend
+}
+
 // Allow provides a unified implementation for both Allow and Peek operations
 // mode determines whether to perform read-only inspection or actual quota consumption
-func Allow(ctx context.Context, storage backends.Backend, config Config, mode AllowMode) (Result, error) {
+func Allow(
+	ctx context.Context,
+	storage backends.Backend,
+	config Config,
+	mode AllowMode,
+
+) (Result, error) {
 	if ctx.Err() != nil {
 		return Result{}, NewContextCanceledError(ctx.Err())
 	}
 
-	now := time.Now()
-	leakRate := config.GetLeakRate()
-	capacity := config.GetCapacity()
+	maxRetries := config.MaxRetries()
+	if maxRetries <= 0 {
+		maxRetries = strategies.DefaultMaxRetries
+	}
+
+	p := &parameter{
+		storage:    storage,
+		key:        config.GetKey(),
+		now:        time.Now(),
+		leakRate:   config.GetLeakRate(),
+		capacity:   config.GetCapacity(),
+		maxRetries: maxRetries,
+	}
 
 	// Read-only mode: just get current state and calculate results
 	if mode == ReadOnly {
-		return allowReadOnly(ctx, storage, config, now, leakRate, capacity)
+		return p.allowReadOnly(ctx)
 	}
 
 	// Try-and-update mode: attempt to consume quota with retries
-	return allowTryAndUpdate(ctx, storage, config, now, leakRate, capacity)
+	return p.allowTryAndUpdate(ctx)
 }
 
 // allowReadOnly implements read-only mode
-func allowReadOnly(ctx context.Context, storage backends.Backend, lbConfig Config, now time.Time, leakRate float64, capacity int) (Result, error) {
+func (p *parameter) allowReadOnly(ctx context.Context) (Result, error) {
 	// Get current state
-	data, err := storage.Get(ctx, lbConfig.GetKey())
+	data, err := p.storage.Get(ctx, p.key)
 	if err != nil {
 		return Result{}, NewStateRetrievalError(err)
 	}
@@ -60,8 +85,8 @@ func allowReadOnly(ctx context.Context, storage backends.Backend, lbConfig Confi
 		// No existing bucket, return default state
 		return Result{
 			Allowed:      true,
-			Remaining:    capacity,
-			Reset:        now, // Leaky buckets don't have a reset time, they continuously leak
+			Remaining:    p.capacity,
+			Reset:        p.now, // Leaky buckets don't have a reset time, they continuously leak
 			stateUpdated: false,
 		}, nil
 	}
@@ -74,38 +99,33 @@ func allowReadOnly(ctx context.Context, storage backends.Backend, lbConfig Confi
 	}
 
 	// Leak requests based on time elapsed
-	timeElapsed := now.Sub(bucket.LastLeak).Seconds()
-	requestsToLeak := timeElapsed * leakRate
+	timeElapsed := p.now.Sub(bucket.LastLeak).Seconds()
+	requestsToLeak := timeElapsed * p.leakRate
 	bucket.Requests = max(0.0, bucket.Requests-requestsToLeak)
-	bucket.LastLeak = now
+	bucket.LastLeak = p.now
 
 	// Calculate remaining capacity
-	remaining := max(capacity-int(bucket.Requests), 0)
+	remaining := max(p.capacity-int(bucket.Requests), 0)
 
 	return Result{
 		Allowed:      remaining > 0,
 		Remaining:    remaining,
-		Reset:        now, // Leaky buckets don't have a reset time
+		Reset:        p.now, // Leaky buckets don't have a reset time
 		stateUpdated: false,
 	}, nil
 }
 
 // allowTryAndUpdate implements try-and-update mode with retries
-func allowTryAndUpdate(ctx context.Context, storage backends.Backend, lbConfig Config, now time.Time, leakRate float64, capacity int) (Result, error) {
-	maxRetries := lbConfig.MaxRetries()
-	if maxRetries <= 0 {
-		maxRetries = strategies.DefaultMaxRetries
-	}
-
+func (p *parameter) allowTryAndUpdate(ctx context.Context) (Result, error) {
 	// Try atomic CheckAndSet operations first
-	for attempt := range maxRetries {
+	for attempt := range p.maxRetries {
 		// Check if context is canceled or timed out
 		if ctx.Err() != nil {
 			return Result{}, NewContextCanceledError(ctx.Err())
 		}
 
 		// Get current bucket state
-		data, err := storage.Get(ctx, lbConfig.GetKey())
+		data, err := p.storage.Get(ctx, p.key)
 		if err != nil {
 			return Result{}, NewStateRetrievalError(err)
 		}
@@ -116,7 +136,7 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, lbConfig C
 			// Initialize new bucket
 			bucket = LeakyBucket{
 				Requests: 0,
-				LastLeak: now,
+				LastLeak: p.now,
 			}
 			oldValue = "" // Key doesn't exist
 		} else {
@@ -129,27 +149,27 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, lbConfig C
 			oldValue = data
 
 			// Leak requests based on elapsed time
-			elapsed := now.Sub(bucket.LastLeak)
-			requestsToLeak := float64(elapsed.Nanoseconds()) * leakRate / 1e9
+			elapsed := p.now.Sub(bucket.LastLeak)
+			requestsToLeak := float64(elapsed.Nanoseconds()) * p.leakRate / 1e9
 			bucket.Requests = max(0.0, bucket.Requests-requestsToLeak)
-			bucket.LastLeak = now
+			bucket.LastLeak = p.now
 		}
 
 		// Calculate if request is allowed
-		allowed := bucket.Requests+1 <= float64(capacity)
+		allowed := bucket.Requests+1 <= float64(p.capacity)
 
 		if allowed {
 			// Add request to bucket
 			bucket.Requests += 1.0
 
 			// Calculate remaining capacity after adding request
-			remaining := max(capacity-int(bucket.Requests), 0)
+			remaining := max(p.capacity-int(bucket.Requests), 0)
 
 			// Save updated bucket state
 			newValue := encodeState(bucket)
-			expiration := strategies.CalcExpiration(capacity, leakRate)
+			expiration := strategies.CalcExpiration(p.capacity, p.leakRate)
 
-			success, err := storage.CheckAndSet(ctx, lbConfig.GetKey(), oldValue, newValue, expiration)
+			success, err := p.storage.CheckAndSet(ctx, p.key, oldValue, newValue, expiration)
 			if err != nil {
 				return Result{}, NewStateSaveError(err)
 			}
@@ -159,28 +179,28 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, lbConfig C
 				return Result{
 					Allowed:      true,
 					Remaining:    remaining,
-					Reset:        now, // When allowed, no specific reset needed
+					Reset:        p.now, // When allowed, no specific reset needed
 					stateUpdated: true,
 				}, nil
 			}
 
 			// If CheckAndSet failed, retry if we haven't exhausted attempts
-			if attempt < maxRetries-1 {
+			if attempt < p.maxRetries-1 {
 				time.Sleep((19 * time.Nanosecond) << (time.Duration(attempt)))
 				continue
 			}
 			break
 		} else {
 			// Request denied, return current remaining capacity
-			remaining := max(capacity-int(bucket.Requests), 0)
+			remaining := max(p.capacity-int(bucket.Requests), 0)
 
 			// Save the current bucket state (even when denying, to handle leaks)
 			bucketData := encodeState(bucket)
-			expiration := strategies.CalcExpiration(capacity, leakRate)
+			expiration := strategies.CalcExpiration(p.capacity, p.leakRate)
 
 			// If this was a new bucket (rare case), set it
 			if oldValue == "" {
-				_, err := storage.CheckAndSet(ctx, lbConfig.GetKey(), oldValue, bucketData, expiration)
+				_, err := p.storage.CheckAndSet(ctx, p.key, oldValue, bucketData, expiration)
 				if err != nil {
 					return Result{}, NewStateSaveError(err)
 				}
@@ -189,7 +209,7 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, lbConfig C
 			return Result{
 				Allowed:      false,
 				Remaining:    remaining,
-				Reset:        calculateResetTime(now, bucket, capacity, leakRate),
+				Reset:        calculateResetTime(p.now, bucket, p.capacity, p.leakRate),
 				stateUpdated: oldValue == "",
 			}, nil
 		}
@@ -200,7 +220,13 @@ func allowTryAndUpdate(ctx context.Context, storage backends.Backend, lbConfig C
 }
 
 // calculateResetTime calculates when the bucket will have capacity for another request
-func calculateResetTime(now time.Time, bucket LeakyBucket, capacity int, leakRate float64) time.Time {
+func calculateResetTime(
+	now time.Time,
+	bucket LeakyBucket,
+	capacity int,
+	leakRate float64,
+
+) time.Time {
 	if bucket.Requests < float64(capacity) {
 		// Already has capacity, no reset needed
 		return now
