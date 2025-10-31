@@ -198,30 +198,11 @@ func newRateLimiter(config Config) (*RateLimiter, error) {
 	// Check if we have a dual-strategy configuration
 	if config.SecondaryConfig != nil {
 		// Use composite strategy for dual-strategy behavior
-		compositeStrategy := strategies.NewComposite(config.Storage)
-		limiter.strategy = compositeStrategy
-
-		// Create and configure the individual strategies
-		primaryStrategy, err := strategies.Create(config.PrimaryConfig.ID(), config.Storage)
+		composite, err := strategies.NewComposite(config.Storage, config.PrimaryConfig, config.SecondaryConfig)
 		if err != nil {
-			return nil, fmt.Errorf("failed to create primary strategy: %w", err)
+			return nil, fmt.Errorf("failed to create composite strategy: %w", err)
 		}
-
-		secondaryStrategy, err := strategies.Create(config.SecondaryConfig.ID(), config.Storage)
-		if err != nil {
-			return nil, fmt.Errorf("failed to create secondary strategy: %w", err)
-		}
-
-		// Set the individual strategies on the composite
-		if comp, ok := compositeStrategy.(interface {
-			SetPrimaryStrategy(strategies.Strategy)
-			SetSecondaryStrategy(strategies.Strategy)
-		}); ok {
-			comp.SetPrimaryStrategy(primaryStrategy)
-			comp.SetSecondaryStrategy(secondaryStrategy)
-		} else {
-			return nil, fmt.Errorf("composite strategy type assertion failed")
-		}
+		limiter.strategy = composite
 
 		return limiter, nil
 	}

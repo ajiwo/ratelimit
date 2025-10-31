@@ -119,20 +119,28 @@ func TestCompositeConfigHelpers_WithKey(t *testing.T) {
 
 func TestCompositeStrategyFlows(t *testing.T) {
 	var storage backends.Backend = nil
-	comp := NewComposite(storage)
-	setter, ok := comp.(interface {
-		SetPrimaryStrategy(Strategy)
-		SetSecondaryStrategy(Strategy)
-	})
-	require.True(t, ok, "composite does not expose setters")
 
+	// Create mock strategies
 	pri := &compMockStrategy{getRes: Results{"p": {Allowed: true}}, allowRes: Results{"p": {Allowed: true}}}
 	sec := &compMockStrategy{getRes: Results{"s": {Allowed: true}}, allowRes: Results{"s": {Allowed: true}}}
 
-	setter.SetPrimaryStrategy(pri)
-	setter.SetSecondaryStrategy(sec)
+	// Register mock strategies
+	Register(StrategyID(1), func(_ backends.Backend) Strategy { return pri })
+	Register(StrategyID(2), func(_ backends.Backend) Strategy { return sec })
+	defer func() {
+		// Clean up registry (in a real implementation, you'd have an Unregister function)
+		registeredStrategies = make(map[StrategyID]StrategyFactory)
+	}()
 
-	cfg := CompositeConfig{BaseKey: "k", Primary: compMockConfig{caps: CapPrimary}, Secondary: compMockConfig{caps: CapSecondary}}
+	// Create configs with registered IDs
+	priConfig := compMockConfig{id: StrategyID(1), caps: CapPrimary}
+	secConfig := compMockConfig{id: StrategyID(2), caps: CapSecondary}
+
+	// Create composite strategy with new signature
+	comp, err := NewComposite(storage, priConfig, secConfig)
+	require.NoError(t, err, "Failed to create composite strategy")
+
+	cfg := CompositeConfig{BaseKey: "k", Primary: priConfig, Secondary: secConfig}
 
 	// GetResult aggregates results with prefixes
 	res, err := comp.Peek(context.Background(), cfg)
@@ -144,33 +152,157 @@ func TestCompositeStrategyFlows(t *testing.T) {
 	_, err = comp.Allow(context.Background(), cfg)
 	require.NoError(t, err, "Allow error: %v", err)
 
-	// Deny via primary
+	// Test primary denial - create new composite with denying primary strategy
 	primDeny := &compMockStrategy{getRes: Results{"p": {Allowed: false}}}
-	setter.SetPrimaryStrategy(primDeny)
-	res, err = comp.Allow(context.Background(), cfg)
+	Register(StrategyID(3), func(_ backends.Backend) Strategy { return primDeny })
+	primDenyConfig := compMockConfig{id: StrategyID(3), caps: CapPrimary}
+
+	compDeny, err := NewComposite(storage, primDenyConfig, secConfig)
+	require.NoError(t, err, "Failed to create composite with denying primary")
+
+	res, err = compDeny.Allow(context.Background(), cfg)
 	require.NoError(t, err, "Allow error: %v", err)
 	require.Contains(t, res, "primary_p", "expected primary results present on denial")
 
-	// Primary allows, secondary denies
-	setter.SetPrimaryStrategy(&compMockStrategy{getRes: Results{"p": {Allowed: true}}})
-	setter.SetSecondaryStrategy(&compMockStrategy{getRes: Results{"s": {Allowed: false}}})
-	res, err = comp.Allow(context.Background(), cfg)
+	// Test secondary denial - create new composite with denying secondary strategy
+	secDeny := &compMockStrategy{getRes: Results{"s": {Allowed: false}}}
+	Register(StrategyID(4), func(_ backends.Backend) Strategy { return secDeny })
+	secDenyConfig := compMockConfig{id: StrategyID(4), caps: CapSecondary}
+
+	compSecDeny, err := NewComposite(storage, priConfig, secDenyConfig)
+	require.NoError(t, err, "Failed to create composite with denying secondary")
+
+	res, err = compSecDeny.Allow(context.Background(), cfg)
 	require.NoError(t, err, "Allow error: %v", err)
 	require.Contains(t, res, "secondary_s", "expected secondary results present on denial")
 
-	// Error paths
-	setter.SetPrimaryStrategy(&compMockStrategy{getErr: errors.New("bad primary")})
-	_, err = comp.Allow(context.Background(), cfg)
+	// Test primary error path
+	priErr := &compMockStrategy{getErr: errors.New("bad primary")}
+	Register(StrategyID(5), func(_ backends.Backend) Strategy { return priErr })
+	priErrConfig := compMockConfig{id: StrategyID(5), caps: CapPrimary}
+
+	compPriErr, err := NewComposite(storage, priErrConfig, secConfig)
+	require.NoError(t, err, "Failed to create composite with erroring primary")
+
+	_, err = compPriErr.Allow(context.Background(), cfg)
 	require.Error(t, err, "expected primary get error")
 
-	setter.SetPrimaryStrategy(&compMockStrategy{getRes: Results{"p": {Allowed: true}}})
-	setter.SetSecondaryStrategy(&compMockStrategy{getErr: errors.New("bad secondary")})
-	_, err = comp.Allow(context.Background(), cfg)
+	// Test secondary error path
+	secErr := &compMockStrategy{getErr: errors.New("bad secondary")}
+	Register(StrategyID(6), func(_ backends.Backend) Strategy { return secErr })
+	secErrConfig := compMockConfig{id: StrategyID(6), caps: CapSecondary}
+
+	compSecErr, err := NewComposite(storage, priConfig, secErrConfig)
+	require.NoError(t, err, "Failed to create composite with erroring secondary")
+
+	_, err = compSecErr.Allow(context.Background(), cfg)
 	require.Error(t, err, "expected secondary get error")
 
-	// Reset forwards to both strategies, error bubbles
-	setter.SetPrimaryStrategy(&compMockStrategy{})
-	setter.SetSecondaryStrategy(&compMockStrategy{resetErr: errors.New("reset fail")})
-	err = comp.Reset(context.Background(), cfg)
+	// Test reset error path
+	resetErr := &compMockStrategy{resetErr: errors.New("reset fail")}
+	Register(StrategyID(7), func(_ backends.Backend) Strategy { return resetErr })
+	resetErrConfig := compMockConfig{id: StrategyID(7), caps: CapSecondary}
+
+	compResetErr, err := NewComposite(storage, priConfig, resetErrConfig)
+	require.NoError(t, err, "Failed to create composite with reset error")
+
+	err = compResetErr.Reset(context.Background(), cfg)
 	require.Error(t, err, "expected reset error")
+}
+
+func TestNewCompositeErrorScenarios(t *testing.T) {
+	var storage backends.Backend = nil
+
+	t.Run("nil primary config", func(t *testing.T) {
+		secConfig := compMockConfig{id: StrategyID(2), caps: CapSecondary}
+		_, err := NewComposite(storage, nil, secConfig)
+		require.Error(t, err, "expected error for nil primary config")
+		require.Contains(t, err.Error(), "primary strategy config cannot be nil")
+	})
+
+	t.Run("nil secondary config", func(t *testing.T) {
+		priConfig := compMockConfig{id: StrategyID(1), caps: CapPrimary}
+		_, err := NewComposite(storage, priConfig, nil)
+		require.Error(t, err, "expected error for nil secondary config")
+		require.Contains(t, err.Error(), "secondary strategy config cannot be nil")
+	})
+
+	t.Run("primary config validation error", func(t *testing.T) {
+		priConfig := compMockConfig{id: StrategyID(1), caps: CapPrimary, valid: errors.New("primary validation failed")}
+		secConfig := compMockConfig{id: StrategyID(2), caps: CapSecondary}
+
+		_, err := NewComposite(storage, priConfig, secConfig)
+		require.Error(t, err, "expected error for primary validation failure")
+		require.Contains(t, err.Error(), "primary config validation failed")
+	})
+
+	t.Run("secondary config validation error", func(t *testing.T) {
+		priConfig := compMockConfig{id: StrategyID(1), caps: CapPrimary}
+		secConfig := compMockConfig{id: StrategyID(2), caps: CapSecondary, valid: errors.New("secondary validation failed")}
+
+		_, err := NewComposite(storage, priConfig, secConfig)
+		require.Error(t, err, "expected error for secondary validation failure")
+		require.Contains(t, err.Error(), "secondary config validation failed")
+	})
+
+	t.Run("primary missing CapPrimary capability", func(t *testing.T) {
+		priConfig := compMockConfig{id: StrategyID(1), caps: CapSecondary} // Wrong capability
+		secConfig := compMockConfig{id: StrategyID(2), caps: CapSecondary}
+
+		_, err := NewComposite(storage, priConfig, secConfig)
+		require.Error(t, err, "expected error for primary missing CapPrimary")
+		require.Contains(t, err.Error(), "primary strategy must support primary capability")
+	})
+
+	t.Run("secondary missing CapSecondary capability", func(t *testing.T) {
+		priConfig := compMockConfig{id: StrategyID(1), caps: CapPrimary}
+		secConfig := compMockConfig{id: StrategyID(2), caps: CapPrimary} // Wrong capability
+
+		_, err := NewComposite(storage, priConfig, secConfig)
+		require.Error(t, err, "expected error for secondary missing CapSecondary")
+		require.Contains(t, err.Error(), "secondary strategy must support secondary capability")
+	})
+
+	t.Run("unregistered primary strategy ID", func(t *testing.T) {
+		priConfig := compMockConfig{id: StrategyID(200), caps: CapPrimary} // Unregistered ID
+		secConfig := compMockConfig{id: StrategyID(2), caps: CapSecondary}
+
+		_, err := NewComposite(storage, priConfig, secConfig)
+		require.Error(t, err, "expected error for unregistered primary strategy")
+		require.Contains(t, err.Error(), "failed to create primary strategy")
+	})
+
+	t.Run("unregistered secondary strategy ID", func(t *testing.T) {
+		// Register a valid primary strategy
+		priStrategy := &compMockStrategy{getRes: Results{"p": {Allowed: true}}}
+		Register(StrategyID(1), func(_ backends.Backend) Strategy { return priStrategy })
+		defer func() {
+			registeredStrategies = make(map[StrategyID]StrategyFactory)
+		}()
+
+		priConfig := compMockConfig{id: StrategyID(1), caps: CapPrimary}
+		secConfig := compMockConfig{id: StrategyID(201), caps: CapSecondary} // Unregistered ID
+
+		_, err := NewComposite(storage, priConfig, secConfig)
+		require.Error(t, err, "expected error for unregistered secondary strategy")
+		require.Contains(t, err.Error(), "failed to create secondary strategy")
+	})
+
+	t.Run("successful creation", func(t *testing.T) {
+		// Register valid strategies
+		priStrategy := &compMockStrategy{getRes: Results{"p": {Allowed: true}}}
+		secStrategy := &compMockStrategy{getRes: Results{"s": {Allowed: true}}}
+		Register(StrategyID(1), func(_ backends.Backend) Strategy { return priStrategy })
+		Register(StrategyID(2), func(_ backends.Backend) Strategy { return secStrategy })
+		defer func() {
+			registeredStrategies = make(map[StrategyID]StrategyFactory)
+		}()
+
+		priConfig := compMockConfig{id: StrategyID(1), caps: CapPrimary}
+		secConfig := compMockConfig{id: StrategyID(2), caps: CapSecondary}
+
+		composite, err := NewComposite(storage, priConfig, secConfig)
+		require.NoError(t, err, "expected successful composite creation")
+		require.NotNil(t, composite, "composite should not be nil")
+	})
 }

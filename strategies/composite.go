@@ -100,20 +100,13 @@ func (c CompositeConfig) WithKey(key string) StrategyConfig {
 
 // MaxRetries returns the retry limit from the primary config
 func (c CompositeConfig) MaxRetries() int {
-	if c.Primary != nil {
-		return c.Primary.MaxRetries()
-	}
-	return 0
+	return c.Primary.MaxRetries()
 }
 
 // WithMaxRetries applies the retry limit to both primary and secondary configs
 func (c CompositeConfig) WithMaxRetries(retries int) StrategyConfig {
-	if c.Primary != nil {
-		c.Primary = c.Primary.WithMaxRetries(retries)
-	}
-	if c.Secondary != nil {
-		c.Secondary = c.Secondary.WithMaxRetries(retries)
-	}
+	c.Primary = c.Primary.WithMaxRetries(retries)
+	c.Secondary = c.Secondary.WithMaxRetries(retries)
 	return c
 }
 
@@ -124,21 +117,49 @@ type compositeStrategy struct {
 	secondary Strategy
 }
 
-// NewComposite creates a new composite strategy
-func NewComposite(storage backends.Backend) Strategy {
-	return &compositeStrategy{
-		storage: storage,
+// NewComposite creates a new composite strategy with internally created primary and secondary strategies
+func NewComposite(b backends.Backend, pConfig StrategyConfig, sConfig StrategyConfig) (*compositeStrategy, error) {
+	// Validate inputs
+	if pConfig == nil {
+		return nil, fmt.Errorf("primary strategy config cannot be nil")
 	}
-}
+	if sConfig == nil {
+		return nil, fmt.Errorf("secondary strategy config cannot be nil")
+	}
 
-// SetPrimaryStrategy sets the primary strategy instance
-func (cs *compositeStrategy) SetPrimaryStrategy(strategy Strategy) {
-	cs.primary = strategy
-}
+	// Validate individual configs
+	if err := pConfig.Validate(); err != nil {
+		return nil, fmt.Errorf("primary config validation failed: %w", err)
+	}
+	if err := sConfig.Validate(); err != nil {
+		return nil, fmt.Errorf("secondary config validation failed: %w", err)
+	}
 
-// SetSecondaryStrategy sets the secondary strategy instance
-func (cs *compositeStrategy) SetSecondaryStrategy(strategy Strategy) {
-	cs.secondary = strategy
+	// Check capabilities
+	if !pConfig.Capabilities().Has(CapPrimary) {
+		return nil, fmt.Errorf("primary strategy must support primary capability")
+	}
+	if !sConfig.Capabilities().Has(CapSecondary) {
+		return nil, fmt.Errorf("secondary strategy must support secondary capability")
+	}
+
+	// Create primary strategy
+	primary, err := Create(pConfig.ID(), b)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create primary strategy: %w", err)
+	}
+
+	// Create secondary strategy
+	secondary, err := Create(sConfig.ID(), b)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create secondary strategy: %w", err)
+	}
+
+	return &compositeStrategy{
+		storage:   b,
+		primary:   primary,
+		secondary: secondary,
+	}, nil
 }
 
 // Allow implements the dual-strategy logic
@@ -146,11 +167,6 @@ func (cs *compositeStrategy) Allow(ctx context.Context, config StrategyConfig) (
 	compositeConfig, ok := config.(CompositeConfig)
 	if !ok {
 		return nil, fmt.Errorf("composite strategy requires CompositeConfig")
-	}
-
-	// Ensure strategies are set
-	if cs.primary == nil || cs.secondary == nil {
-		return nil, fmt.Errorf("composite strategy requires both primary and secondary strategies to be set")
 	}
 
 	results := make(Results)
@@ -208,10 +224,6 @@ func (cs *compositeStrategy) Peek(ctx context.Context, config StrategyConfig) (R
 		return nil, fmt.Errorf("composite strategy requires CompositeConfig")
 	}
 
-	if cs.primary == nil || cs.secondary == nil {
-		return nil, fmt.Errorf("composite strategy requires both primary and secondary strategies to be set")
-	}
-
 	results := make(Results)
 
 	// Get primary results
@@ -242,10 +254,6 @@ func (cs *compositeStrategy) Reset(ctx context.Context, config StrategyConfig) e
 	compositeConfig, ok := config.(CompositeConfig)
 	if !ok {
 		return fmt.Errorf("composite strategy requires CompositeConfig")
-	}
-
-	if cs.primary == nil || cs.secondary == nil {
-		return fmt.Errorf("composite strategy requires both primary and secondary strategies to be set")
 	}
 
 	// Reset primary strategy
