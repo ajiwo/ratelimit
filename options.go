@@ -2,7 +2,6 @@ package ratelimit
 
 import (
 	"fmt"
-	"math"
 
 	"github.com/ajiwo/ratelimit/backends"
 	"github.com/ajiwo/ratelimit/strategies"
@@ -89,9 +88,11 @@ func WithMaxRetries(retries int) Option {
 		if retries < 0 {
 			return fmt.Errorf("check and set retries cannot be negative, got %d", retries)
 		}
-		maxRet := math.MaxInt - 32
-		if retries > maxRet {
-			return fmt.Errorf("check and set retries cannot exceed %d, got %d", maxRet, retries)
+		if retries > strategies.MaxRetries {
+			return fmt.Errorf(
+				"check and set retries cannot exceed %d, got %d",
+				strategies.MaxRetries, retries,
+			)
 		}
 		config.maxRetries = retries
 		return nil
