@@ -22,6 +22,11 @@ type Strategy interface {
 	// Peek inspects current rate limit status without consuming quota
 	Peek(ctx context.Context, config StrategyConfig) (Results, error)
 
-	// Reset resets the rate limit counter (mainly for testing)
+	// Reset removes the rate limit state, returning the strategy to its initial fresh state.
+	//
+	// "fresh state" means no stored state exists (empty string/"" in storage).
+	// All strategies treat empty state as a fresh request with full quota available.
+	// After Reset, the next Allow call will behave identically to a new user or
+	// a request whose previous state has expired due to TTL.
 	Reset(ctx context.Context, config StrategyConfig) error
 }
