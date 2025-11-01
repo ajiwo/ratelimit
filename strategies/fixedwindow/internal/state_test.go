@@ -32,13 +32,9 @@ func TestEncodeDecodeState(t *testing.T) {
 	assert.True(t, ok)
 	assert.Len(t, decoded, 2)
 
-	// Check deterministic ordering (should be alphabetical)
-	names := []string{}
-	for name := range decoded {
-		names = append(names, name)
-	}
-	assert.Equal(t, "burst", names[0])
-	assert.Equal(t, "default", names[1])
+	// Verify both expected keys exist
+	assert.Contains(t, decoded, "burst")
+	assert.Contains(t, decoded, "default")
 
 	// Check values
 	assert.Equal(t, 5, decoded["burst"].Count)

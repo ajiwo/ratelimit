@@ -1,8 +1,6 @@
 package internal
 
 import (
-	"maps"
-	"slices"
 	"strconv"
 	"time"
 
@@ -22,19 +20,15 @@ func encodeState(quotaStates map[string]FixedWindow) string {
 		return ""
 	}
 
-	// Get quota names in deterministic order (lexical ascending)
-	quotaNames := slices.Sorted(maps.Keys(quotaStates))
-
 	sb := builderpool.Get()
 	defer func() {
 		builderpool.Put(sb)
 	}()
 
 	sb.WriteString("v2|")
-	sb.WriteString(strconv.Itoa(len(quotaNames)))
+	sb.WriteString(strconv.Itoa(len(quotaStates)))
 
-	for _, name := range quotaNames {
-		window := quotaStates[name]
+	for name, window := range quotaStates {
 		sb.WriteByte('|')
 		sb.WriteString(name)
 		sb.WriteByte('|')
