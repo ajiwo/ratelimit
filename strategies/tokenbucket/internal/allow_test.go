@@ -67,7 +67,7 @@ func (m *mockConfigOne) MaxRetries() int {
 }
 
 func TestAllow(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	key := "test-key"
 	burstSize := 10
 	refillRate := 0.1

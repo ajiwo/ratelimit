@@ -15,9 +15,9 @@ import (
 
 // TestGCRA_MemoryBackend tests GCRA strategy with memory backend
 func TestGCRA_MemoryBackend(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	storage := memory.New()
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	strategy := gcra.New(storage)
 	config := gcra.Config{
@@ -48,9 +48,9 @@ func TestGCRA_MemoryBackend(t *testing.T) {
 
 // TestGCRA_PeekBehavior tests Peek vs Allow behavior
 func TestGCRA_PeekBehavior(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	storage := memory.New()
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	strategy := gcra.New(storage)
 	config := gcra.Config{
@@ -83,9 +83,9 @@ func TestGCRA_PeekBehavior(t *testing.T) {
 
 // TestGCRA_Reset tests reset functionality
 func TestGCRA_Reset(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	storage := memory.New()
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	strategy := gcra.New(storage)
 	config := gcra.Config{
@@ -119,9 +119,9 @@ func TestGCRA_Reset(t *testing.T) {
 
 // TestGCRA_ConcurrentAccess tests concurrent access to GCRA
 func TestGCRA_ConcurrentAccess(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	storage := memory.New()
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	strategy := gcra.New(storage)
 	config := gcra.Config{
@@ -172,9 +172,9 @@ func TestGCRA_ConcurrentAccess(t *testing.T) {
 
 // TestGCRA_RateLimiting tests actual rate limiting over time
 func TestGCRA_RateLimiting(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	storage := memory.New()
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	strategy := gcra.New(storage)
 	config := gcra.Config{
@@ -209,9 +209,9 @@ func TestGCRA_RateLimiting(t *testing.T) {
 
 // TestGCRA_ErrorHandling tests error scenarios
 func TestGCRA_ErrorHandling(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	storage := memory.New()
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	strategy := gcra.New(storage)
 
@@ -242,9 +242,9 @@ func TestGCRA_ErrorHandling(t *testing.T) {
 
 // TestGCRA_MultipleKeys tests GCRA with different keys
 func TestGCRA_MultipleKeys(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	storage := memory.New()
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	strategy := gcra.New(storage)
 
@@ -272,14 +272,14 @@ func TestGCRA_MultipleKeys(t *testing.T) {
 
 // TestGCRA_BackendCompatibility tests GCRA with different backends
 func TestGCRA_BackendCompatibility(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 
 	backends := []string{"memory", "redis", "postgres"}
 
 	for _, backendName := range backends {
 		t.Run(backendName+"Backend", func(t *testing.T) {
 			storage := UseBackend(t, backendName)
-			defer storage.Close()
+			t.Cleanup(func() { storage.Close() })
 
 			strategy := gcra.New(storage)
 			config := gcra.Config{Key: "test_" + backendName, Rate: 10.0, Burst: 5}

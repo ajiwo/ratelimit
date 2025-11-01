@@ -38,7 +38,7 @@ func setupRedisTest(t *testing.T) (*Backend, func()) {
 func TestRedisStorage_Get(t *testing.T) {
 	ctx := t.Context()
 	storage, teardown := setupRedisTest(t)
-	defer teardown()
+	t.Cleanup(teardown)
 
 	if storage == nil {
 		t.Skip("Redis not available, skipping tests")
@@ -74,7 +74,7 @@ func TestRedisStorage_Get(t *testing.T) {
 func TestRedisStorage_Set(t *testing.T) {
 	ctx := t.Context()
 	storage, teardown := setupRedisTest(t)
-	defer teardown()
+	t.Cleanup(teardown)
 	if storage == nil {
 		t.Skip("Redis not available, skipping tests")
 	}
@@ -103,7 +103,7 @@ func TestRedisStorage_Set(t *testing.T) {
 func TestRedisStorage_Delete(t *testing.T) {
 	ctx := t.Context()
 	storage, teardown := setupRedisTest(t)
-	defer teardown()
+	t.Cleanup(teardown)
 
 	if storage == nil {
 		t.Skip("Redis not available, skipping tests")
@@ -130,7 +130,7 @@ func TestRedisStorage_Delete(t *testing.T) {
 func TestRedisStorage_ConcurrentAccess(t *testing.T) {
 	ctx := t.Context()
 	storage, teardown := setupRedisTest(t)
-	defer teardown()
+	t.Cleanup(teardown)
 
 	if storage == nil {
 		t.Skip("Redis not available, skipping tests")
@@ -226,7 +226,7 @@ func TestRedisStorage_Close(t *testing.T) {
 func TestRedisStorage_CheckAndSet(t *testing.T) {
 	ctx := t.Context()
 	storage, teardown := setupRedisTest(t)
-	defer teardown()
+	defer teardown() // don't use t.Cleanup for a test with subtests
 
 	if storage == nil {
 		t.Skip("Redis not available, skipping CheckAndSet tests")

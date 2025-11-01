@@ -59,7 +59,7 @@ func TestTokenBucket_Peek(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
 		storage := &mockBackend{store: make(map[string]string)}
-		defer storage.Close()
+		t.Cleanup(func() { storage.Close() })
 		strategy := New(storage)
 
 		config := Config{
@@ -105,7 +105,7 @@ func TestTokenBucket_Reset(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
 		storage := &mockBackend{store: make(map[string]string)}
-		defer storage.Close()
+		t.Cleanup(func() { storage.Close() })
 		strategy := New(storage)
 
 		config := Config{
@@ -143,7 +143,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
 			storage := &mockBackend{store: make(map[string]string)}
-			defer storage.Close()
+			t.Cleanup(func() { storage.Close() })
 			strategy := New(storage)
 
 			config := Config{
@@ -163,7 +163,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
 			storage := &mockBackend{store: make(map[string]string)}
-			defer storage.Close()
+			t.Cleanup(func() { storage.Close() })
 			strategy := New(storage)
 
 			config := Config{
@@ -191,7 +191,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
 			storage := &mockBackend{store: make(map[string]string)}
-			defer storage.Close()
+			t.Cleanup(func() { storage.Close() })
 			strategy := New(storage)
 
 			config := Config{
@@ -228,7 +228,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
 			storage := &mockBackend{store: make(map[string]string)}
-			defer storage.Close()
+			t.Cleanup(func() { storage.Close() })
 			strategy := New(storage)
 
 			config1 := Config{
@@ -273,7 +273,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			ctx := t.Context()
 			storage := &mockBackend{store: make(map[string]string)}
-			defer storage.Close()
+			t.Cleanup(func() { storage.Close() })
 			strategy := New(storage)
 
 			config := Config{
@@ -309,7 +309,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 func TestTokenBucket_ConcurrentAccess(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := &mockBackend{store: make(map[string]string)}
-		defer storage.Close()
+		t.Cleanup(func() { storage.Close() })
 		strategy := New(storage)
 
 		config := Config{

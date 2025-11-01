@@ -11,7 +11,7 @@ import (
 
 func TestMemoryStorage_Get(t *testing.T) {
 	storage := New()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("Get non-existent key", func(t *testing.T) {
 		val, err := storage.Get(ctx, "nonexistent")
@@ -40,7 +40,7 @@ func TestMemoryStorage_Get(t *testing.T) {
 	})
 
 	t.Run("Canceled Get", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		cancel() // Cancel immediately
 
 		val, err := storage.Get(ctx, "testkey")
@@ -74,7 +74,7 @@ func TestMemoryStorage_Set(t *testing.T) {
 	})
 
 	t.Run("Canceled Set", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		cancel() // Cancel immediately
 
 		err := storage.Set(ctx, "testkey", "testvalue", time.Hour)
@@ -85,7 +85,7 @@ func TestMemoryStorage_Set(t *testing.T) {
 
 func TestMemoryStorage_Delete(t *testing.T) {
 	storage := New()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	t.Run("Delete existing key", func(t *testing.T) {
 		err := storage.Set(ctx, "deletekey", "value", time.Hour)
@@ -105,7 +105,7 @@ func TestMemoryStorage_Delete(t *testing.T) {
 	})
 
 	t.Run("Canceled Delete", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		cancel() // Cancel immediately
 
 		err := storage.Delete(ctx, "testkey")
@@ -116,7 +116,7 @@ func TestMemoryStorage_Delete(t *testing.T) {
 
 func TestMemoryStorage_ConcurrentAccess(t *testing.T) {
 	storage := New()
-	ctx := context.Background()
+	ctx := t.Context()
 
 	const numGoroutines = 10
 	const numOperations = 100
@@ -171,9 +171,9 @@ func TestMemoryStorage_ConcurrentAccess(t *testing.T) {
 }
 
 func TestMemoryStorage_AutoCleanup(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	storage := NewWithCleanup(100 * time.Millisecond) // 100ms cleanup interval
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	// Add some entries that will expire quickly
 	err := storage.Set(ctx, "expired1", "value1", 50*time.Millisecond)
@@ -201,9 +201,9 @@ func TestMemoryStorage_AutoCleanup(t *testing.T) {
 }
 
 func TestMemoryStorage_NoAutoCleanup(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	storage := NewWithCleanup(0) // Disable auto cleanup
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	// Add an entry that will expire
 	err := storage.Set(ctx, "expired", "value", time.Millisecond*10)
@@ -226,9 +226,9 @@ func TestMemoryStorage_NoAutoCleanup(t *testing.T) {
 }
 
 func TestMemoryStorage_cleanup(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	storage := NewWithCleanup(0) // Disable auto cleanup for this test
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	t.Run("CheckAndSet with empty oldValue - key doesn't exist", func(t *testing.T) {
 		success, err := storage.CheckAndSet(ctx, "newkey", "", "newvalue", time.Hour)
@@ -306,7 +306,7 @@ func TestMemoryStorage_cleanup(t *testing.T) {
 	})
 
 	t.Run("Canceled CheckAndSet", func(t *testing.T) {
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		cancel() // Cancel immediately
 
 		success, err := storage.CheckAndSet(ctx, "testkey", "", "testvalue", time.Hour)

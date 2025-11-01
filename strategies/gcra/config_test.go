@@ -13,7 +13,7 @@ import (
 func TestConfig_Validate(t *testing.T) {
 	ctx := t.Context()
 	storage := &mockBackend{store: make(map[string]string)}
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 	strategy := New(storage)
 
 	testCases := []struct {

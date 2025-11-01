@@ -66,7 +66,7 @@ func (m *mockConfig) MaxRetries() int {
 }
 
 func TestAllow(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	key := "test-key"
 	burst := 10
 	rate := 10.0 // 10 requests per second

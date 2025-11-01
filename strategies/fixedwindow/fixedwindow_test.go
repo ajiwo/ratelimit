@@ -72,7 +72,7 @@ func (m *mockBackend) Close() error {
 func TestFixedWindow_Allow(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := newMockBackend()
-		defer storage.Close()
+		t.Cleanup(func() { storage.Close() })
 		strategy := New(storage)
 
 		config := NewConfig().
@@ -99,7 +99,7 @@ func TestFixedWindow_Allow(t *testing.T) {
 func TestFixedWindow_WindowReset(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := newMockBackend()
-		defer storage.Close()
+		t.Cleanup(func() { storage.Close() })
 		strategy := New(storage)
 
 		config := NewConfig().
@@ -135,7 +135,7 @@ func TestFixedWindow_WindowReset(t *testing.T) {
 func TestFixedWindow_MultipleKeys(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := newMockBackend()
-		defer storage.Close()
+		t.Cleanup(func() { storage.Close() })
 		strategy := New(storage)
 
 		config1 := NewConfig().
@@ -170,7 +170,7 @@ func TestFixedWindow_MultipleKeys(t *testing.T) {
 func TestFixedWindow_ZeroLimit(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := newMockBackend()
-		defer storage.Close()
+		t.Cleanup(func() { storage.Close() })
 		strategy := New(storage)
 
 		config := NewConfig().
@@ -190,7 +190,7 @@ func TestFixedWindow_ZeroLimit(t *testing.T) {
 func TestFixedWindow_Peek(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := newMockBackend()
-		defer storage.Close()
+		t.Cleanup(func() { storage.Close() })
 		strategy := New(storage)
 
 		config := NewConfig().
@@ -243,7 +243,7 @@ func TestFixedWindow_Peek(t *testing.T) {
 func TestFixedWindow_Reset(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := newMockBackend()
-		defer storage.Close()
+		t.Cleanup(func() { storage.Close() })
 		strategy := New(storage)
 
 		config := NewConfig().
@@ -279,7 +279,7 @@ func TestFixedWindow_Reset(t *testing.T) {
 func TestFixedWindow_ConcurrentAccess(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := newMockBackend()
-		defer storage.Close()
+		t.Cleanup(func() { storage.Close() })
 		strategy := New(storage)
 
 		config := NewConfig().
@@ -330,7 +330,7 @@ func TestFixedWindow_ConcurrentAccess(t *testing.T) {
 func TestFixedWindow_PreciseTiming(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		storage := newMockBackend()
-		defer storage.Close()
+		t.Cleanup(func() { storage.Close() })
 		strategy := New(storage)
 
 		config := NewConfig().
@@ -491,7 +491,7 @@ func TestFixedWindow_Registration(t *testing.T) {
 	// Though it's difficult to test the registration directly, it should at least compile and run
 	// The init function has 50% coverage - this test exercises it once
 	storage := newMockBackend()
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	// Create a strategy to ensure the init function executed properly
 	strategy := New(storage)
@@ -501,7 +501,7 @@ func TestFixedWindow_Registration(t *testing.T) {
 func TestFixedWindow_InvalidConfig(t *testing.T) {
 	// Test with non-config type passed to Allow and Peek
 	storage := newMockBackend()
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 	strategy := New(storage)
 
 	ctx := t.Context()

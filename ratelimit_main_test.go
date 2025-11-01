@@ -264,7 +264,7 @@ func TestAllowAndResultFlow_SingleStrategy(t *testing.T) {
 
 	// request without explicit result
 	user := "user"
-	allowed, err := rl.Allow(context.Background(), AccessOptions{Key: user})
+	allowed, err := rl.Allow(t.Context(), AccessOptions{Key: user})
 	require.NoError(t, err, "expected allowed without error")
 	require.True(t, allowed, "expected allowed to be true")
 
@@ -278,7 +278,7 @@ func TestAllowAndResultFlow_SingleStrategy(t *testing.T) {
 
 	// request with result map capture
 	resHolder := strategies.Results{}
-	allowed, err = rl.Allow(context.Background(), AccessOptions{Result: &resHolder})
+	allowed, err = rl.Allow(t.Context(), AccessOptions{Result: &resHolder})
 	require.NoError(t, err, "expected allowed with result")
 	require.True(t, allowed, "expected allowed to be true")
 	assert.True(t, reflect.DeepEqual(resHolder, ms.allowRes), "results not propagated correctly")
@@ -297,7 +297,7 @@ func TestPeekAndReset_DualStrategy_PassesCompositeConfig(t *testing.T) {
 	}
 
 	// Peek should forward CompositeConfig to strategy
-	_, err := rl.Peek(context.Background(), AccessOptions{})
+	_, err := rl.Peek(t.Context(), AccessOptions{})
 	require.NoError(t, err, "Peek error: %v", err)
 
 	// Last config should be CompositeConfig with both configs containing same fully qualified key after WithKey
@@ -319,5 +319,5 @@ func TestPeekAndReset_DualStrategy_PassesCompositeConfig(t *testing.T) {
 	}
 
 	// Reset should also forward CompositeConfig
-	require.NoError(t, rl.Reset(context.Background(), AccessOptions{}), "Reset error: %v", err)
+	require.NoError(t, rl.Reset(t.Context(), AccessOptions{}), "Reset error: %v", err)
 }

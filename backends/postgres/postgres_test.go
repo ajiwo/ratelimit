@@ -1,7 +1,6 @@
 package postgres
 
 import (
-	"context"
 	"fmt"
 	"os"
 	"sync"
@@ -29,7 +28,7 @@ func setupPostgresTest(t *testing.T) (*Backend, func()) {
 	}
 
 	teardown := func() {
-		ctx := context.Background()
+		ctx := t.Context()
 		_, _ = storage.GetPool().Exec(ctx, `TRUNCATE TABLE ratelimit_kv`)
 		_ = storage.Close()
 	}
@@ -40,7 +39,7 @@ func setupPostgresTest(t *testing.T) (*Backend, func()) {
 func TestPostgresStorage_Get(t *testing.T) {
 	ctx := t.Context()
 	storage, teardown := setupPostgresTest(t)
-	defer teardown()
+	t.Cleanup(teardown)
 
 	if storage == nil {
 		t.Skip("PostgreSQL not available, skipping tests")
@@ -76,7 +75,7 @@ func TestPostgresStorage_Get(t *testing.T) {
 func TestPostgresStorage_Set(t *testing.T) {
 	ctx := t.Context()
 	storage, teardown := setupPostgresTest(t)
-	defer teardown()
+	t.Cleanup(teardown)
 	if storage == nil {
 		t.Skip("PostgreSQL not available, skipping tests")
 	}
@@ -115,7 +114,7 @@ func TestPostgresStorage_Set(t *testing.T) {
 func TestPostgresStorage_Delete(t *testing.T) {
 	ctx := t.Context()
 	storage, teardown := setupPostgresTest(t)
-	defer teardown()
+	t.Cleanup(teardown)
 
 	if storage == nil {
 		t.Skip("PostgreSQL not available, skipping tests")
@@ -142,7 +141,7 @@ func TestPostgresStorage_Delete(t *testing.T) {
 func TestPostgresStorage_ConcurrentAccess(t *testing.T) {
 	ctx := t.Context()
 	storage, teardown := setupPostgresTest(t)
-	defer teardown()
+	t.Cleanup(teardown)
 
 	if storage == nil {
 		t.Skip("PostgreSQL not available, skipping tests")
@@ -233,7 +232,7 @@ func TestPostgresStorage_Close(t *testing.T) {
 func TestPostgresStorage_CheckAndSet(t *testing.T) {
 	ctx := t.Context()
 	storage, teardown := setupPostgresTest(t)
-	defer teardown()
+	defer teardown() // don't use t.Cleanup for a test with subtests
 
 	if storage == nil {
 		t.Skip("PostgreSQL not available, skipping CheckAndSet tests")

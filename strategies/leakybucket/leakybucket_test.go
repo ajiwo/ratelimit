@@ -58,7 +58,7 @@ func (m *mockBackend) Close() error {
 func TestLeakyBucketAllowWithResult(t *testing.T) {
 	ctx := t.Context()
 	storage := &mockBackend{store: make(map[string]string)}
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 
 	strategy := New(storage)
 
@@ -85,7 +85,7 @@ func TestLeakyBucketLeak(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx := t.Context()
 		storage := &mockBackend{store: make(map[string]string)}
-		defer storage.Close()
+		t.Cleanup(func() { storage.Close() })
 
 		strategy := New(storage)
 
@@ -121,7 +121,7 @@ func TestLeakyBucketLeak(t *testing.T) {
 func TestLeakyBucketPeek(t *testing.T) {
 	ctx := t.Context()
 	storage := &mockBackend{store: make(map[string]string)}
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 	strategy := New(storage)
 
 	config := Config{
@@ -167,7 +167,7 @@ func TestLeakyBucketPeek(t *testing.T) {
 func TestLeakyBucketReset(t *testing.T) {
 	ctx := t.Context()
 	storage := &mockBackend{store: make(map[string]string)}
-	defer storage.Close()
+	t.Cleanup(func() { storage.Close() })
 	strategy := New(storage)
 
 	config := Config{

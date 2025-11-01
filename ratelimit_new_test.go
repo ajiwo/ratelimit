@@ -1,7 +1,6 @@
 package ratelimit
 
 import (
-	"context"
 	"errors"
 	"testing"
 
@@ -42,7 +41,7 @@ func TestNew_And_Composites(t *testing.T) {
 	require.NoError(t, err, "unexpected error creating limiter")
 
 	// Ensure composite flow works and returns results without errors
-	allowed, err := rl.Allow(context.Background(), AccessOptions{})
+	allowed, err := rl.Allow(t.Context(), AccessOptions{})
 	require.NoError(t, err, "composite allow error")
 	require.True(t, allowed, "expected allowed when both strategies allow")
 
@@ -79,7 +78,7 @@ func TestAllow_ErrorAndDenialPaths(t *testing.T) {
 	rl, err := New(WithBackend(mb), WithBaseKey("base"), WithPrimaryStrategy(primCfg))
 	require.NoError(t, err, "unexpected error")
 
-	ok, err := rl.Allow(context.Background(), AccessOptions{})
+	ok, err := rl.Allow(t.Context(), AccessOptions{})
 	require.Error(t, err, "expected error from strategy allow")
 	assert.False(t, ok, "expected ok to be false when strategy errors")
 
@@ -90,7 +89,7 @@ func TestAllow_ErrorAndDenialPaths(t *testing.T) {
 	rl, err = New(WithBackend(mb), WithBaseKey("base"), WithPrimaryStrategy(primCfg))
 	require.NoError(t, err, "unexpected error")
 
-	ok, err = rl.Allow(context.Background(), AccessOptions{})
+	ok, err = rl.Allow(t.Context(), AccessOptions{})
 	require.NoError(t, err, "unexpected error")
 	assert.False(t, ok, "expected not allowed when any quota denies")
 }
@@ -106,7 +105,7 @@ func TestPeekAndReset_ErrorPaths(t *testing.T) {
 	rl, err := New(WithBackend(mb), WithBaseKey("base"), WithPrimaryStrategy(primCfg))
 	require.NoError(t, err, "unexpected error")
 
-	_, err = rl.Peek(context.Background(), AccessOptions{})
+	_, err = rl.Peek(t.Context(), AccessOptions{})
 	require.Error(t, err, "expected error from Peek")
 
 	// Reset fails
@@ -115,6 +114,6 @@ func TestPeekAndReset_ErrorPaths(t *testing.T) {
 	rl, err = New(WithBackend(mb), WithBaseKey("base"), WithPrimaryStrategy(primCfg))
 	require.NoError(t, err, "unexpected error")
 
-	err = rl.Reset(context.Background(), AccessOptions{})
+	err = rl.Reset(t.Context(), AccessOptions{})
 	require.Error(t, err, "expected error from Reset")
 }

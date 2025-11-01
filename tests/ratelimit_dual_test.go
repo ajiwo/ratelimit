@@ -1,7 +1,6 @@
 package tests
 
 import (
-	"context"
 	"fmt"
 	"sync"
 	"testing"
@@ -40,7 +39,7 @@ func TestDualStrategy_FixedWindow1Quota_LeakyBucket_Memory(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
-	defer limiter.Close()
+	t.Cleanup(func() { limiter.Close() })
 
 	ctx := t.Context()
 	userID := "testuser"
@@ -101,9 +100,9 @@ func TestDualStrategy_FixedWindow1Quota_LeakyBucket_Postgres(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
-	defer limiter.Close()
+	t.Cleanup(func() { limiter.Close() })
 
-	ctx := context.Background()
+	ctx := t.Context()
 	userID := "testuser"
 
 	// Test basic functionality
@@ -136,9 +135,9 @@ func TestDualStrategy_FixedWindow1Quota_LeakyBucket_Redis(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
-	defer limiter.Close()
+	t.Cleanup(func() { limiter.Close() })
 
-	ctx := context.Background()
+	ctx := t.Context()
 	userID := "testuser"
 
 	// Test basic functionality
@@ -176,7 +175,7 @@ func TestDualStrategy_FixedWindow3Quota_TokenBucket_Memory(t *testing.T) {
 		)
 		require.NoError(t, err)
 		require.NotNil(t, limiter)
-		defer limiter.Close()
+		t.Cleanup(func() { limiter.Close() })
 
 		ctx := t.Context()
 		userID := "testuser"
@@ -245,9 +244,9 @@ func TestDualStrategy_FixedWindow3Quota_TokenBucket_Postgres(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
-	defer limiter.Close()
+	t.Cleanup(func() { limiter.Close() })
 
-	ctx := context.Background()
+	ctx := t.Context()
 	userID := "testuser"
 
 	// Test that all 3 quotas work
@@ -285,9 +284,9 @@ func TestDualStrategy_FixedWindow3Quota_TokenBucket_Redis(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
-	defer limiter.Close()
+	t.Cleanup(func() { limiter.Close() })
 
-	ctx := context.Background()
+	ctx := t.Context()
 	userID := "testuser"
 
 	// Test that all 3 quotas work
@@ -324,9 +323,9 @@ func TestDualStrategy_ConcurrentAccess_Memory(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
-	defer limiter.Close()
+	t.Cleanup(func() { limiter.Close() })
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Start multiple goroutines making requests concurrently
 	const numGoroutines = 20
@@ -409,9 +408,9 @@ func TestDualStrategy_ConcurrentAccess_Postgres(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
-	defer limiter.Close()
+	t.Cleanup(func() { limiter.Close() })
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test with fewer concurrent requests for Postgres to avoid overwhelming it
 	const numGoroutines = 10
@@ -480,9 +479,9 @@ func TestDualStrategy_ConcurrentAccess_Redis(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
-	defer limiter.Close()
+	t.Cleanup(func() { limiter.Close() })
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	const numGoroutines = 10
 	const requestsPerGoroutine = 3
@@ -549,9 +548,9 @@ func TestDualStrategy_PeekBehavior(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
-	defer limiter.Close()
+	t.Cleanup(func() { limiter.Close() })
 
-	ctx := context.Background()
+	ctx := t.Context()
 	userID := "testuser"
 
 	// Initial peek should show full capacity
@@ -605,9 +604,9 @@ func TestDualStrategy_ResetBehavior(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
-	defer limiter.Close()
+	t.Cleanup(func() { limiter.Close() })
 
-	ctx := context.Background()
+	ctx := t.Context()
 	userID := "testuser"
 
 	// Consume all quota
@@ -679,7 +678,7 @@ func TestDualStrategy_DifferentUsers(t *testing.T) {
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
-	defer limiter.Close()
+	t.Cleanup(func() { limiter.Close() })
 
 	ctx := t.Context()
 

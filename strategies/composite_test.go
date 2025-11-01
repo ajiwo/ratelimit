@@ -127,10 +127,10 @@ func TestCompositeStrategyFlows(t *testing.T) {
 	// Register mock strategies
 	Register(StrategyID(1), func(_ backends.Backend) Strategy { return pri })
 	Register(StrategyID(2), func(_ backends.Backend) Strategy { return sec })
-	defer func() {
+	t.Cleanup(func() {
 		// Clean up registry (in a real implementation, you'd have an Unregister function)
 		registeredStrategies = make(map[StrategyID]StrategyFactory)
-	}()
+	})
 
 	// Create configs with registered IDs
 	priConfig := compMockConfig{id: StrategyID(1), caps: CapPrimary}
@@ -143,13 +143,13 @@ func TestCompositeStrategyFlows(t *testing.T) {
 	cfg := CompositeConfig{BaseKey: "k", Primary: priConfig, Secondary: secConfig}
 
 	// GetResult aggregates results with prefixes
-	res, err := comp.Peek(context.Background(), cfg)
+	res, err := comp.Peek(t.Context(), cfg)
 	require.NoError(t, err, "GetResult error: %v", err)
 	require.Contains(t, res, "primary_p", "expected primary_p in results")
 	require.Contains(t, res, "secondary_s", "expected secondary_s in results")
 
 	// Allow path where both allow
-	_, err = comp.Allow(context.Background(), cfg)
+	_, err = comp.Allow(t.Context(), cfg)
 	require.NoError(t, err, "Allow error: %v", err)
 
 	// Test primary denial - create new composite with denying primary strategy
@@ -160,7 +160,7 @@ func TestCompositeStrategyFlows(t *testing.T) {
 	compDeny, err := NewComposite(storage, primDenyConfig, secConfig)
 	require.NoError(t, err, "Failed to create composite with denying primary")
 
-	res, err = compDeny.Allow(context.Background(), cfg)
+	res, err = compDeny.Allow(t.Context(), cfg)
 	require.NoError(t, err, "Allow error: %v", err)
 	require.Contains(t, res, "primary_p", "expected primary results present on denial")
 
@@ -172,7 +172,7 @@ func TestCompositeStrategyFlows(t *testing.T) {
 	compSecDeny, err := NewComposite(storage, priConfig, secDenyConfig)
 	require.NoError(t, err, "Failed to create composite with denying secondary")
 
-	res, err = compSecDeny.Allow(context.Background(), cfg)
+	res, err = compSecDeny.Allow(t.Context(), cfg)
 	require.NoError(t, err, "Allow error: %v", err)
 	require.Contains(t, res, "secondary_s", "expected secondary results present on denial")
 
@@ -184,7 +184,7 @@ func TestCompositeStrategyFlows(t *testing.T) {
 	compPriErr, err := NewComposite(storage, priErrConfig, secConfig)
 	require.NoError(t, err, "Failed to create composite with erroring primary")
 
-	_, err = compPriErr.Allow(context.Background(), cfg)
+	_, err = compPriErr.Allow(t.Context(), cfg)
 	require.Error(t, err, "expected primary get error")
 
 	// Test secondary error path
@@ -195,7 +195,7 @@ func TestCompositeStrategyFlows(t *testing.T) {
 	compSecErr, err := NewComposite(storage, priConfig, secErrConfig)
 	require.NoError(t, err, "Failed to create composite with erroring secondary")
 
-	_, err = compSecErr.Allow(context.Background(), cfg)
+	_, err = compSecErr.Allow(t.Context(), cfg)
 	require.Error(t, err, "expected secondary get error")
 
 	// Test reset error path
@@ -206,7 +206,7 @@ func TestCompositeStrategyFlows(t *testing.T) {
 	compResetErr, err := NewComposite(storage, priConfig, resetErrConfig)
 	require.NoError(t, err, "Failed to create composite with reset error")
 
-	err = compResetErr.Reset(context.Background(), cfg)
+	err = compResetErr.Reset(t.Context(), cfg)
 	require.Error(t, err, "expected reset error")
 }
 
@@ -276,9 +276,9 @@ func TestNewCompositeErrorScenarios(t *testing.T) {
 		// Register a valid primary strategy
 		priStrategy := &compMockStrategy{getRes: Results{"p": {Allowed: true}}}
 		Register(StrategyID(1), func(_ backends.Backend) Strategy { return priStrategy })
-		defer func() {
+		t.Cleanup(func() {
 			registeredStrategies = make(map[StrategyID]StrategyFactory)
-		}()
+		})
 
 		priConfig := compMockConfig{id: StrategyID(1), caps: CapPrimary}
 		secConfig := compMockConfig{id: StrategyID(201), caps: CapSecondary} // Unregistered ID
@@ -294,9 +294,9 @@ func TestNewCompositeErrorScenarios(t *testing.T) {
 		secStrategy := &compMockStrategy{getRes: Results{"s": {Allowed: true}}}
 		Register(StrategyID(1), func(_ backends.Backend) Strategy { return priStrategy })
 		Register(StrategyID(2), func(_ backends.Backend) Strategy { return secStrategy })
-		defer func() {
+		t.Cleanup(func() {
 			registeredStrategies = make(map[StrategyID]StrategyFactory)
-		}()
+		})
 
 		priConfig := compMockConfig{id: StrategyID(1), caps: CapPrimary}
 		secConfig := compMockConfig{id: StrategyID(2), caps: CapSecondary}

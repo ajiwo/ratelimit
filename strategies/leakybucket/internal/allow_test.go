@@ -66,7 +66,7 @@ func (m *mockConfig) MaxRetries() int {
 }
 
 func TestAllow(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	key := "test-key"
 	capacity := 10
 	leakRate := 1.0 // 1 request per second
