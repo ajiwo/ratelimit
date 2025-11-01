@@ -119,10 +119,9 @@ func TestValidateKey(t *testing.T) {
 				if tt.errorMsg != "" && !strings.Contains(err.Error(), tt.errorMsg) {
 					t.Errorf("ValidateKey() error message = %v, want to contain %v", err.Error(), tt.errorMsg)
 				}
-			} else {
-				if err != nil {
-					t.Errorf("ValidateKey() unexpected error = %v", err)
-				}
+			} else if err != nil {
+				t.Errorf("ValidateKey() unexpected error = %v", err)
+
 			}
 		})
 	}
@@ -193,10 +192,8 @@ func TestValidateQuotaName(t *testing.T) {
 				if tt.errorMsg != "" && !strings.Contains(err.Error(), tt.errorMsg) {
 					t.Errorf("ValidateQuotaName() error message = %v, want to contain %v", err.Error(), tt.errorMsg)
 				}
-			} else {
-				if err != nil {
-					t.Errorf("ValidateQuotaName() unexpected error = %v", err)
-				}
+			} else if err != nil {
+				t.Errorf("ValidateQuotaName() unexpected error = %v", err)
 			}
 		})
 	}
