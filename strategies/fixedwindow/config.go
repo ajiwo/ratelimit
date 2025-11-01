@@ -6,6 +6,7 @@ import (
 
 	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/ajiwo/ratelimit/strategies/fixedwindow/internal"
+	"github.com/ajiwo/ratelimit/utils"
 )
 
 type Quota = internal.Quota
@@ -31,6 +32,10 @@ func (c Config) Validate() error {
 		return ErrNoQuotas
 	}
 	for name, quota := range c.Quotas {
+		// Validate quota name
+		if err := utils.ValidateQuotaName(name); err != nil {
+			return err
+		}
 		if quota.Limit <= 0 {
 			return NewInvalidQuotaLimitError(name, quota.Limit)
 		}

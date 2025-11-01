@@ -5,50 +5,20 @@ import (
 
 	"github.com/ajiwo/ratelimit/backends"
 	"github.com/ajiwo/ratelimit/strategies"
+	"github.com/ajiwo/ratelimit/utils"
 )
-
-// allowedCharsArray is a precomputed boolean array for O(1) character validation
-var allowedCharsArray [128]bool
-
-func init() {
-	// Initialize all characters as not allowed
-	for i := range 128 {
-		allowedCharsArray[i] = false
-	}
-
-	// Set allowed characters to true
-	for _, c := range "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-:.@" {
-		allowedCharsArray[c] = true
-	}
-}
 
 // validateKey validates that a key meets the requirements:
 // - Maximum 64 bytes length
 // - Contains only alphanumeric ASCII characters, underscore (_), hyphen (-), and colon (:)
 func validateKey(key, keyType string) error {
-	if len(key) == 0 {
-		return fmt.Errorf("%s cannot be empty", keyType)
+	opts := utils.ValidationOptions{
+		FieldName:    keyType,
+		MaxLength:    64,
+		MinLength:    1,
+		EmptyAllowed: false,
 	}
-
-	if len(key) > 64 {
-		return fmt.Errorf("%s cannot exceed 64 bytes, got %d bytes", keyType, len(key))
-	}
-
-	const hint = "Only alphanumeric ASCII, underscore (_), hyphen (-), colon (:), period (.), and at (@) are allowed"
-
-	for i, r := range key {
-		// Check if character is within ASCII range
-		if r >= 128 {
-			return fmt.Errorf("%s contains invalid character '%c' at position %d. %s", keyType, r, i, hint)
-		}
-
-		// Check if character is allowed
-		if !allowedCharsArray[r] {
-			return fmt.Errorf("%s contains invalid character '%c' at position %d. %s", keyType, r, i, hint)
-		}
-	}
-
-	return nil
+	return utils.ValidateString(key, opts)
 }
 
 // Config defines the configuration for single or dual strategy rate limiting
