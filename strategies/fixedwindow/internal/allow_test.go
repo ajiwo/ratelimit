@@ -78,7 +78,6 @@ func TestAllow(t *testing.T) {
 			config.On("GetKey").Return(key)
 			config.On("GetQuotas").Return(quotas)
 			config.On("MaxRetries").Return(maxRetries)
-			config.On("MaxRetries").Return(maxRetries)
 			storage.On("Get", ctx, "test-key:default").Return("", nil)
 
 			results, err := Allow(ctx, storage, config, ReadOnly)
@@ -178,7 +177,6 @@ func TestAllow(t *testing.T) {
 			config.On("GetKey").Return(key)
 			config.On("GetQuotas").Return(quotas)
 			config.On("MaxRetries").Return(maxRetries)
-			config.On("MaxRetries").Return(maxRetries)
 			storage.On("Get", ctx, "test-key:default").Return("", nil)
 			storage.On("CheckAndSet", ctx, "test-key:default", "", mock.AnythingOfType("string"), quota.Window).Return(true, nil)
 
@@ -205,7 +203,6 @@ func TestAllow(t *testing.T) {
 			config.On("GetKey").Return(key)
 			config.On("GetQuotas").Return(quotas)
 			config.On("MaxRetries").Return(maxRetries)
-			config.On("MaxRetries").Return(maxRetries)
 			storage.On("Get", ctx, "test-key:default").Return(encodedState, nil)
 			storage.On("CheckAndSet", ctx, "test-key:default", encodedState, mock.AnythingOfType("string"), quota.Window).Return(true, nil)
 
@@ -231,7 +228,6 @@ func TestAllow(t *testing.T) {
 			config.On("GetKey").Return(key)
 			config.On("GetQuotas").Return(quotas)
 			config.On("MaxRetries").Return(maxRetries)
-			config.On("MaxRetries").Return(maxRetries)
 			storage.On("Get", ctx, "test-key:default").Return(encodedState, nil)
 
 			results, err := Allow(ctx, storage, config, TryUpdate)
@@ -250,7 +246,6 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetQuotas").Return(quotas)
-			config.On("MaxRetries").Return(maxRetries)
 			config.On("MaxRetries").Return(maxRetries)
 
 			// First Get returns empty
@@ -281,7 +276,6 @@ func TestAllow(t *testing.T) {
 			config.On("GetKey").Return(key)
 			config.On("GetQuotas").Return(quotas)
 			config.On("MaxRetries").Return(maxRetries)
-			config.On("MaxRetries").Return(maxRetries)
 
 			storage.On("Get", ctx, "test-key:default").Return("", nil)
 			storage.On("CheckAndSet", ctx, "test-key:default", "", mock.AnythingOfType("string"), quota.Window).Return(false, nil)
@@ -299,7 +293,6 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetQuotas").Return(quotas)
-			config.On("MaxRetries").Return(maxRetries)
 			config.On("MaxRetries").Return(maxRetries)
 
 			_, err := Allow(canceledCtx, storage, config, TryUpdate)
@@ -320,7 +313,6 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetQuotas").Return(multiQuotas)
-			config.On("MaxRetries").Return(maxRetries)
 			config.On("MaxRetries").Return(maxRetries)
 
 			// Setup storage responses for both quotas
@@ -354,7 +346,6 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetQuotas").Return(multiQuotas)
-			config.On("MaxRetries").Return(maxRetries)
 			config.On("MaxRetries").Return(maxRetries)
 
 			// Setup storage responses
