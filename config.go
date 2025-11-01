@@ -12,13 +12,7 @@ import (
 // - Maximum 64 bytes length
 // - Contains only alphanumeric ASCII characters, underscore (_), hyphen (-), and colon (:)
 func validateKey(key, keyType string) error {
-	opts := utils.ValidationOptions{
-		FieldName:    keyType,
-		MaxLength:    64,
-		MinLength:    1,
-		EmptyAllowed: false,
-	}
-	return utils.ValidateString(key, opts)
+	return utils.ValidateKey(key, keyType)
 }
 
 // Config defines the configuration for single or dual strategy rate limiting
