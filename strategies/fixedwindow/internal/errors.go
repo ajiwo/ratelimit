@@ -11,16 +11,16 @@ var (
 )
 
 // State operation error functions
-func NewStateRetrievalError(quotaName string, err error) error {
-	return fmt.Errorf("failed to get fixed window state for quota '%s': %w", quotaName, err)
+func NewStateRetrievalError(err error) error {
+	return fmt.Errorf("failed to get fixed window state: %w", err)
 }
 
-func NewStateParsingError(quotaName string) error {
-	return fmt.Errorf("failed to parse fixed window state for quota '%s': invalid encoding", quotaName)
+func NewStateParsingError() error {
+	return fmt.Errorf("failed to parse fixed window state: invalid encoding")
 }
 
-func NewStateUpdateError(quotaName string, attempts int) error {
-	return fmt.Errorf("failed to update fixed window state for quota '%s' after %d attempts due to concurrent access", quotaName, attempts)
+func NewStateUpdateError(attempts int) error {
+	return fmt.Errorf("failed to update fixed window state after %d attempts due to concurrent access", attempts)
 }
 
 func NewContextCanceledError(err error) error {

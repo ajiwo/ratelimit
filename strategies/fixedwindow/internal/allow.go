@@ -80,7 +80,7 @@ func (p *parameter) allowReadOnly(ctx context.Context) (map[string]Result, error
 	// Get current combined state
 	data, err := p.storage.Get(ctx, combinedKey)
 	if err != nil {
-		return nil, NewStateRetrievalError("combined", err)
+		return nil, NewStateRetrievalError(err)
 	}
 
 	var quotaStates map[string]FixedWindow
@@ -97,7 +97,7 @@ func (p *parameter) allowReadOnly(ctx context.Context) (map[string]Result, error
 		if states, ok := decodeState(data); ok {
 			quotaStates = states
 		} else {
-			return nil, NewStateParsingError("combined")
+			return nil, NewStateParsingError()
 		}
 	}
 
@@ -188,7 +188,7 @@ func (p *parameter) allowTryAndUpdate(ctx context.Context) (map[string]Result, e
 			time.Sleep((19 * time.Nanosecond) << attempt)
 			continue
 		}
-		return nil, NewStateUpdateError("combined", p.maxRetries)
+		return nil, NewStateUpdateError(p.maxRetries)
 	}
 
 	return nil, ErrConcurrentAccess
@@ -198,7 +198,7 @@ func (p *parameter) allowTryAndUpdate(ctx context.Context) (map[string]Result, e
 func (p *parameter) getAndParseState(ctx context.Context) (map[string]FixedWindow, string, error) {
 	data, err := p.storage.Get(ctx, p.key)
 	if err != nil {
-		return nil, "", NewStateRetrievalError("combined", err)
+		return nil, "", NewStateRetrievalError(err)
 	}
 
 	var quotaStates map[string]FixedWindow
@@ -217,7 +217,7 @@ func (p *parameter) getAndParseState(ctx context.Context) (map[string]FixedWindo
 		if states, ok := decodeState(data); ok {
 			quotaStates = states
 		} else {
-			return nil, "", NewStateParsingError("combined")
+			return nil, "", NewStateParsingError()
 		}
 		oldValue = data
 	}

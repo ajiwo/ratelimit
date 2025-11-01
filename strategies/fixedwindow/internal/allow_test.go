@@ -287,7 +287,7 @@ func TestAllow(t *testing.T) {
 
 			_, err := Allow(ctx, storage, config, TryUpdate)
 			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "failed to update fixed window state for quota 'combined' after 3 attempts due to concurrent access")
+			assert.Contains(t, err.Error(), "failed to update fixed window state after 3 attempts due to concurrent access")
 		})
 
 		t.Run("context canceled", func(t *testing.T) {
