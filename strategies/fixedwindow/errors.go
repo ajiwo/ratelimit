@@ -9,6 +9,7 @@ var (
 	// Configuration errors
 	ErrInvalidConfig      = errors.New("fixed window strategy requires fixedwindow.Config")
 	ErrNoQuotas           = errors.New("fixed window must have at least one quota")
+	ErrTooManyQuotas      = errors.New("fixed window maximum of 8 quotas per key exceeded")
 	ErrDuplicateRateRatio = errors.New("duplicate rate ratio found")
 )
 

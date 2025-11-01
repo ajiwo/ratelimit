@@ -61,7 +61,7 @@ func (m *mockConfig) MaxRetries() int {
 }
 
 func TestAllow(t *testing.T) {
-	ctx := context.Background()
+	ctx := t.Context()
 	key := "test-key"
 	quota := Quota{
 		Limit:  10,
@@ -78,7 +78,7 @@ func TestAllow(t *testing.T) {
 			config.On("GetKey").Return(key)
 			config.On("GetQuotas").Return(quotas)
 			config.On("MaxRetries").Return(maxRetries)
-			storage.On("Get", ctx, "test-key:default").Return("", nil)
+			storage.On("Get", ctx, "test-key").Return("", nil)
 
 			results, err := Allow(ctx, storage, config, ReadOnly)
 			assert.NoError(t, err)
@@ -98,12 +98,13 @@ func TestAllow(t *testing.T) {
 				Count: 5,
 				Start: time.Now().Add(-30 * time.Second),
 			}
-			encodedState := encodeState(window)
+			quotaStates := map[string]FixedWindow{"default": window}
+			encodedState := encodeState(quotaStates)
 
 			config.On("GetKey").Return(key)
 			config.On("GetQuotas").Return(quotas)
 			config.On("MaxRetries").Return(maxRetries)
-			storage.On("Get", ctx, "test-key:default").Return(encodedState, nil)
+			storage.On("Get", ctx, "test-key").Return(encodedState, nil)
 
 			results, err := Allow(ctx, storage, config, ReadOnly)
 			assert.NoError(t, err)
@@ -123,12 +124,13 @@ func TestAllow(t *testing.T) {
 				Count: 5,
 				Start: time.Now().Add(-2 * time.Minute), // Expired
 			}
-			encodedState := encodeState(window)
+			quotaStates := map[string]FixedWindow{"default": window}
+			encodedState := encodeState(quotaStates)
 
 			config.On("GetKey").Return(key)
 			config.On("GetQuotas").Return(quotas)
 			config.On("MaxRetries").Return(maxRetries)
-			storage.On("Get", ctx, "test-key:default").Return(encodedState, nil)
+			storage.On("Get", ctx, "test-key").Return(encodedState, nil)
 
 			results, err := Allow(ctx, storage, config, ReadOnly)
 			assert.NoError(t, err)
@@ -147,7 +149,7 @@ func TestAllow(t *testing.T) {
 			config.On("GetKey").Return(key)
 			config.On("GetQuotas").Return(quotas)
 			config.On("MaxRetries").Return(maxRetries)
-			storage.On("Get", ctx, "test-key:default").Return("", errors.New("storage error"))
+			storage.On("Get", ctx, "test-key").Return("", errors.New("storage error"))
 
 			_, err := Allow(ctx, storage, config, ReadOnly)
 			assert.Error(t, err)
@@ -161,7 +163,7 @@ func TestAllow(t *testing.T) {
 			config.On("GetKey").Return(key)
 			config.On("GetQuotas").Return(quotas)
 			config.On("MaxRetries").Return(maxRetries)
-			storage.On("Get", ctx, "test-key:default").Return("invalid-state", nil)
+			storage.On("Get", ctx, "test-key").Return("invalid-state", nil)
 
 			_, err := Allow(ctx, storage, config, ReadOnly)
 			assert.Error(t, err)
@@ -177,8 +179,8 @@ func TestAllow(t *testing.T) {
 			config.On("GetKey").Return(key)
 			config.On("GetQuotas").Return(quotas)
 			config.On("MaxRetries").Return(maxRetries)
-			storage.On("Get", ctx, "test-key:default").Return("", nil)
-			storage.On("CheckAndSet", ctx, "test-key:default", "", mock.AnythingOfType("string"), quota.Window).Return(true, nil)
+			storage.On("Get", ctx, "test-key").Return("", nil)
+			storage.On("CheckAndSet", ctx, "test-key", "", mock.AnythingOfType("string"), mock.AnythingOfType("time.Duration")).Return(true, nil)
 
 			results, err := Allow(ctx, storage, config, TryUpdate)
 			assert.NoError(t, err)
@@ -198,13 +200,14 @@ func TestAllow(t *testing.T) {
 				Count: 5,
 				Start: time.Now().Add(-30 * time.Second),
 			}
-			encodedState := encodeState(window)
+			quotaStates := map[string]FixedWindow{"default": window}
+			encodedState := encodeState(quotaStates)
 
 			config.On("GetKey").Return(key)
 			config.On("GetQuotas").Return(quotas)
 			config.On("MaxRetries").Return(maxRetries)
-			storage.On("Get", ctx, "test-key:default").Return(encodedState, nil)
-			storage.On("CheckAndSet", ctx, "test-key:default", encodedState, mock.AnythingOfType("string"), quota.Window).Return(true, nil)
+			storage.On("Get", ctx, "test-key").Return(encodedState, nil)
+			storage.On("CheckAndSet", ctx, "test-key", encodedState, mock.AnythingOfType("string"), mock.AnythingOfType("time.Duration")).Return(true, nil)
 
 			results, err := Allow(ctx, storage, config, TryUpdate)
 			assert.NoError(t, err)
@@ -223,12 +226,13 @@ func TestAllow(t *testing.T) {
 				Count: quota.Limit, // At limit
 				Start: time.Now().Add(-30 * time.Second),
 			}
-			encodedState := encodeState(window)
+			quotaStates := map[string]FixedWindow{"default": window}
+			encodedState := encodeState(quotaStates)
 
 			config.On("GetKey").Return(key)
 			config.On("GetQuotas").Return(quotas)
 			config.On("MaxRetries").Return(maxRetries)
-			storage.On("Get", ctx, "test-key:default").Return(encodedState, nil)
+			storage.On("Get", ctx, "test-key").Return(encodedState, nil)
 
 			results, err := Allow(ctx, storage, config, TryUpdate)
 			assert.NoError(t, err)
@@ -249,16 +253,17 @@ func TestAllow(t *testing.T) {
 			config.On("MaxRetries").Return(maxRetries)
 
 			// First Get returns empty
-			storage.On("Get", ctx, "test-key:default").Return("", nil).Once()
+			storage.On("Get", ctx, "test-key").Return("", nil).Once()
 			// First CheckAndSet fails for empty oldValue
-			storage.On("CheckAndSet", ctx, "test-key:default", "", mock.AnythingOfType("string"), quota.Window).Return(false, nil).Once()
+			storage.On("CheckAndSet", ctx, "test-key", "", mock.AnythingOfType("string"), mock.AnythingOfType("time.Duration")).Return(false, nil).Once()
 
 			// Second Get returns some state
 			window := FixedWindow{Count: 5, Start: time.Now().Add(-30 * time.Second)}
-			encodedState := encodeState(window)
-			storage.On("Get", ctx, "test-key:default").Return(encodedState, nil).Once()
+			quotaStates := map[string]FixedWindow{"default": window}
+			encodedState := encodeState(quotaStates)
+			storage.On("Get", ctx, "test-key").Return(encodedState, nil).Once()
 			// Second CheckAndSet succeeds
-			storage.On("CheckAndSet", ctx, "test-key:default", encodedState, mock.AnythingOfType("string"), quota.Window).Return(true, nil).Once()
+			storage.On("CheckAndSet", ctx, "test-key", encodedState, mock.AnythingOfType("string"), mock.AnythingOfType("time.Duration")).Return(true, nil).Once()
 
 			results, err := Allow(ctx, storage, config, TryUpdate)
 			assert.NoError(t, err)
@@ -277,12 +282,12 @@ func TestAllow(t *testing.T) {
 			config.On("GetQuotas").Return(quotas)
 			config.On("MaxRetries").Return(maxRetries)
 
-			storage.On("Get", ctx, "test-key:default").Return("", nil)
-			storage.On("CheckAndSet", ctx, "test-key:default", "", mock.AnythingOfType("string"), quota.Window).Return(false, nil)
+			storage.On("Get", ctx, "test-key").Return("", nil)
+			storage.On("CheckAndSet", ctx, "test-key", "", mock.AnythingOfType("string"), mock.AnythingOfType("time.Duration")).Return(false, nil)
 
 			_, err := Allow(ctx, storage, config, TryUpdate)
 			assert.Error(t, err)
-			assert.Contains(t, err.Error(), "failed to update fixed window state for quota 'default' after 3 attempts due to concurrent access")
+			assert.Contains(t, err.Error(), "failed to update fixed window state for quota 'combined' after 3 attempts due to concurrent access")
 		})
 
 		t.Run("context canceled", func(t *testing.T) {
@@ -315,11 +320,9 @@ func TestAllow(t *testing.T) {
 			config.On("GetQuotas").Return(multiQuotas)
 			config.On("MaxRetries").Return(maxRetries)
 
-			// Setup storage responses for both quotas
-			storage.On("Get", ctx, "test-key:requests").Return("", nil)
-			storage.On("Get", ctx, "test-key:writes").Return("", nil)
-			storage.On("CheckAndSet", ctx, "test-key:requests", "", mock.AnythingOfType("string"), multiQuotas["requests"].Window).Return(true, nil)
-			storage.On("CheckAndSet", ctx, "test-key:writes", "", mock.AnythingOfType("string"), multiQuotas["writes"].Window).Return(true, nil)
+			// Setup storage responses for combined state
+			storage.On("Get", ctx, "test-key").Return("", nil)
+			storage.On("CheckAndSet", ctx, "test-key", "", mock.AnythingOfType("string"), multiQuotas["requests"].Window).Return(true, nil)
 
 			results, err := Allow(ctx, storage, config, TryUpdate)
 			assert.NoError(t, err)
@@ -340,17 +343,19 @@ func TestAllow(t *testing.T) {
 				"writes":   {Limit: 1, Window: time.Minute}, // Will be at limit
 			}
 
-			// Setup full window for writes
-			fullWindow := FixedWindow{Count: 1, Start: time.Now().Add(-30 * time.Second)}
-			fullWindowState := encodeState(fullWindow)
+			// Setup combined state with writes at limit
+			combinedState := map[string]FixedWindow{
+				"requests": {Count: 0, Start: time.Now().Add(-30 * time.Second)}, // Not at limit
+				"writes":   {Count: 1, Start: time.Now().Add(-30 * time.Second)}, // At limit (denied)
+			}
+			fullWindowState := encodeState(combinedState)
 
 			config.On("GetKey").Return(key)
 			config.On("GetQuotas").Return(multiQuotas)
 			config.On("MaxRetries").Return(maxRetries)
 
-			// Setup storage responses
-			storage.On("Get", ctx, "test-key:requests").Return("", nil)
-			storage.On("Get", ctx, "test-key:writes").Return(fullWindowState, nil)
+			// Setup storage response for combined state
+			storage.On("Get", ctx, "test-key").Return(fullWindowState, nil)
 
 			results, err := Allow(ctx, storage, config, TryUpdate)
 			assert.NoError(t, err)

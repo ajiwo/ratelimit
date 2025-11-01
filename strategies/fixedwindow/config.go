@@ -31,6 +31,12 @@ func (c Config) Validate() error {
 	if len(c.Quotas) == 0 {
 		return ErrNoQuotas
 	}
+
+	// Validate maximum of 8 quotas per key
+	if len(c.Quotas) > internal.MaxQuota {
+		return ErrTooManyQuotas
+	}
+
 	for name, quota := range c.Quotas {
 		// Validate quota name
 		if err := utils.ValidateQuotaName(name); err != nil {

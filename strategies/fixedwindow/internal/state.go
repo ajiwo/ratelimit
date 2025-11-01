@@ -1,10 +1,11 @@
 package internal
 
 import (
+	"maps"
+	"slices"
 	"strconv"
 	"time"
 
-	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/ajiwo/ratelimit/utils/builderpool"
 )
 
@@ -14,83 +15,172 @@ type FixedWindow struct {
 	Start time.Time `json:"start"` // Window start time
 }
 
-// quotaState represents the state of a single quota during processing
-type quotaState struct {
-	name     string
-	quota    Quota
-	key      string
-	window   FixedWindow
-	oldValue string
-	allowed  bool
-}
+// encodeState serializes multiple quotas into a combined ASCII format:
+// v2|N|quotaName1|count1|startUnixNano1|...|quotaNameN|countN|startUnixNanoN
+func encodeState(quotaStates map[string]FixedWindow) string {
+	if len(quotaStates) == 0 {
+		return ""
+	}
 
-// buildQuotaKey builds a quota-specific key
-func buildQuotaKey(baseKey, quotaName string) string {
-	sb := builderpool.Get()
-	defer func() {
-		builderpool.Put(sb)
-	}()
-	sb.WriteString(baseKey)
-	sb.WriteByte(':')
-	sb.WriteString(quotaName)
-	return sb.String()
-}
+	// Get quota names in deterministic order (lexical ascending)
+	quotaNames := slices.Sorted(maps.Keys(quotaStates))
 
-// encodeState serializes FixedWindow into a compact ASCII format:
-// v2|count|start_unix_nano
-func encodeState(w FixedWindow) string {
 	sb := builderpool.Get()
 	defer func() {
 		builderpool.Put(sb)
 	}()
 
 	sb.WriteString("v2|")
-	sb.WriteString(strconv.Itoa(w.Count))
-	sb.WriteByte('|')
-	sb.WriteString(strconv.FormatInt(w.Start.UnixNano(), 10))
+	sb.WriteString(strconv.Itoa(len(quotaNames)))
+
+	for _, name := range quotaNames {
+		window := quotaStates[name]
+		sb.WriteByte('|')
+		sb.WriteString(name)
+		sb.WriteByte('|')
+		sb.WriteString(strconv.Itoa(window.Count))
+		sb.WriteByte('|')
+		sb.WriteString(strconv.FormatInt(window.Start.UnixNano(), 10))
+	}
+
 	return sb.String()
 }
 
-// decodeState deserializes from compact format; returns ok=false if not compact.
-func decodeState(s string) (FixedWindow, bool) {
-	if !strategies.CheckV2Header(s) {
-		return FixedWindow{}, false
+// findPipeSeparator finds the next pipe separator in data and returns its position
+func findPipeSeparator(data string) (int, bool) {
+	pos := 0
+	for pos < len(data) && data[pos] != '|' {
+		pos++
+	}
+	return pos, pos < len(data)
+}
+
+// parseQuotaCount parses the quota count from the beginning of data
+func parseQuotaCount(data string) (int, string, bool) {
+	pos, found := findPipeSeparator(data)
+	if !found {
+		return 0, "", false
+	}
+
+	n, err := strconv.Atoi(data[:pos])
+	if err != nil || n <= 0 || n > MaxQuota {
+		return 0, "", false
+	}
+
+	return n, data[pos+1:], true
+}
+
+// parseQuotaField parses a single field (name or count) and returns the value and remaining data
+func parseQuotaField(data string) (string, string, bool) {
+	pos, found := findPipeSeparator(data)
+	if !found {
+		return "", "", false
+	}
+
+	return data[:pos], data[pos+1:], true
+}
+
+// parseStartTime parses the start time field for a quota
+func parseStartTime(data string, isLastQuota bool) (int64, string, bool) {
+	if isLastQuota {
+		startNS, err := strconv.ParseInt(data, 10, 64)
+		if err != nil {
+			return 0, "", false
+		}
+		return startNS, "", true
+	}
+
+	pos, found := findPipeSeparator(data)
+	if !found {
+		return 0, "", false
+	}
+
+	startNS, err := strconv.ParseInt(data[:pos], 10, 64)
+	if err != nil {
+		return 0, "", false
+	}
+
+	return startNS, data[pos+1:], true
+}
+
+func decodeState(s string) (map[string]FixedWindow, bool) {
+	if len(s) < 3 || s[:3] != "v2|" {
+		return nil, false
 	}
 
 	data := s[3:] // Skip "v2|"
 
-	count, startNS, ok := parseStateFields(data)
+	// Parse number of quotas
+	n, data, ok := parseQuotaCount(data)
 	if !ok {
-		return FixedWindow{}, false
+		return nil, false
 	}
 
-	return FixedWindow{
-		Count: count,
-		Start: time.Unix(0, startNS),
-	}, true
+	result := make(map[string]FixedWindow, n)
+
+	// Parse each quota
+	for i := range n {
+		if len(data) == 0 {
+			return nil, false
+		}
+
+		// Parse quota name
+		name, remainingData, ok := parseQuotaField(data)
+		if !ok {
+			return nil, false
+		}
+
+		// Parse count
+		countStr, remainingData, ok := parseQuotaField(remainingData)
+		if !ok {
+			return nil, false
+		}
+
+		count, err := strconv.Atoi(countStr)
+		if err != nil || count < 0 {
+			return nil, false
+		}
+
+		// Parse start time
+		isLastQuota := i == n-1
+		startNS, remainingData, ok := parseStartTime(remainingData, isLastQuota)
+		if !ok {
+			return nil, false
+		}
+
+		result[name] = FixedWindow{
+			Count: count,
+			Start: time.Unix(0, startNS),
+		}
+		data = remainingData
+	}
+
+	return result, true
 }
 
-// parseStateFields parses the fields from a fixed window string representation
-func parseStateFields(data string) (int, int64, bool) {
-	// Parse count (first field)
-	pos1 := 0
-	for pos1 < len(data) && data[pos1] != '|' {
-		pos1++
-	}
-	if pos1 == len(data) {
-		return 0, 0, false
+// computeMaxResetTTL calculates the TTL as the maximum reset time across all quotas minus now
+// with a minimum of 1 second (non-configurable)
+func computeMaxResetTTL(quotaStates map[string]FixedWindow, quotas map[string]Quota, now time.Time) time.Duration {
+	var maxReset time.Time
+
+	// Find the latest reset time across all quotas
+	for name, window := range quotaStates {
+		if quota, exists := quotas[name]; exists {
+			resetTime := window.Start.Add(quota.Window)
+			if resetTime.After(maxReset) {
+				maxReset = resetTime
+			}
+		}
 	}
 
-	count, err1 := strconv.Atoi(data[:pos1])
-	if err1 != nil {
-		return 0, 0, false
+	if maxReset.IsZero() {
+		return 1 * time.Second // Default minimum
 	}
 
-	// Parse start time (second field)
-	startNS, err2 := strconv.ParseInt(data[pos1+1:], 10, 64)
-	if err2 != nil {
-		return 0, 0, false
+	ttl := maxReset.Sub(now)
+	if ttl < 1*time.Second {
+		return 1 * time.Second
 	}
 
-	return count, startNS, true
+	return ttl
 }

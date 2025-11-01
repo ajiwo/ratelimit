@@ -97,6 +97,24 @@ func TestConfig_Validate(t *testing.T) {
 			expectError: true,
 		},
 		{
+			name: "More than 8 quotas",
+			config: Config{
+				Key: "too_many_quotas",
+				Quotas: map[string]Quota{
+					"q1": {Limit: 1, Window: time.Second},
+					"q2": {Limit: 2, Window: time.Second},
+					"q3": {Limit: 3, Window: time.Second},
+					"q4": {Limit: 4, Window: time.Second},
+					"q5": {Limit: 5, Window: time.Second},
+					"q6": {Limit: 6, Window: time.Second},
+					"q7": {Limit: 7, Window: time.Second},
+					"q8": {Limit: 8, Window: time.Second},
+					"q9": {Limit: 9, Window: time.Second}, // 9th quota - should fail
+				},
+			},
+			expectError: true,
+		},
+		{
 			name: "Empty key",
 			config: Config{
 				Key: "",

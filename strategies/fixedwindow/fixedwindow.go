@@ -6,7 +6,6 @@ import (
 	"github.com/ajiwo/ratelimit/backends"
 	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/ajiwo/ratelimit/strategies/fixedwindow/internal"
-	"github.com/ajiwo/ratelimit/utils/builderpool"
 )
 
 // Strategy implements the fixed window rate limiting algorithm
@@ -61,15 +60,7 @@ func (f *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) 
 		return ErrInvalidConfig
 	}
 
-	// Delete all quota keys from storage
-	var lastErr error
-	for quotaName := range fixedConfig.Quotas {
-		quotaKey := buildQuotaKey(fixedConfig.Key, quotaName)
-		if err := f.storage.Delete(ctx, quotaKey); err != nil {
-			lastErr = err
-		}
-	}
-	return lastErr
+	return internal.Reset(ctx, fixedConfig, f.storage)
 }
 
 // convertResults converts internal.Result map to strategies.Result map
@@ -83,16 +74,4 @@ func convertResults(internalResults map[string]internal.Result) strategies.Resul
 		}
 	}
 	return results
-}
-
-// buildQuotaKey builds a quota-specific key
-func buildQuotaKey(baseKey, quotaName string) string {
-	sb := builderpool.Get()
-	defer func() {
-		builderpool.Put(sb)
-	}()
-	sb.WriteString(baseKey)
-	sb.WriteByte(':')
-	sb.WriteString(quotaName)
-	return sb.String()
 }
