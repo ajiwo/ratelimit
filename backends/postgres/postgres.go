@@ -128,10 +128,26 @@ func (p *Backend) Close() error {
 	return nil
 }
 
-// CheckAndSet atomically sets key to newValue only if current value matches oldValue
-// Returns true if the set was successful, false if value didn't match or key expired
-// Empty oldValue means "only set if key doesn't exist"
-func (p *Backend) CheckAndSet(ctx context.Context, key string, oldValue, newValue string, expiration time.Duration) (bool, error) {
+// CheckAndSet atomically sets key to newValue only if current value matches oldValue.
+// This operation provides compare-and-swap semantics for implementing optimistic locking.
+//
+// Parameters:
+//   - ctx: Context for cancellation and timeouts
+//   - key: The storage key to operate on
+//   - oldValue: Expected current value. Use empty string "" for "set if not exists" semantics
+//   - newValue: New value to set if the current value matches oldValue
+//   - expiration: Time-to-live for the key. Use 0 for no expiration
+//
+// Returns:
+//   - bool: true if the operation succeeded (value was set), false otherwise
+//   - error: Any storage-related error (not including failed comparison)
+//
+// Behavior:
+//   - If oldValue is "", the operation succeeds only if the key doesn't exist
+//   - If oldValue matches the current value, the key is updated to newValue
+//   - Expired keys are treated as non-existent for comparison purposes
+//   - All values are stored and compared as strings
+func (p *Backend) CheckAndSet(ctx context.Context, key, oldValue, newValue string, expiration time.Duration) (bool, error) {
 	var expiresAt *time.Time
 	if expiration > 0 {
 		t := time.Now().Add(expiration)

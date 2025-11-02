@@ -322,7 +322,12 @@ func TestAllow(t *testing.T) {
 
 			// Setup storage responses for combined state
 			storage.On("Get", ctx, "test-key").Return("", nil)
-			storage.On("CheckAndSet", ctx, "test-key", "", mock.AnythingOfType("string"), multiQuotas["requests"].Window).Return(true, nil)
+			storage.On("CheckAndSet", ctx, "test-key",
+				"",                                   // oldVal
+				mock.AnythingOfType("string"),        // newVal
+				mock.AnythingOfType("time.Duration"), // expiration
+			).
+				Return(true, nil)
 
 			results, err := Allow(ctx, storage, config, TryUpdate)
 			assert.NoError(t, err)
@@ -356,6 +361,13 @@ func TestAllow(t *testing.T) {
 
 			// Setup storage response for combined state
 			storage.On("Get", ctx, "test-key").Return(fullWindowState, nil)
+			// Set up CheckAndSet expectations - when one quota denies, others should not be updated
+			storage.On("CheckAndSet", ctx, "test-key",
+				mock.AnythingOfType("string"),        // oldVal
+				mock.AnythingOfType("string"),        // newVal
+				mock.AnythingOfType("time.Duration"), // expiration
+			).
+				Return(true, nil)
 
 			results, err := Allow(ctx, storage, config, TryUpdate)
 			assert.NoError(t, err)
