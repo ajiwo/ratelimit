@@ -84,9 +84,6 @@ func TestFixedWindow_ConcurrentAccessMemory(t *testing.T) {
 	assert.Equal(t, 5, allowedCount, "Exactly 5 requests should be allowed")
 	assert.Equal(t, 15, deniedCount, "Exactly 15 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestFixedWindow_ConcurrentAccessPostgres(t *testing.T) {
@@ -153,9 +150,6 @@ func TestFixedWindow_ConcurrentAccessPostgres(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestFixedWindow_ConcurrentAccessRedis(t *testing.T) {
@@ -222,9 +216,6 @@ func TestFixedWindow_ConcurrentAccessRedis(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestLeakyBucket_ConcurrentAccessMemory(t *testing.T) {
@@ -283,9 +274,6 @@ func TestLeakyBucket_ConcurrentAccessMemory(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestLeakyBucket_ConcurrentAccessPostgres(t *testing.T) {
@@ -344,9 +332,6 @@ func TestLeakyBucket_ConcurrentAccessPostgres(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestLeakyBucket_ConcurrentAccessRedis(t *testing.T) {
@@ -405,9 +390,6 @@ func TestLeakyBucket_ConcurrentAccessRedis(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestTokenBucket_ConcurrentAccessMemory(t *testing.T) {
@@ -466,9 +448,6 @@ func TestTokenBucket_ConcurrentAccessMemory(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestTokenBucket_ConcurrentAccessPostgres(t *testing.T) {
@@ -527,9 +506,6 @@ func TestTokenBucket_ConcurrentAccessPostgres(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestTokenBucket_ConcurrentAccessRedis(t *testing.T) {
@@ -588,9 +564,6 @@ func TestTokenBucket_ConcurrentAccessRedis(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestFixedWindow_ConcurrentAccessMemoryWithResult(t *testing.T) {
@@ -658,9 +631,6 @@ func TestFixedWindow_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestFixedWindow_ConcurrentAccessPostgresWithResult(t *testing.T) {
@@ -728,9 +698,6 @@ func TestFixedWindow_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestFixedWindow_ConcurrentAccessRedisWithResult(t *testing.T) {
@@ -798,9 +765,6 @@ func TestFixedWindow_ConcurrentAccessRedisWithResult(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestLeakyBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
@@ -860,9 +824,6 @@ func TestLeakyBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestLeakyBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
@@ -922,9 +883,6 @@ func TestLeakyBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestLeakyBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
@@ -984,9 +942,6 @@ func TestLeakyBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestTokenBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
@@ -1046,9 +1001,6 @@ func TestTokenBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestTokenBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
@@ -1108,9 +1060,6 @@ func TestTokenBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestTokenBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
@@ -1170,9 +1119,6 @@ func TestTokenBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestGCRA_ConcurrentAccessMemory(t *testing.T) {
@@ -1231,9 +1177,6 @@ func TestGCRA_ConcurrentAccessMemory(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestGCRA_ConcurrentAccessPostgres(t *testing.T) {
@@ -1292,9 +1235,6 @@ func TestGCRA_ConcurrentAccessPostgres(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestGCRA_ConcurrentAccessRedis(t *testing.T) {
@@ -1353,9 +1293,6 @@ func TestGCRA_ConcurrentAccessRedis(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestGCRA_ConcurrentAccessMemoryWithResult(t *testing.T) {
@@ -1415,9 +1352,6 @@ func TestGCRA_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestGCRA_ConcurrentAccessPostgresWithResult(t *testing.T) {
@@ -1477,9 +1411,6 @@ func TestGCRA_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
 
 func TestGCRA_ConcurrentAccessRedisWithResult(t *testing.T) {
@@ -1539,7 +1470,4 @@ func TestGCRA_ConcurrentAccessRedisWithResult(t *testing.T) {
 	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
 	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	err = limiter.Close()
-	require.NoError(t, err)
 }
