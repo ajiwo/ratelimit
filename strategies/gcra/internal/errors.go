@@ -16,7 +16,7 @@ func NewStateRetrievalError(err error) error {
 }
 
 func NewStateParsingError() error {
-	return fmt.Errorf("failed to parse GCRA state: invalid encoding")
+	return ErrStateParsing
 }
 
 func NewStateSaveError(err error) error {

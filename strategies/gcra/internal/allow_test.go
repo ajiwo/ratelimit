@@ -161,7 +161,7 @@ func TestAllow(t *testing.T) {
 
 			_, err := Allow(ctx, storage, config, ReadOnly)
 			assert.Error(t, err)
-			assert.Equal(t, NewStateParsingError(), err)
+			assert.Equal(t, ErrStateParsing, err)
 		})
 	})
 

@@ -16,7 +16,7 @@ func NewStateRetrievalError(err error) error {
 }
 
 func NewStateParsingError() error {
-	return fmt.Errorf("failed to parse fixed window state: invalid encoding")
+	return ErrStateParsing
 }
 
 func NewStateUpdateError(attempts int) error {
