@@ -74,7 +74,8 @@ func WithBackend(backend backends.Backend) Option {
 // This is used by all strategies that perform optimistic locking (Fixed Window, Token Bucket, Leaky Bucket, GCRA).
 //
 // Under high concurrency, CheckAndSet operations may need to retry if the state changes between read and write.
-// The retry loop uses exponential backoff (starts at 19ns) and checks for context cancellation on each attempt.
+// The retry loop uses exponential backoff with delays based on time since last failed attempt, clamped
+// between 32ns and 32ms, and checks for context cancellation on each attempt.
 //
 // Recommended values:
 //   - Low contention (< 10 concurrent users): 10-15 retries
@@ -82,7 +83,7 @@ func WithBackend(backend backends.Backend) Option {
 //   - High contention (100+ concurrent users): (2 x concurrent users) retries
 //
 // Note: Context cancellation will stop retries early regardless of this limit.
-// If retries is 0 or not set, the default value (3000) will be used.
+// If retries is 0 or not set, the default value (300) will be used.
 func WithMaxRetries(retries int) Option {
 	return func(config *Config) error {
 		if retries < 0 {

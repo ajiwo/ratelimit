@@ -172,6 +172,7 @@ func (p *parameter) allowTryAndUpdate(ctx context.Context) (map[string]Result, e
 		// Use CheckAndSet for atomic update
 		newValue := encodeState(normalizedStates)
 		newTTL := computeMaxResetTTL(normalizedStates, p.quotas, p.now)
+		beforeCAS := time.Now()
 		success, err := p.storage.CheckAndSet(ctx, p.key, oldValue, newValue, newTTL)
 		if err != nil {
 			return nil, err
@@ -183,9 +184,11 @@ func (p *parameter) allowTryAndUpdate(ctx context.Context) (map[string]Result, e
 			return finalResults, nil
 		}
 
+		baseDelay := min(max(time.Since(beforeCAS), 32*time.Nanosecond), 32*time.Millisecond)
+
 		// If CheckAndSet failed, retry if we haven't exhausted attempts
 		if attempt < p.maxRetries-1 {
-			time.Sleep((19 * time.Nanosecond) << attempt)
+			time.Sleep(baseDelay << (attempt % 16))
 			continue
 		}
 		return nil, NewStateUpdateError(p.maxRetries)

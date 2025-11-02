@@ -1,14 +1,13 @@
 package strategies
 
 import (
-	"math"
 	"time"
 )
 
 const (
 	// DefaultMaxRetries is the default maximum number of retry attempts for CheckAndSet operations
-	DefaultMaxRetries = 3000
-	MaxRetries        = math.MaxInt - 32
+	DefaultMaxRetries = 300
+	MaxRetries        = 65_535
 )
 
 // CheckV2Header validates that the string starts with "v2|"

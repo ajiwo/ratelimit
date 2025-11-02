@@ -143,6 +143,7 @@ func (p *parameter) allowTryAndUpdate(ctx context.Context) (Result, error) {
 			newValue := encodeState(bucket)
 			expiration := strategies.CalcExpiration(p.burstSize, p.refillRate)
 
+			beforeCAS := time.Now()
 			success, err := p.storage.CheckAndSet(ctx, p.key, oldValue, newValue, expiration)
 			if err != nil {
 				return Result{}, NewStateSaveError(err)
@@ -157,8 +158,10 @@ func (p *parameter) allowTryAndUpdate(ctx context.Context) (Result, error) {
 				}, nil
 			}
 
+			baseDelay := min(max(time.Since(beforeCAS), 32*time.Nanosecond), 32*time.Millisecond)
+
 			if attempt < p.maxRetries-1 {
-				time.Sleep((19 * time.Nanosecond) << time.Duration(attempt))
+				time.Sleep(baseDelay << (attempt % 16))
 				continue
 			}
 			break
