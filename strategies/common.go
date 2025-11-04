@@ -7,7 +7,7 @@ import (
 const (
 	// DefaultMaxRetries is the default maximum number of retry attempts for CheckAndSet operations
 	DefaultMaxRetries = 30
-	MaxRetries        = 16383
+	MaxRetries        = 9390
 )
 
 // CheckV2Header validates that the string starts with "v2|"
@@ -32,15 +32,18 @@ func CalcExpiration(capacity int, rate float64) time.Duration {
 // last failed CheckAndSet operation.
 func NextDelay(attempt int, feedback time.Duration) time.Duration {
 
-	// Clamp attempt
+	// Clamp attempt, overflow at 9391
 	attempt = min(max(attempt, 0), MaxRetries)
 
-	// Clamp feedback duration
-	feedback = min(max(feedback, 10*time.Millisecond), 10*time.Second)
+	// Clamp feedback duration to prevent very short delays that could overwhelm the system
+	// The 30ns lower bound reduces randomness for sub-30ns feedback values but prevents
+	// system overload from rapid retries
+	feedback = min(max(feedback, 30*time.Nanosecond), 30*time.Second)
 
 	// Calculate shift amount (capped exponential growth)
 	shift := attempt % 16
 
+	// Calculate delay with linear multiplier and exponential shift
 	mult := time.Duration(attempt + 1)
 	delay := (feedback * mult) << shift
 

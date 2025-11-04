@@ -21,7 +21,7 @@ func TestFixedWindow_ConcurrentAccessMemory(t *testing.T) {
 
 	limiter, err := ratelimit.New(
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
 			Key: "test",
@@ -93,7 +93,7 @@ func TestFixedWindow_ConcurrentAccessPostgres(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
 			Key: "test",
 			Quotas: map[string]fixedwindow.Quota{
@@ -159,7 +159,7 @@ func TestFixedWindow_ConcurrentAccessRedis(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
 			Key: "test",
 			Quotas: map[string]fixedwindow.Quota{
@@ -225,7 +225,7 @@ func TestLeakyBucket_ConcurrentAccessMemory(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(leakybucket.Config{Capacity: 10, LeakRate: 0.1}),
 	)
 	require.NoError(t, err)
@@ -283,7 +283,7 @@ func TestLeakyBucket_ConcurrentAccessPostgres(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(leakybucket.Config{Capacity: 10, LeakRate: 0.1}),
 	)
 	require.NoError(t, err)
@@ -341,7 +341,7 @@ func TestLeakyBucket_ConcurrentAccessRedis(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(leakybucket.Config{Capacity: 10, LeakRate: 0.1}),
 	)
 	require.NoError(t, err)
@@ -399,7 +399,7 @@ func TestTokenBucket_ConcurrentAccessMemory(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(tokenbucket.Config{BurstSize: 10, RefillRate: 0.1}),
 	)
 	require.NoError(t, err)
@@ -457,7 +457,7 @@ func TestTokenBucket_ConcurrentAccessPostgres(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(tokenbucket.Config{BurstSize: 10, RefillRate: 0.1}),
 	)
 	require.NoError(t, err)
@@ -515,7 +515,7 @@ func TestTokenBucket_ConcurrentAccessRedis(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(tokenbucket.Config{BurstSize: 10, RefillRate: 0.1}),
 	)
 	require.NoError(t, err)
@@ -573,7 +573,7 @@ func TestFixedWindow_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
 			Key: "test",
 			Quotas: map[string]fixedwindow.Quota{
@@ -640,7 +640,7 @@ func TestFixedWindow_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
 			Key: "test",
 			Quotas: map[string]fixedwindow.Quota{
@@ -707,7 +707,7 @@ func TestFixedWindow_ConcurrentAccessRedisWithResult(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
 			Key: "test",
 			Quotas: map[string]fixedwindow.Quota{
@@ -774,7 +774,7 @@ func TestLeakyBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(leakybucket.Config{Capacity: 10, LeakRate: 0.1}),
 	)
 	require.NoError(t, err)
@@ -833,7 +833,7 @@ func TestLeakyBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(leakybucket.Config{Capacity: 10, LeakRate: 0.1}),
 	)
 	require.NoError(t, err)
@@ -892,7 +892,7 @@ func TestLeakyBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(leakybucket.Config{Capacity: 10, LeakRate: 0.1}),
 	)
 	require.NoError(t, err)
@@ -951,7 +951,7 @@ func TestTokenBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(tokenbucket.Config{BurstSize: 10, RefillRate: 0.1}),
 	)
 	require.NoError(t, err)
@@ -1010,7 +1010,7 @@ func TestTokenBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(tokenbucket.Config{BurstSize: 10, RefillRate: 0.1}),
 	)
 	require.NoError(t, err)
@@ -1069,7 +1069,7 @@ func TestTokenBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(tokenbucket.Config{BurstSize: 10, RefillRate: 0.1}),
 	)
 	require.NoError(t, err)
@@ -1128,7 +1128,7 @@ func TestGCRA_ConcurrentAccessMemory(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(gcra.Config{Burst: 10, Rate: 0.1}),
 	)
 	require.NoError(t, err)
@@ -1186,7 +1186,7 @@ func TestGCRA_ConcurrentAccessPostgres(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(gcra.Config{Burst: 10, Rate: 0.1}),
 	)
 	require.NoError(t, err)
@@ -1244,7 +1244,7 @@ func TestGCRA_ConcurrentAccessRedis(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(gcra.Config{Burst: 10, Rate: 0.1}),
 	)
 	require.NoError(t, err)
@@ -1302,7 +1302,7 @@ func TestGCRA_ConcurrentAccessMemoryWithResult(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(gcra.Config{Burst: 10, Rate: 0.1}),
 	)
 	require.NoError(t, err)
@@ -1361,7 +1361,7 @@ func TestGCRA_ConcurrentAccessPostgresWithResult(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(gcra.Config{Burst: 10, Rate: 0.1}),
 	)
 	require.NoError(t, err)
@@ -1420,7 +1420,7 @@ func TestGCRA_ConcurrentAccessRedisWithResult(t *testing.T) {
 	limiter, err := ratelimit.New(
 		ratelimit.WithBaseKey(key),
 		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(21),
+		ratelimit.WithMaxRetries(7),
 		ratelimit.WithPrimaryStrategy(gcra.Config{Burst: 10, Rate: 0.1}),
 	)
 	require.NoError(t, err)

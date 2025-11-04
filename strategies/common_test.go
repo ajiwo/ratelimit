@@ -67,16 +67,16 @@ func TestNextDelay(t *testing.T) {
 			want:     100 * time.Millisecond, // (-5 -> 0) (100ms * 1) << 0
 		},
 		{
-			name:     "feedback below minimum (10ms) gets clamped",
+			name:     "feedback below minimum (30ns) gets clamped",
 			attempt:  1,
-			feedback: 1 * time.Millisecond,
-			want:     40 * time.Millisecond, // (1ms -> 10ms * 2) << 1
+			feedback: 1 * time.Nanosecond,
+			want:     120 * time.Nanosecond, // (1ns -> 30ns * 2) << 1
 		},
 		{
-			name:     "feedback above maximum (10s) gets clamped",
+			name:     "feedback above maximum (30s) gets clamped",
 			attempt:  1,
-			feedback: 30 * time.Second,
-			want:     40 * time.Second, // (30s -> 10s * 2) << 1
+			feedback: 60 * time.Second,
+			want:     120 * time.Second, // (60s -> 30s * 2) << 1
 		},
 		{
 			name:     "exponential backoff with shift",

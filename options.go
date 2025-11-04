@@ -75,7 +75,7 @@ func WithBackend(backend backends.Backend) Option {
 //
 // Under high concurrency, CheckAndSet operations may need to retry if the state changes between read and write.
 // The retry loop uses exponential backoff with delays based on time since last failed attempt, clamped
-// between 10ms and 10s, and checks for context cancellation (except for short delays, which bypass context checks)
+// between 30ns and 30s, and checks for context cancellation (except for short delays, which bypass context checks)
 // on each attempt.
 //
 // Recommended values:
