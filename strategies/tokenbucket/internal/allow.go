@@ -7,6 +7,7 @@ import (
 
 	"github.com/ajiwo/ratelimit/backends"
 	"github.com/ajiwo/ratelimit/strategies"
+	"github.com/ajiwo/ratelimit/utils"
 )
 
 type AllowMode int
@@ -137,13 +138,13 @@ func (p *parameter) allowTryAndUpdate(ctx context.Context) (Result, error) {
 		allowed := math.Floor(bucket.Tokens) >= 1.0
 
 		if allowed {
+			beforeCAS := time.Now()
 			bucket.Tokens -= 1.0
 			remaining := max(int(bucket.Tokens), 0)
 
 			newValue := encodeState(bucket)
 			expiration := strategies.CalcExpiration(p.burstSize, p.refillRate)
 
-			beforeCAS := time.Now()
 			success, err := p.storage.CheckAndSet(ctx, p.key, oldValue, newValue, expiration)
 			if err != nil {
 				return Result{}, NewStateSaveError(err)
@@ -158,10 +159,13 @@ func (p *parameter) allowTryAndUpdate(ctx context.Context) (Result, error) {
 				}, nil
 			}
 
-			baseDelay := min(max(time.Since(beforeCAS), 32*time.Nanosecond), 32*time.Millisecond)
+			feedback := time.Since(beforeCAS)
+			delay := strategies.NextDelay(attempt, feedback)
 
 			if attempt < p.maxRetries-1 {
-				time.Sleep(baseDelay << (attempt % 16))
+				if err := utils.SleepOrWait(ctx, delay, 500*time.Millisecond); err != nil {
+					return Result{}, NewContextCanceledError(err)
+				}
 				continue
 			}
 			break

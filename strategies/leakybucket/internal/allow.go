@@ -6,6 +6,7 @@ import (
 
 	"github.com/ajiwo/ratelimit/backends"
 	"github.com/ajiwo/ratelimit/strategies"
+	"github.com/ajiwo/ratelimit/utils"
 )
 
 // AllowMode represents the operation mode for `Allow`
@@ -159,6 +160,8 @@ func (p *parameter) allowTryAndUpdate(ctx context.Context) (Result, error) {
 		allowed := bucket.Requests+1 <= float64(p.capacity)
 
 		if allowed {
+			beforeCAS := time.Now()
+
 			// Add request to bucket
 			bucket.Requests += 1.0
 
@@ -169,7 +172,6 @@ func (p *parameter) allowTryAndUpdate(ctx context.Context) (Result, error) {
 			newValue := encodeState(bucket)
 			expiration := strategies.CalcExpiration(p.capacity, p.leakRate)
 
-			beforeCAS := time.Now()
 			success, err := p.storage.CheckAndSet(ctx, p.key, oldValue, newValue, expiration)
 			if err != nil {
 				return Result{}, NewStateSaveError(err)
@@ -185,11 +187,14 @@ func (p *parameter) allowTryAndUpdate(ctx context.Context) (Result, error) {
 				}, nil
 			}
 
-			baseDelay := min(max(time.Since(beforeCAS), 32*time.Nanosecond), 32*time.Millisecond)
+			feedback := time.Since(beforeCAS)
+			delay := strategies.NextDelay(attempt, feedback)
 
 			// If CheckAndSet failed, retry if we haven't exhausted attempts
 			if attempt < p.maxRetries-1 {
-				time.Sleep(baseDelay << (attempt % 16))
+				if err := utils.SleepOrWait(ctx, delay, 500*time.Millisecond); err != nil {
+					return Result{}, NewContextCanceledError(err)
+				}
 				continue
 			}
 			break
