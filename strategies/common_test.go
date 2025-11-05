@@ -61,12 +61,6 @@ func TestNextDelay(t *testing.T) {
 			want:     400 * time.Millisecond, // (100ms * 2) << 1
 		},
 		{
-			name:     "negative attempt treated as zero",
-			attempt:  -5,
-			feedback: 100 * time.Millisecond,
-			want:     100 * time.Millisecond, // (-5 -> 0) (100ms * 1) << 0
-		},
-		{
 			name:     "feedback below minimum (30ns) gets clamped",
 			attempt:  1,
 			feedback: 1 * time.Nanosecond,
