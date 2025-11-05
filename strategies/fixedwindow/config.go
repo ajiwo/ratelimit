@@ -81,7 +81,7 @@ func (c Config) validateUniqueRateRatios() error {
 	return nil
 }
 
-func (c Config) ID() strategies.StrategyID {
+func (c Config) ID() strategies.ID {
 	return strategies.StrategyFixedWindow
 }
 
@@ -89,20 +89,20 @@ func (c Config) Capabilities() strategies.CapabilityFlags {
 	return strategies.CapPrimary | strategies.CapQuotas
 }
 
-func (c Config) GetRole() strategies.StrategyRole {
+func (c Config) GetRole() strategies.Role {
 	return strategies.RolePrimary
 }
 
-func (c Config) WithRole(role strategies.StrategyRole) strategies.StrategyConfig {
+func (c Config) WithRole(role strategies.Role) strategies.Config {
 	return c
 }
 
-func (c Config) WithKey(key string) strategies.StrategyConfig {
+func (c Config) WithKey(key string) strategies.Config {
 	c.Key = key
 	return c
 }
 
-func (c Config) WithMaxRetries(retries int) strategies.StrategyConfig {
+func (c Config) WithMaxRetries(retries int) strategies.Config {
 	c.maxRetries = retries
 	return c
 }

@@ -8,7 +8,7 @@ import (
 
 func TestStrategyID_String(t *testing.T) {
 	cases := []struct {
-		id StrategyID
+		id ID
 		s  string
 	}{
 		{StrategyTokenBucket, "token_bucket"},
@@ -16,7 +16,7 @@ func TestStrategyID_String(t *testing.T) {
 		{StrategyLeakyBucket, "leaky_bucket"},
 		{StrategyGCRA, "gcra"},
 		{StrategyComposite, "composite"},
-		{StrategyID(255), "unknown"},
+		{ID(255), "unknown"},
 	}
 	for _, tc := range cases {
 		if got := tc.id.String(); got != tc.s {

@@ -24,7 +24,7 @@ func New(storage backends.Backend) *Strategy {
 type FixedWindow = internal.FixedWindow
 
 // Allow checks if a request is allowed and returns detailed statistics
-func (f *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) (strategies.Results, error) {
+func (f *Strategy) Allow(ctx context.Context, config strategies.Config) (strategies.Results, error) {
 	fixedConfig, ok := config.(Config)
 	if !ok {
 		return nil, ErrInvalidConfig
@@ -39,7 +39,7 @@ func (f *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 }
 
 // Peek inspects current state without consuming quota
-func (f *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (strategies.Results, error) {
+func (f *Strategy) Peek(ctx context.Context, config strategies.Config) (strategies.Results, error) {
 	fixedConfig, ok := config.(Config)
 	if !ok {
 		return nil, ErrInvalidConfig
@@ -54,7 +54,7 @@ func (f *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (
 }
 
 // Reset resets the rate limit counter for the given key
-func (f *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) error {
+func (f *Strategy) Reset(ctx context.Context, config strategies.Config) error {
 	fixedConfig, ok := config.(Config)
 	if !ok {
 		return ErrInvalidConfig

@@ -11,7 +11,7 @@ import (
 )
 
 // factory that returns provided strategy instance
-func registerMockStrategy(t *testing.T, id strategies.StrategyID, s strategies.Strategy) {
+func registerMockStrategy(t *testing.T, id strategies.ID, s strategies.Strategy) {
 	t.Helper()
 	strategies.Register(id, func(_ backends.Backend) strategies.Strategy { // backend is not used by mocks
 		return s

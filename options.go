@@ -11,7 +11,7 @@ import (
 type Option func(*Config) error
 
 // WithPrimaryStrategy configures the primary rate limiting strategy with custom configuration
-func WithPrimaryStrategy(strategyConfig strategies.StrategyConfig) Option {
+func WithPrimaryStrategy(strategyConfig strategies.Config) Option {
 	return func(config *Config) error {
 		if strategyConfig == nil {
 			return fmt.Errorf("primary strategy config cannot be nil")
@@ -22,7 +22,7 @@ func WithPrimaryStrategy(strategyConfig strategies.StrategyConfig) Option {
 }
 
 // WithSecondaryStrategy configures the secondary smoother strategy
-func WithSecondaryStrategy(strategyConfig strategies.StrategyConfig) Option {
+func WithSecondaryStrategy(strategyConfig strategies.Config) Option {
 	return func(config *Config) error {
 		if strategyConfig == nil {
 			return fmt.Errorf("secondary strategy config cannot be nil")

@@ -21,7 +21,7 @@ func New(storage backends.Backend) *Strategy {
 }
 
 // Allow checks if a request is allowed and returns detailed statistics
-func (l *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) (map[string]strategies.Result, error) {
+func (l *Strategy) Allow(ctx context.Context, config strategies.Config) (map[string]strategies.Result, error) {
 	lbConfig, ok := config.(Config)
 	if !ok {
 		return nil, ErrInvalidConfig
@@ -41,7 +41,7 @@ func (l *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 }
 
 // Peek inspects current state without consuming quota
-func (l *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (map[string]strategies.Result, error) {
+func (l *Strategy) Peek(ctx context.Context, config strategies.Config) (map[string]strategies.Result, error) {
 	lbConfig, ok := config.(Config)
 	if !ok {
 		return nil, ErrInvalidConfig
@@ -61,7 +61,7 @@ func (l *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (
 }
 
 // Reset resets the leaky bucket state for the given key
-func (l *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) error {
+func (l *Strategy) Reset(ctx context.Context, config strategies.Config) error {
 	lbConfig, ok := config.(Config)
 	if !ok {
 		return ErrInvalidConfig

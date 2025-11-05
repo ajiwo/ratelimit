@@ -44,7 +44,7 @@ func newCustomStrategy(storage backends.Backend,
 
 // Peek checks both strategies without consuming quota
 func (c *customStrategy) Peek(ctx context.Context,
-	primaryConfig, secondaryConfig strategies.StrategyConfig,
+	primaryConfig, secondaryConfig strategies.Config,
 ) (strategies.Results, error) {
 	results := make(strategies.Results)
 
@@ -76,7 +76,7 @@ func (c *customStrategy) Peek(ctx context.Context,
 // Allow allows request based on custom decision logic
 func (c *customStrategy) Allow(
 	ctx context.Context,
-	primaryConfig, secondaryConfig strategies.StrategyConfig,
+	primaryConfig, secondaryConfig strategies.Config,
 	logic func(strategies.Results) bool,
 ) (bool, strategies.Results, error) {
 	results, err := c.Peek(ctx, primaryConfig, secondaryConfig)
@@ -112,12 +112,12 @@ func main() {
 
 	// Configure strategies
 	primaryConfig := fixedwindow.NewConfig().
-		SetKey("user:123").
+		SetKey("user:123:primary").
 		AddQuota("hourly", 100, time.Hour).
 		Build()
 
 	secondaryConfig := tokenbucket.Config{
-		Key:        "user:123",
+		Key:        "user:123:secondary",
 		BurstSize:  5,
 		RefillRate: 0.1, // 1 token per 10 seconds
 	}

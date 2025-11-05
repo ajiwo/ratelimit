@@ -4,11 +4,11 @@ import (
 	"strings"
 )
 
-// StrategyID uniquely identifies a strategy implementation
-type StrategyID uint8
+// ID uniquely identifies a strategy implementation
+type ID uint8
 
 const (
-	StrategyUnknown StrategyID = iota
+	StrategyUnknown ID = iota
 	StrategyTokenBucket
 	StrategyFixedWindow
 	StrategyLeakyBucket
@@ -17,7 +17,7 @@ const (
 )
 
 // String returns the canonical string representation of the strategy ID
-func (id StrategyID) String() string {
+func (id ID) String() string {
 	switch id {
 	case StrategyTokenBucket:
 		return "token_bucket"
@@ -34,33 +34,33 @@ func (id StrategyID) String() string {
 	}
 }
 
-// StrategyRole defines the role a strategy instance will play
-type StrategyRole int
+// Role defines the role a strategy instance will play
+type Role int
 
 const (
-	RolePrimary StrategyRole = iota
+	RolePrimary Role = iota
 	RoleSecondary
 )
 
-// StrategyConfig defines the interface for all strategy configurations
-type StrategyConfig interface {
+// Config defines the interface for all strategy configurations
+type Config interface {
 	Validate() error
-	ID() StrategyID
+	ID() ID
 	Capabilities() CapabilityFlags
 
 	// Role-based methods
-	GetRole() StrategyRole
-	WithRole(role StrategyRole) StrategyConfig
+	GetRole() Role
+	WithRole(role Role) Config
 
 	// WithKey returns a copy of the config with the provided fully-qualified key applied
-	WithKey(key string) StrategyConfig
+	WithKey(key string) Config
 
 	// MaxRetries returns the maximum retry attempts for atomic operations
 	// Returns 0 if not configured, which means use DefaultCheckAndSetRetries
 	MaxRetries() int
 
 	// WithMaxRetries returns a copy of the config with the provided retry limit
-	WithMaxRetries(retries int) StrategyConfig
+	WithMaxRetries(retries int) Config
 }
 
 // CapabilityFlags defines the capabilities and roles a strategy can fulfill

@@ -64,7 +64,7 @@ var _ strategies.Strategy = (*mockStrategyOne)(nil)
 
 // strategy that records the last config and returns preconfigured results/errors.
 type mockStrategyOne struct {
-	lastConfig strategies.StrategyConfig
+	lastConfig strategies.Config
 	allowRes   strategies.Results
 	allowErr   error
 	getRes     strategies.Results
@@ -72,17 +72,17 @@ type mockStrategyOne struct {
 	resetErr   error
 }
 
-func (m *mockStrategyOne) Allow(ctx context.Context, cfg strategies.StrategyConfig) (strategies.Results, error) {
+func (m *mockStrategyOne) Allow(ctx context.Context, cfg strategies.Config) (strategies.Results, error) {
 	m.lastConfig = cfg
 	return m.allowRes, m.allowErr
 }
 
-func (m *mockStrategyOne) Peek(ctx context.Context, cfg strategies.StrategyConfig) (strategies.Results, error) {
+func (m *mockStrategyOne) Peek(ctx context.Context, cfg strategies.Config) (strategies.Results, error) {
 	m.lastConfig = cfg
 	return m.getRes, m.getErr
 }
 
-func (m *mockStrategyOne) Reset(ctx context.Context, cfg strategies.StrategyConfig) error {
+func (m *mockStrategyOne) Reset(ctx context.Context, cfg strategies.Config) error {
 	m.lastConfig = cfg
 	return m.resetErr
 }
@@ -90,29 +90,29 @@ func (m *mockStrategyOne) Reset(ctx context.Context, cfg strategies.StrategyConf
 // mockStrategyConfig implements strategies.StrategyConfig
 
 type mockStrategyConfig struct {
-	id         strategies.StrategyID
+	id         strategies.ID
 	caps       strategies.CapabilityFlags
-	role       strategies.StrategyRole
+	role       strategies.Role
 	key        string
 	valid      error
 	maxRetries int
 }
 
 func (m mockStrategyConfig) Validate() error                          { return m.valid }
-func (m mockStrategyConfig) ID() strategies.StrategyID                { return m.id }
+func (m mockStrategyConfig) ID() strategies.ID                        { return m.id }
 func (m mockStrategyConfig) Capabilities() strategies.CapabilityFlags { return m.caps }
-func (m mockStrategyConfig) GetRole() strategies.StrategyRole         { return m.role }
-func (m mockStrategyConfig) WithRole(role strategies.StrategyRole) strategies.StrategyConfig {
+func (m mockStrategyConfig) GetRole() strategies.Role                 { return m.role }
+func (m mockStrategyConfig) WithRole(role strategies.Role) strategies.Config {
 	m.role = role
 	return m
 }
 
-func (m mockStrategyConfig) WithKey(key string) strategies.StrategyConfig {
+func (m mockStrategyConfig) WithKey(key string) strategies.Config {
 	m.key = key
 	return m
 }
 func (m mockStrategyConfig) MaxRetries() int { return m.maxRetries }
-func (m mockStrategyConfig) WithMaxRetries(retries int) strategies.StrategyConfig {
+func (m mockStrategyConfig) WithMaxRetries(retries int) strategies.Config {
 	m.maxRetries = retries
 	return m
 }

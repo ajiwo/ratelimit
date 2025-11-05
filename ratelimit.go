@@ -137,7 +137,7 @@ func (r *RateLimiter) allowWithResult(ctx context.Context, dynamicKey string) (b
 }
 
 // buildStrategyConfig builds the appropriate strategy config (composite or single)
-func (r *RateLimiter) buildStrategyConfig(dynamicKey string) strategies.StrategyConfig {
+func (r *RateLimiter) buildStrategyConfig(dynamicKey string) strategies.Config {
 	// build dual strategy config
 	if r.config.SecondaryConfig != nil {
 		return composite.Config{

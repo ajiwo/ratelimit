@@ -18,7 +18,7 @@ func New(storage backends.Backend) *Strategy {
 
 type TokenBucket = internal.TokenBucket
 
-func (t *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) (map[string]strategies.Result, error) {
+func (t *Strategy) Allow(ctx context.Context, config strategies.Config) (map[string]strategies.Result, error) {
 	tokenConfig, ok := config.(Config)
 	if !ok {
 		return nil, ErrInvalidConfig
@@ -38,7 +38,7 @@ func (t *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) 
 	}, nil
 }
 
-func (t *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (map[string]strategies.Result, error) {
+func (t *Strategy) Peek(ctx context.Context, config strategies.Config) (map[string]strategies.Result, error) {
 	tokenConfig, ok := config.(Config)
 	if !ok {
 		return nil, ErrInvalidConfig
@@ -58,7 +58,7 @@ func (t *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (
 	}, nil
 }
 
-func (t *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) error {
+func (t *Strategy) Reset(ctx context.Context, config strategies.Config) error {
 	tokenConfig, ok := config.(Config)
 	if !ok {
 		return ErrInvalidConfig

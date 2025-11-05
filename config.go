@@ -17,10 +17,10 @@ func validateKey(key, keyType string) error {
 
 // Config defines the configuration for single or dual strategy rate limiting
 type Config struct {
-	BaseKey         string                    `json:"base_key"`
-	Storage         backends.Backend          `json:"-"`
-	PrimaryConfig   strategies.StrategyConfig `json:"primary_config"`
-	SecondaryConfig strategies.StrategyConfig `json:"secondary_config,omitempty"`
+	BaseKey         string            `json:"base_key"`
+	Storage         backends.Backend  `json:"-"`
+	PrimaryConfig   strategies.Config `json:"primary_config"`
+	SecondaryConfig strategies.Config `json:"secondary_config,omitempty"`
 	maxRetries      int
 }
 

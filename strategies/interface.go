@@ -17,10 +17,10 @@ type Result struct {
 // Strategy defines the interface for rate limiting strategies
 type Strategy interface {
 	// Allow checks if a request is allowed and returns detailed statistics in a single call
-	Allow(ctx context.Context, config StrategyConfig) (Results, error)
+	Allow(ctx context.Context, config Config) (Results, error)
 
 	// Peek inspects current rate limit status without consuming quota
-	Peek(ctx context.Context, config StrategyConfig) (Results, error)
+	Peek(ctx context.Context, config Config) (Results, error)
 
 	// Reset removes the rate limit state, returning the strategy to its initial fresh state.
 	//
@@ -28,5 +28,5 @@ type Strategy interface {
 	// All strategies treat empty state as a fresh request with full quota available.
 	// After Reset, the next Allow call will behave identically to a new user or
 	// a request whose previous state has expired due to TTL.
-	Reset(ctx context.Context, config StrategyConfig) error
+	Reset(ctx context.Context, config Config) error
 }

@@ -13,8 +13,8 @@ import (
 // Config represents a dual-strategy configuration
 type Config struct {
 	BaseKey   string
-	Primary   strategies.StrategyConfig
-	Secondary strategies.StrategyConfig
+	Primary   strategies.Config
+	Secondary strategies.Config
 }
 
 func (c Config) Validate() error {
@@ -47,7 +47,7 @@ func (c Config) Validate() error {
 	return nil
 }
 
-func (c Config) ID() strategies.StrategyID {
+func (c Config) ID() strategies.ID {
 	return strategies.StrategyComposite
 }
 
@@ -55,11 +55,11 @@ func (c Config) Capabilities() strategies.CapabilityFlags {
 	return strategies.CapPrimary | strategies.CapSecondary
 }
 
-func (c Config) GetRole() strategies.StrategyRole {
+func (c Config) GetRole() strategies.Role {
 	return strategies.RolePrimary // Composite always acts as primary
 }
 
-func (c Config) WithRole(role strategies.StrategyRole) strategies.StrategyConfig {
+func (c Config) WithRole(role strategies.Role) strategies.Config {
 	// Composite strategies don't change roles
 	return c
 }
@@ -69,7 +69,7 @@ func (c Config) WithRole(role strategies.StrategyRole) strategies.StrategyConfig
 //
 // The new key is then prefixed with BaseKey and suffixed with ":p" for
 // primary and ":s" for secondary.
-func (c Config) WithKey(key string) strategies.StrategyConfig {
+func (c Config) WithKey(key string) strategies.Config {
 	var wg sync.WaitGroup
 
 	wg.Go(func() {
@@ -105,7 +105,7 @@ func (c Config) MaxRetries() int {
 }
 
 // WithMaxRetries applies the retry limit to both primary and secondary configs
-func (c Config) WithMaxRetries(retries int) strategies.StrategyConfig {
+func (c Config) WithMaxRetries(retries int) strategies.Config {
 	c.Primary = c.Primary.WithMaxRetries(retries)
 	c.Secondary = c.Secondary.WithMaxRetries(retries)
 	return c
@@ -119,7 +119,7 @@ type Strategy struct {
 }
 
 // NewComposite creates a new composite strategy with internally created primary and secondary strategies
-func NewComposite(b backends.Backend, pConfig strategies.StrategyConfig, sConfig strategies.StrategyConfig) (*Strategy, error) {
+func NewComposite(b backends.Backend, pConfig strategies.Config, sConfig strategies.Config) (*Strategy, error) {
 	// Validate inputs
 	if pConfig == nil {
 		return nil, fmt.Errorf("primary strategy config cannot be nil")
@@ -164,7 +164,7 @@ func NewComposite(b backends.Backend, pConfig strategies.StrategyConfig, sConfig
 }
 
 // Allow implements the dual-strategy logic
-func (cs *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig) (strategies.Results, error) {
+func (cs *Strategy) Allow(ctx context.Context, config strategies.Config) (strategies.Results, error) {
 	compositeConfig, ok := config.(Config)
 	if !ok {
 		return nil, fmt.Errorf("composite strategy requires CompositeConfig")
@@ -219,7 +219,7 @@ func (cs *Strategy) Allow(ctx context.Context, config strategies.StrategyConfig)
 }
 
 // Peek inspects current state without consuming quota
-func (cs *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) (strategies.Results, error) {
+func (cs *Strategy) Peek(ctx context.Context, config strategies.Config) (strategies.Results, error) {
 	compositeConfig, ok := config.(Config)
 	if !ok {
 		return nil, fmt.Errorf("composite strategy requires CompositeConfig")
@@ -251,7 +251,7 @@ func (cs *Strategy) Peek(ctx context.Context, config strategies.StrategyConfig) 
 }
 
 // Reset resets both strategies
-func (cs *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig) error {
+func (cs *Strategy) Reset(ctx context.Context, config strategies.Config) error {
 	compositeConfig, ok := config.(Config)
 	if !ok {
 		return fmt.Errorf("composite strategy requires CompositeConfig")
@@ -273,17 +273,17 @@ func (cs *Strategy) Reset(ctx context.Context, config strategies.StrategyConfig)
 }
 
 // createPrimaryConfig creates a role-aware config for the primary strategy
-func (cs *Strategy) createPrimaryConfig(compositeConfig Config) strategies.StrategyConfig {
+func (cs *Strategy) createPrimaryConfig(compositeConfig Config) strategies.Config {
 	return compositeConfig.Primary.WithRole(strategies.RolePrimary)
 }
 
 // createSecondaryConfig creates a role-aware config for the secondary strategy
-func (cs *Strategy) createSecondaryConfig(compositeConfig Config) strategies.StrategyConfig {
+func (cs *Strategy) createSecondaryConfig(compositeConfig Config) strategies.Config {
 	return compositeConfig.Secondary.WithRole(strategies.RoleSecondary)
 }
 
 // consumeQuotas consumes quota from both primary and secondary strategies
-func (cs *Strategy) consumeQuotas(ctx context.Context, primaryConfig, secondaryConfig strategies.StrategyConfig, results strategies.Results) (strategies.Results, error) {
+func (cs *Strategy) consumeQuotas(ctx context.Context, primaryConfig, secondaryConfig strategies.Config, results strategies.Results) (strategies.Results, error) {
 	primaryAllowResults, err := cs.primary.Allow(ctx, primaryConfig)
 	if err != nil {
 		return nil, fmt.Errorf("primary strategy quota consumption failed: %w", err)
