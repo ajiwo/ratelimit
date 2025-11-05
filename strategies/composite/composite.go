@@ -3,123 +3,52 @@ package composite
 import (
 	"context"
 	"fmt"
-	"sync"
+	"maps"
+	"strings"
+	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
 	"github.com/ajiwo/ratelimit/strategies"
+	"github.com/ajiwo/ratelimit/utils"
 	"github.com/ajiwo/ratelimit/utils/builderpool"
 )
 
-// Config represents a dual-strategy configuration
-type Config struct {
-	BaseKey   string
-	Primary   strategies.Config
-	Secondary strategies.Config
+// encodeComposite creates a composite state encoding from primary and secondary states
+// Format: cmp1|<primaryState>$<secondaryState>
+func encodeComposite(primaryState, secondaryState string) string {
+	sb := builderpool.Get()
+	defer builderpool.Put(sb)
+
+	sb.WriteString("cmp1|")
+	sb.WriteString(primaryState)
+	sb.WriteByte('$')
+	sb.WriteString(secondaryState)
+	return sb.String()
 }
 
-func (c Config) Validate() error {
-	if c.BaseKey == "" {
-		return fmt.Errorf("composite config base key cannot be empty")
-	}
-	if c.Primary == nil {
-		return fmt.Errorf("composite config primary strategy cannot be nil")
-	}
-	if c.Secondary == nil {
-		return fmt.Errorf("composite config secondary strategy cannot be nil")
-	}
-
-	// Validate individual configs
-	if err := c.Primary.Validate(); err != nil {
-		return fmt.Errorf("primary config validation failed: %w", err)
-	}
-	if err := c.Secondary.Validate(); err != nil {
-		return fmt.Errorf("secondary config validation failed: %w", err)
+// decodeComposite extracts primary and secondary states from composite encoding
+// Returns empty strings for both if decoding fails
+func decodeComposite(compositeState string) (primaryState, secondaryState string) {
+	if !strings.HasPrefix(compositeState, "cmp1|") {
+		return "", ""
 	}
 
-	// Check capabilities
-	if !c.Primary.Capabilities().Has(strategies.CapPrimary) {
-		return fmt.Errorf("primary strategy must support primary capability")
-	}
-	if !c.Secondary.Capabilities().Has(strategies.CapSecondary) {
-		return fmt.Errorf("secondary strategy must support secondary capability")
+	content := compositeState[5:] // Remove "cmp1|" prefix
+	parts := strings.SplitN(content, "$", 2)
+	if len(parts) != 2 {
+		return "", ""
 	}
 
-	return nil
+	return parts[0], parts[1]
 }
 
-func (c Config) ID() strategies.ID {
-	return strategies.StrategyComposite
-}
-
-func (c Config) Capabilities() strategies.CapabilityFlags {
-	return strategies.CapPrimary | strategies.CapSecondary
-}
-
-func (c Config) GetRole() strategies.Role {
-	return strategies.RolePrimary // Composite always acts as primary
-}
-
-func (c Config) WithRole(role strategies.Role) strategies.Config {
-	// Composite strategies don't change roles
-	return c
-}
-
-// WithKey applies a new fully-qualified-key to both primary and secondary
-// configs derived from the supplied key.
-//
-// The new key is then prefixed with BaseKey and suffixed with ":p" for
-// primary and ":s" for secondary.
-func (c Config) WithKey(key string) strategies.Config {
-	var wg sync.WaitGroup
-
-	wg.Go(func() {
-		sb := builderpool.Get()
-		defer func() {
-			builderpool.Put(sb)
-		}()
-		sb.WriteString(c.BaseKey)
-		sb.WriteString(":")
-		sb.WriteString(key)
-		sb.WriteString(":p")
-		c.Primary = c.Primary.WithKey(sb.String())
-	})
-	wg.Go(func() {
-		builder := builderpool.Get()
-		defer func() {
-			builderpool.Put(builder)
-		}()
-		builder.WriteString(c.BaseKey)
-		builder.WriteString(":")
-		builder.WriteString(key)
-		builder.WriteString(":s")
-		c.Secondary = c.Secondary.WithKey(builder.String())
-	})
-	wg.Wait()
-
-	return c
-}
-
-// MaxRetries returns the retry limit from the primary config
-func (c Config) MaxRetries() int {
-	return c.Primary.MaxRetries()
-}
-
-// WithMaxRetries applies the retry limit to both primary and secondary configs
-func (c Config) WithMaxRetries(retries int) strategies.Config {
-	c.Primary = c.Primary.WithMaxRetries(retries)
-	c.Secondary = c.Secondary.WithMaxRetries(retries)
-	return c
-}
-
-// Strategy implements dual-strategy behavior
+// Strategy implements atomic dual-strategy behavior
 type Strategy struct {
-	storage   backends.Backend
-	primary   strategies.Strategy
-	secondary strategies.Strategy
+	storage backends.Backend
 }
 
-// NewComposite creates a new composite strategy with internally created primary and secondary strategies
-func NewComposite(b backends.Backend, pConfig strategies.Config, sConfig strategies.Config) (*Strategy, error) {
+// New creates a new composite strategy
+func New(b backends.Backend, pConfig strategies.Config, sConfig strategies.Config) (*Strategy, error) {
 	// Validate inputs
 	if pConfig == nil {
 		return nil, fmt.Errorf("primary strategy config cannot be nil")
@@ -144,92 +73,212 @@ func NewComposite(b backends.Backend, pConfig strategies.Config, sConfig strateg
 		return nil, fmt.Errorf("secondary strategy must support secondary capability")
 	}
 
-	// Create primary strategy
-	primary, err := strategies.Create(pConfig.ID(), b)
+	return &Strategy{
+		storage: b,
+	}, nil
+}
+
+// Allow implements atomic dual-strategy logic using composite state
+func (cs *Strategy) Allow(ctx context.Context, sci strategies.Config) (strategies.Results, error) {
+	cfg, key, maxRetries, err := prepareCompositeForAllow(sci)
+	if err != nil {
+		return nil, err
+	}
+
+	for attempt := range maxRetries {
+		results, done, feedback, err := cs.tryAllowOnce(ctx, cfg, key)
+		if err != nil {
+			return nil, err
+		}
+		if done {
+			return results, nil
+		}
+		// CAS failed, apply backoff and retry due to contention
+		delay := strategies.NextDelay(attempt, feedback)
+		if err := utils.SleepOrWait(ctx, delay, 500*time.Millisecond); err != nil {
+			return nil, fmt.Errorf("composite allow canceled: %w", err)
+		}
+	}
+
+	return nil, fmt.Errorf("max retries (%d) exceeded for composite operation", maxRetries)
+}
+
+// prepareCompositeForAllow validates and extracts composite config essentials
+func prepareCompositeForAllow(sci strategies.Config) (Config, string, int, error) {
+	cfg, ok := sci.(Config)
+	if !ok {
+		return Config{}, "", 0, fmt.Errorf("composite strategy requires CompositeConfig")
+	}
+
+	key := cfg.CompositeKey()
+	if key == "" {
+		return Config{}, "", 0, fmt.Errorf("composite key not set, call WithKey first")
+	}
+
+	maxRetries := cfg.MaxRetries()
+	if maxRetries <= 0 {
+		maxRetries = strategies.DefaultMaxRetries
+	}
+
+	return cfg, key, maxRetries, nil
+}
+
+// tryAllowOnce executes a single attempt of the composite allow logic.
+// Returns:
+// - results: final results if decision is determined (denied or committed), or nil if need retry
+// - done: true if decision is final (return immediately), false if should retry due to CAS contention
+// - duration: time taken for the operation (for backoff calculation), non-zero if retry required
+// - err: any error occurred during attempt
+func (cs *Strategy) tryAllowOnce(ctx context.Context, cfg Config, key string) (strategies.Results, bool, time.Duration, error) {
+	// Start recording time
+	beforeCAS := time.Now()
+
+	// Get current composite state
+	oldComposite, err := cs.storage.Get(ctx, key)
+	if err != nil {
+		return nil, true, 0, fmt.Errorf("failed to get composite state: %w", err)
+	}
+
+	// Decode composite state
+	oldPrimary, oldSecondary := decodeComposite(oldComposite)
+
+	// Create single-key adapters seeded with current states
+	primaryAdapter := newSingleKeyAdapter(oldPrimary)
+	secondaryAdapter := newSingleKeyAdapter(oldSecondary)
+
+	// Create ephemeral strategies bound to adapters
+	primaryStrategy, err := strategies.Create(cfg.Primary.ID(), primaryAdapter)
+	if err != nil {
+		return nil, true, 0, fmt.Errorf("failed to create primary strategy: %w", err)
+	}
+
+	secondaryStrategy, err := strategies.Create(cfg.Secondary.ID(), secondaryAdapter)
+	if err != nil {
+		return nil, true, 0, fmt.Errorf("failed to create secondary strategy: %w", err)
+	}
+
+	// Peek primary
+	primaryPeekResults, err := primaryStrategy.Peek(ctx, cfg.Primary)
+	if err != nil {
+		return nil, true, 0, fmt.Errorf("primary strategy peek failed: %w", err)
+	}
+	if anyDenied(primaryPeekResults) {
+		// Denied by primary, final decision without commit
+		return prefixResults(primaryPeekResults, "primary_"), true, 0, nil
+	}
+
+	// Peek secondary
+	secondaryPeekResults, err := secondaryStrategy.Peek(ctx, cfg.Secondary)
+	if err != nil {
+		return nil, true, 0, fmt.Errorf("secondary strategy peek failed: %w", err)
+	}
+	if anyDenied(secondaryPeekResults) {
+		// Denied by secondary, final decision without commit
+		return mergePrefixedResults(
+			prefixResults(primaryPeekResults, "primary_"),
+			prefixResults(secondaryPeekResults, "secondary_"),
+		), true, 0, nil
+	}
+
+	// Both allow -> consume quota
+	primaryAllowResults, err := primaryStrategy.Allow(ctx, cfg.Primary)
+	if err != nil {
+		return nil, true, 0, fmt.Errorf("primary strategy allow failed: %w", err)
+	}
+
+	secondaryAllowResults, err := secondaryStrategy.Allow(ctx, cfg.Secondary)
+	if err != nil {
+		return nil, true, 0, fmt.Errorf("secondary strategy allow failed: %w", err)
+	}
+
+	// Encode new composite state
+	newComposite := encodeComposite(primaryAdapter.value, secondaryAdapter.value)
+	ttl := max(primaryAdapter.expiration, secondaryAdapter.expiration)
+
+	// Atomic commit with CAS
+	ok, err := cs.storage.CheckAndSet(ctx, key, oldComposite, newComposite, ttl)
+	if err != nil {
+		return nil, true, 0, fmt.Errorf("CAS operation failed: %w", err)
+	}
+	if ok {
+		// Success! Merge and return results
+		return mergePrefixedResults(
+			prefixResults(primaryAllowResults, "primary_"),
+			prefixResults(secondaryAllowResults, "secondary_"),
+		), true, 0, nil
+	}
+
+	// CAS failed -> retry
+	return nil, false, time.Since(beforeCAS), nil
+}
+
+// prefixResults returns a new results map with all keys prefixed
+func prefixResults(in strategies.Results, prefix string) strategies.Results {
+	out := make(strategies.Results, len(in))
+	for k, v := range in {
+		out[prefix+k] = v
+	}
+	return out
+}
+
+// mergePrefixedResults merges two results maps into a new map
+func mergePrefixedResults(a, b strategies.Results) strategies.Results {
+	out := make(strategies.Results, len(a)+len(b))
+	maps.Copy(out, a)
+	maps.Copy(out, b)
+	return out
+}
+
+// anyDenied checks if any result in the map indicates denial
+func anyDenied(results strategies.Results) bool {
+	for _, result := range results {
+		if !result.Allowed {
+			return true
+		}
+	}
+	return false
+}
+
+// Peek inspects current state without consuming quota using composite state decoding
+func (cs *Strategy) Peek(ctx context.Context, sci strategies.Config) (strategies.Results, error) {
+	cfg, ok := sci.(Config)
+	if !ok {
+		return nil, fmt.Errorf("composite strategy requires CompositeConfig")
+	}
+
+	key := cfg.CompositeKey()
+	if key == "" {
+		return nil, fmt.Errorf("composite key not set, call WithKey first")
+	}
+
+	// Get current composite state
+	oldComposite, err := cs.storage.Get(ctx, key)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get composite state: %w", err)
+	}
+
+	// Decode composite state
+	oldPrimary, oldSecondary := decodeComposite(oldComposite)
+
+	// Create single-key adapters seeded with current states
+	primaryAdapter := newSingleKeyAdapter(oldPrimary)
+	secondaryAdapter := newSingleKeyAdapter(oldSecondary)
+
+	// Create ephemeral strategies bound to adapters
+	primaryStrategy, err := strategies.Create(cfg.Primary.ID(), primaryAdapter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create primary strategy: %w", err)
 	}
 
-	// Create secondary strategy
-	secondary, err := strategies.Create(sConfig.ID(), b)
+	secondaryStrategy, err := strategies.Create(cfg.Secondary.ID(), secondaryAdapter)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create secondary strategy: %w", err)
-	}
-
-	return &Strategy{
-		storage:   b,
-		primary:   primary,
-		secondary: secondary,
-	}, nil
-}
-
-// Allow implements the dual-strategy logic
-func (cs *Strategy) Allow(ctx context.Context, config strategies.Config) (strategies.Results, error) {
-	compositeConfig, ok := config.(Config)
-	if !ok {
-		return nil, fmt.Errorf("composite strategy requires CompositeConfig")
-	}
-
-	results := make(strategies.Results)
-
-	// Step 1: Check primary strategy (no consumption yet)
-	primaryConfig := cs.createPrimaryConfig(compositeConfig)
-	primaryResults, err := cs.primary.Peek(ctx, primaryConfig)
-	if err != nil {
-		return nil, fmt.Errorf("primary strategy check failed: %w", err)
-	}
-
-	// Check if all primary quotas allow the request
-	allAllowed := true
-	for quotaName, result := range primaryResults {
-		results["primary_"+quotaName] = result
-		if !result.Allowed {
-			allAllowed = false
-		}
-	}
-
-	// If primary denies, don't check secondary
-	if !allAllowed {
-		return results, nil
-	}
-
-	// Step 2: Check secondary strategy (no consumption yet)
-	secondaryConfig := cs.createSecondaryConfig(compositeConfig)
-	secondaryResults, err := cs.secondary.Peek(ctx, secondaryConfig)
-	if err != nil {
-		return nil, fmt.Errorf("secondary strategy check failed: %w", err)
-	}
-
-	// Check if all secondary quotas allow the request
-	secondaryAllAllowed := true
-	for quotaName, result := range secondaryResults {
-		results["secondary_"+quotaName] = result
-		if !result.Allowed {
-			secondaryAllAllowed = false
-		}
-	}
-
-	// If secondary denies, don't consume from either strategy
-	if !secondaryAllAllowed {
-		return results, nil
-	}
-
-	// Step 3: Both strategies allow, now consume quota from both
-	return cs.consumeQuotas(ctx, primaryConfig, secondaryConfig, results)
-}
-
-// Peek inspects current state without consuming quota
-func (cs *Strategy) Peek(ctx context.Context, config strategies.Config) (strategies.Results, error) {
-	compositeConfig, ok := config.(Config)
-	if !ok {
-		return nil, fmt.Errorf("composite strategy requires CompositeConfig")
 	}
 
 	results := make(strategies.Results)
 
 	// Get primary results
-	primaryConfig := cs.createPrimaryConfig(compositeConfig)
-	primaryResults, err := cs.primary.Peek(ctx, primaryConfig)
+	primaryResults, err := primaryStrategy.Peek(ctx, cfg.Primary)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get primary results: %w", err)
 	}
@@ -238,8 +287,7 @@ func (cs *Strategy) Peek(ctx context.Context, config strategies.Config) (strateg
 	}
 
 	// Get secondary results
-	secondaryConfig := cs.createSecondaryConfig(compositeConfig)
-	secondaryResults, err := cs.secondary.Peek(ctx, secondaryConfig)
+	secondaryResults, err := secondaryStrategy.Peek(ctx, cfg.Secondary)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get secondary results: %w", err)
 	}
@@ -250,57 +298,47 @@ func (cs *Strategy) Peek(ctx context.Context, config strategies.Config) (strateg
 	return results, nil
 }
 
-// Reset resets both strategies
-func (cs *Strategy) Reset(ctx context.Context, config strategies.Config) error {
-	compositeConfig, ok := config.(Config)
+// Reset atomically clears composite state using CAS
+func (cs *Strategy) Reset(ctx context.Context, sci strategies.Config) error {
+	cfg, ok := sci.(Config)
 	if !ok {
 		return fmt.Errorf("composite strategy requires CompositeConfig")
 	}
 
-	// Reset primary strategy
-	primaryConfig := cs.createPrimaryConfig(compositeConfig)
-	if err := cs.primary.Reset(ctx, primaryConfig); err != nil {
-		return fmt.Errorf("failed to reset primary strategy: %w", err)
+	key := cfg.CompositeKey()
+	if key == "" {
+		return fmt.Errorf("composite key not set, call WithKey first")
 	}
 
-	// Reset secondary strategy
-	secondaryConfig := cs.createSecondaryConfig(compositeConfig)
-	if err := cs.secondary.Reset(ctx, secondaryConfig); err != nil {
-		return fmt.Errorf("failed to reset secondary strategy: %w", err)
+	maxRetries := cfg.MaxRetries()
+	if maxRetries <= 0 {
+		maxRetries = 5 // default retry count
 	}
 
-	return nil
-}
+	for attempt := 0; attempt < maxRetries; attempt++ {
+		// Get current composite state
+		oldComposite, err := cs.storage.Get(ctx, key)
+		if err != nil {
+			return fmt.Errorf("failed to get composite state: %w", err)
+		}
 
-// createPrimaryConfig creates a role-aware config for the primary strategy
-func (cs *Strategy) createPrimaryConfig(compositeConfig Config) strategies.Config {
-	return compositeConfig.Primary.WithRole(strategies.RolePrimary)
-}
+		// Create empty composite state
+		newComposite := encodeComposite("", "")
+		ttl := time.Second // Small TTL for empty value
 
-// createSecondaryConfig creates a role-aware config for the secondary strategy
-func (cs *Strategy) createSecondaryConfig(compositeConfig Config) strategies.Config {
-	return compositeConfig.Secondary.WithRole(strategies.RoleSecondary)
-}
+		// Atomic reset with CAS
+		ok, err := cs.storage.CheckAndSet(ctx, key, oldComposite, newComposite, ttl)
+		if err != nil {
+			return fmt.Errorf("CAS operation failed: %w", err)
+		}
 
-// consumeQuotas consumes quota from both primary and secondary strategies
-func (cs *Strategy) consumeQuotas(ctx context.Context, primaryConfig, secondaryConfig strategies.Config, results strategies.Results) (strategies.Results, error) {
-	primaryAllowResults, err := cs.primary.Allow(ctx, primaryConfig)
-	if err != nil {
-		return nil, fmt.Errorf("primary strategy quota consumption failed: %w", err)
+		if ok {
+			// Success!
+			return nil
+		}
+
+		// CAS failed, retry due to contention
 	}
 
-	secondaryAllowResults, err := cs.secondary.Allow(ctx, secondaryConfig)
-	if err != nil {
-		return nil, fmt.Errorf("secondary strategy quota consumption failed: %w", err)
-	}
-
-	// Update results with the consumed values from Allow operations
-	for quotaName, result := range primaryAllowResults {
-		results["primary_"+quotaName] = result
-	}
-	for quotaName, result := range secondaryAllowResults {
-		results["secondary_"+quotaName] = result
-	}
-
-	return results, nil
+	return fmt.Errorf("max retries (%d) exceeded for composite reset", maxRetries)
 }

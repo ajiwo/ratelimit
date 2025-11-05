@@ -301,17 +301,22 @@ func TestPeekAndReset_DualStrategy_PassesCompositeConfig(t *testing.T) {
 	_, err := rl.Peek(context.Background(), AccessOptions{})
 	require.NoError(t, err, "Peek error: %v", err)
 
-	// Last config should be CompositeConfig with both configs containing same fully qualified key after WithKey
+	// Last config should be CompositeConfig with composite key set after WithKey
+	// In the new atomic design, primary and secondary configs don't get keys since they use singleKeyAdapter
 	if cc, ok := ms.lastConfig.(composite.Config); ok {
-		// Apply key so we can inspect keys passed down via WithKey inside Peek
+		// Apply key so we can inspect composite key passed down via WithKey inside Peek
 		cc = cc.WithKey("base:default").(composite.Config)
+		assert.NotEmpty(t, cc.CompositeKey(), "expected composite key after WithKey")
+		assert.Equal(t, "base:base:default:c", cc.CompositeKey(), "composite key should match expected format")
+
+		// Primary and secondary configs should not have keys in the new atomic design
 		if pc, okp := cc.Primary.(mockStrategyConfig); okp {
-			assert.NotEmpty(t, pc.key, "expected key on primary after WithKey")
+			assert.Empty(t, pc.key, "primary config should not have key in atomic design")
 		} else {
 			t.Fatalf("primary strategy config type mismatch")
 		}
 		if sc, oks := cc.Secondary.(mockStrategyConfig); oks {
-			assert.NotEmpty(t, sc.key, "expected key on secondary after WithKey")
+			assert.Empty(t, sc.key, "secondary config should not have key in atomic design")
 		} else {
 			t.Fatalf("secondary strategy config type mismatch")
 		}

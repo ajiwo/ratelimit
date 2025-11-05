@@ -198,12 +198,12 @@ func newRateLimiter(config Config) (*RateLimiter, error) {
 
 	// Check if we have a dual-strategy configuration
 	if config.SecondaryConfig != nil {
-		// Use composite strategy for dual-strategy behavior
-		composite, err := composite.NewComposite(config.Storage, config.PrimaryConfig, config.SecondaryConfig)
+		// Use comp strategy for dual-strategy behavior
+		comp, err := composite.New(config.Storage, config.PrimaryConfig, config.SecondaryConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create composite strategy: %w", err)
 		}
-		limiter.strategy = composite
+		limiter.strategy = comp
 
 		return limiter, nil
 	}
