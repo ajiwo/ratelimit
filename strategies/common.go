@@ -31,10 +31,6 @@ func CalcExpiration(capacity int, rate float64) time.Duration {
 // In practice, feedback is random, measured from the time before and after of the
 // last failed CheckAndSet operation.
 func NextDelay(attempt int, feedback time.Duration) time.Duration {
-
-	// Clamp attempt, overflow at 9391
-	attempt = min(max(attempt, 0), MaxRetries)
-
 	// Clamp feedback duration to prevent very short delays that could overwhelm the system
 	// The 30ns lower bound reduces randomness for sub-30ns feedback values but prevents
 	// system overload from rapid retries
