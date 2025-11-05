@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/ajiwo/ratelimit/strategies"
+	"github.com/ajiwo/ratelimit/strategies/composite"
 	"github.com/ajiwo/ratelimit/utils/builderpool"
 )
 
@@ -139,7 +140,7 @@ func (r *RateLimiter) allowWithResult(ctx context.Context, dynamicKey string) (b
 func (r *RateLimiter) buildStrategyConfig(dynamicKey string) strategies.StrategyConfig {
 	// build dual strategy config
 	if r.config.SecondaryConfig != nil {
-		return strategies.CompositeConfig{
+		return composite.CompositeConfig{
 			BaseKey:   r.config.BaseKey,
 			Primary:   r.config.PrimaryConfig,
 			Secondary: r.config.SecondaryConfig,
@@ -198,7 +199,7 @@ func newRateLimiter(config Config) (*RateLimiter, error) {
 	// Check if we have a dual-strategy configuration
 	if config.SecondaryConfig != nil {
 		// Use composite strategy for dual-strategy behavior
-		composite, err := strategies.NewComposite(config.Storage, config.PrimaryConfig, config.SecondaryConfig)
+		composite, err := composite.NewComposite(config.Storage, config.PrimaryConfig, config.SecondaryConfig)
 		if err != nil {
 			return nil, fmt.Errorf("failed to create composite strategy: %w", err)
 		}
