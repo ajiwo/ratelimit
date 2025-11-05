@@ -7,7 +7,7 @@ import (
 
 func init() {
 	strategies.Register(strategies.StrategyComposite, func(storage backends.Backend) strategies.Strategy {
-		return &compositeStrategy{
+		return &Strategy{
 			storage: storage,
 		}
 	})

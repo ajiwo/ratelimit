@@ -302,9 +302,9 @@ func TestPeekAndReset_DualStrategy_PassesCompositeConfig(t *testing.T) {
 	require.NoError(t, err, "Peek error: %v", err)
 
 	// Last config should be CompositeConfig with both configs containing same fully qualified key after WithKey
-	if cc, ok := ms.lastConfig.(composite.CompositeConfig); ok {
+	if cc, ok := ms.lastConfig.(composite.Config); ok {
 		// Apply key so we can inspect keys passed down via WithKey inside Peek
-		cc = cc.WithKey("base:default").(composite.CompositeConfig)
+		cc = cc.WithKey("base:default").(composite.Config)
 		if pc, okp := cc.Primary.(mockStrategyConfig); okp {
 			assert.NotEmpty(t, pc.key, "expected key on primary after WithKey")
 		} else {

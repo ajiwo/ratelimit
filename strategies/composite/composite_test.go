@@ -63,31 +63,31 @@ func TestCompositeConfigValidate(t *testing.T) {
 	sec := compMockConfig{caps: strategies.CapSecondary}
 
 	t.Run("baseKey and Presence", func(t *testing.T) {
-		err := (CompositeConfig{}).Validate()
+		err := (Config{}).Validate()
 		require.Error(t, err, "expected error for empty base key and nil strategies")
-		err = (CompositeConfig{BaseKey: "k", Secondary: sec}).Validate()
+		err = (Config{BaseKey: "k", Secondary: sec}).Validate()
 		require.Error(t, err, "expected error when primary is nil")
 
-		err = (CompositeConfig{BaseKey: "k", Primary: pri}).Validate()
+		err = (Config{BaseKey: "k", Primary: pri}).Validate()
 		require.Error(t, err, "expected error when secondary is nil")
 
-		err = (CompositeConfig{BaseKey: "k", Primary: pri, Secondary: sec}).Validate()
+		err = (Config{BaseKey: "k", Primary: pri, Secondary: sec}).Validate()
 		require.NoError(t, err, "unexpected: %v", err)
 	})
 
 	t.Run("inner validate", func(t *testing.T) {
 		bad := compMockConfig{caps: strategies.CapPrimary, valid: errors.New("bad")}
-		err := (CompositeConfig{BaseKey: "k", Primary: bad, Secondary: sec}).Validate()
+		err := (Config{BaseKey: "k", Primary: bad, Secondary: sec}).Validate()
 		require.Error(t, err, "expected error from primary validate")
 	})
 
 	t.Run("capabilities", func(t *testing.T) {
 		noPriCap := compMockConfig{}
-		err := (CompositeConfig{BaseKey: "k", Primary: noPriCap, Secondary: sec}).Validate()
+		err := (Config{BaseKey: "k", Primary: noPriCap, Secondary: sec}).Validate()
 		require.Error(t, err, "expected error for primary missing CapPrimary")
 
 		noSecCap := compMockConfig{caps: strategies.CapPrimary}
-		err = (CompositeConfig{BaseKey: "k", Primary: pri, Secondary: noSecCap}).Validate()
+		err = (Config{BaseKey: "k", Primary: pri, Secondary: noSecCap}).Validate()
 		require.Error(t, err, "expected error for secondary missing CapSecondary")
 	})
 }
@@ -95,7 +95,7 @@ func TestCompositeConfigValidate(t *testing.T) {
 func TestCompositeConfigHelpers_IDCapsRole(t *testing.T) {
 	pri := compMockConfig{caps: strategies.CapPrimary}
 	sec := compMockConfig{caps: strategies.CapSecondary}
-	cc := CompositeConfig{BaseKey: "k", Primary: pri, Secondary: sec}
+	cc := Config{BaseKey: "k", Primary: pri, Secondary: sec}
 	if cc.ID() != strategies.StrategyComposite {
 		t.Fatalf("ID mismatch")
 	}
@@ -105,7 +105,7 @@ func TestCompositeConfigHelpers_IDCapsRole(t *testing.T) {
 	if cc.GetRole() != strategies.RolePrimary {
 		t.Fatalf("GetRole should be primary")
 	}
-	if got := cc.WithRole(strategies.RoleSecondary).(CompositeConfig); !reflect.DeepEqual(got, cc) {
+	if got := cc.WithRole(strategies.RoleSecondary).(Config); !reflect.DeepEqual(got, cc) {
 		t.Fatalf("WithRole should return same config")
 	}
 }
@@ -113,8 +113,8 @@ func TestCompositeConfigHelpers_IDCapsRole(t *testing.T) {
 func TestCompositeConfigHelpers_WithKey(t *testing.T) {
 	pri := compMockConfig{caps: strategies.CapPrimary}
 	sec := compMockConfig{caps: strategies.CapSecondary}
-	cc := CompositeConfig{BaseKey: "k", Primary: pri, Secondary: sec}
-	applied := cc.WithKey("fully:qualified").(CompositeConfig)
+	cc := Config{BaseKey: "k", Primary: pri, Secondary: sec}
+	applied := cc.WithKey("fully:qualified").(Config)
 	if p, ok := applied.Primary.(compMockConfig); !ok || p.key != "k:fully:qualified:p" {
 		t.Fatalf("primary key not applied")
 	}
@@ -142,7 +142,7 @@ func TestCompositeStrategyFlows(t *testing.T) {
 	comp, err := NewComposite(storage, priConfig, secConfig)
 	require.NoError(t, err, "Failed to create composite strategy")
 
-	cfg := CompositeConfig{BaseKey: "k", Primary: priConfig, Secondary: secConfig}
+	cfg := Config{BaseKey: "k", Primary: priConfig, Secondary: secConfig}
 
 	// GetResult aggregates results with prefixes
 	res, err := comp.Peek(context.Background(), cfg)
