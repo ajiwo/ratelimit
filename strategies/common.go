@@ -1,6 +1,7 @@
 package strategies
 
 import (
+	"math/rand/v2"
 	"time"
 )
 
@@ -38,5 +39,10 @@ func NextDelay(attempt int, feedback time.Duration) time.Duration {
 	mult := time.Duration(attempt + 1)
 	delay := (feedback * mult) << shift
 
-	return delay
+	half := delay >> 1
+	// #nosec: G404 non security context
+	jitter := time.Duration(rand.Int64N(int64(half)))
+	// fmt.Printf("attempt=%d feedback=%v delay=%v half=%v jitter=%v\n", attempt, feedback, delay, half, jitter)
+
+	return half + jitter
 }
