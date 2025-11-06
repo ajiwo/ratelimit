@@ -4,7 +4,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/ajiwo/ratelimit/utils/builderpool"
 )
 
@@ -14,25 +13,25 @@ type GCRA struct {
 }
 
 // encodeState serializes GCRAState into a compact ASCII format:
-// v2|tat_unix_nano
+// 42|tat_unix_nano
 func encodeState(s GCRA) string {
 	sb := builderpool.Get()
 	defer func() {
 		builderpool.Put(sb)
 	}()
 
-	sb.WriteString("v2|")
+	sb.WriteString("42|")
 	sb.WriteString(strconv.FormatInt(s.TAT.UnixNano(), 10))
 	return sb.String()
 }
 
 // decodeState deserializes from compact format; returns ok=false if not compact.
 func decodeState(s string) (GCRA, bool) {
-	if !strategies.CheckV2Header(s) {
+	if len(s) < 3 || s[:3] != "42|" {
 		return GCRA{}, false
 	}
 
-	data := s[3:] // Skip "v2|"
+	data := s[3:] // Skip "42|"
 
 	tat, ok := parseStateFields(data)
 	if !ok {

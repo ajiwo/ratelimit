@@ -37,15 +37,15 @@ func TestDecodeStateInvalid(t *testing.T) {
 		},
 		{
 			name:  "missing parts",
-			input: "v2|123.45",
+			input: "32|123.45",
 		},
 		{
 			name:  "invalid requests",
-			input: "v2|abc|123456789",
+			input: "32|abc|123456789",
 		},
 		{
 			name:  "invalid last leak",
-			input: "v2|123.45|abc",
+			input: "32|123.45|abc",
 		},
 		{
 			name:  "empty string",
@@ -53,11 +53,11 @@ func TestDecodeStateInvalid(t *testing.T) {
 		},
 		{
 			name:  "only header",
-			input: "v2|",
+			input: "32|",
 		},
 		{
 			name:  "missing second field",
-			input: "v2|123.45|",
+			input: "32|123.45|",
 		},
 	}
 

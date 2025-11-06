@@ -4,7 +4,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/ajiwo/ratelimit/utils/builderpool"
 )
 
@@ -15,10 +14,11 @@ type LeakyBucket struct {
 }
 
 // encodeState serializes LeakyBucket into a compact ASCII format:
-// v2|requests|lastleak_unix_nano
+// 32|requests|lastleak_unix_nano
 func encodeState(b LeakyBucket) string {
 	sb := builderpool.Get()
-	sb.WriteString("v2|")
+	defer builderpool.Put(sb)
+	sb.WriteString("32|")
 	sb.WriteString(strconv.FormatFloat(b.Requests, 'g', -1, 64))
 	sb.WriteByte('|')
 	sb.WriteString(strconv.FormatInt(b.LastLeak.UnixNano(), 10))
@@ -52,11 +52,11 @@ func parseStateFields(data string) (float64, int64, bool) {
 
 // decodeState deserializes from compact format; returns ok=false if not compact.
 func decodeState(s string) (LeakyBucket, bool) {
-	if !strategies.CheckV2Header(s) {
+	if len(s) < 3 || s[:3] != "32|" {
 		return LeakyBucket{}, false
 	}
 
-	data := s[3:] // Skip "v2|"
+	data := s[3:] // Skip "32|"
 
 	req, last, ok := parseStateFields(data)
 	if !ok {

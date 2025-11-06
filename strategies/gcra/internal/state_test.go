@@ -39,11 +39,11 @@ func TestDecodeStateInvalid(t *testing.T) {
 		},
 		{
 			name:  "only header",
-			input: "v2|",
+			input: "42|",
 		},
 		{
 			name:  "invalid TAT",
-			input: "v2|abc",
+			input: "42|abc",
 		},
 	}
 

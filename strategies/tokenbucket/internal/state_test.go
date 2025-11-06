@@ -37,15 +37,15 @@ func TestDecodeStateInvalid(t *testing.T) {
 		},
 		{
 			name:  "missing parts",
-			input: "v2|123.45",
+			input: "12|123.45",
 		},
 		{
 			name:  "invalid tokens",
-			input: "v2|abc|123456789",
+			input: "12|abc|123456789",
 		},
 		{
 			name:  "invalid last refill",
-			input: "v2|123.45|abc",
+			input: "12|123.45|abc",
 		},
 	}
 

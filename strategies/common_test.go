@@ -7,26 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 )
 
-func TestCheckV2Header(t *testing.T) {
-	cases := []struct {
-		s  string
-		ok bool
-	}{
-		{"v2|payload", true},
-		{"v2|", true},
-		{"v3|", false},
-		{"v2-", false},
-		{"", false},
-		{"v", false},
-		{"v2", false},
-	}
-	for _, tc := range cases {
-		if got := CheckV2Header(tc.s); got != tc.ok {
-			t.Fatalf("CheckV2Header(%q)=%v want %v", tc.s, got, tc.ok)
-		}
-	}
-}
-
 func TestCalcExpiration(t *testing.T) {
 	// capacity 10, rate 5 -> (10/5)*2 = 4 seconds
 	d := CalcExpiration(10, 5)

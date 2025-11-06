@@ -25,7 +25,7 @@ func TestEncodeDecodeState(t *testing.T) {
 	// Test encoding
 	encoded := encodeState(quotaStates)
 	assert.NotEmpty(t, encoded)
-	assert.True(t, len(encoded) > 3) // Should have at least "v2|"
+	assert.True(t, len(encoded) > 3) // Should have at least "23|"
 
 	// Test decoding
 	decoded, ok := decodeState(encoded)
@@ -56,23 +56,23 @@ func TestDecodeStateInvalid(t *testing.T) {
 		},
 		{
 			name:  "missing parts",
-			input: "v2|2|quota1|1",
+			input: "23|2|quota1|1",
 		},
 		{
 			name:  "invalid quota count",
-			input: "v2|abc|quota1|1|123",
+			input: "23|abc|quota1|1|123",
 		},
 		{
 			name:  "too many quotas",
-			input: "v2|9|quota1|1|123|quota2|2|456|quota3|3|789|quota4|4|111|quota5|5|222|quota6|6|333|quota7|7|444|quota8|8|555|quota9|9|666",
+			input: "23|9|quota1|1|123|quota2|2|456|quota3|3|789|quota4|4|111|quota5|5|222|quota6|6|333|quota7|7|444|quota8|8|555|quota9|9|666",
 		},
 		{
 			name:  "invalid count",
-			input: "v2|1|quota1|abc|123",
+			input: "23|1|quota1|abc|123",
 		},
 		{
 			name:  "invalid start time",
-			input: "v2|1|quota1|1|abc",
+			input: "23|1|quota1|1|abc",
 		},
 		{
 			name:  "empty string",
@@ -80,7 +80,7 @@ func TestDecodeStateInvalid(t *testing.T) {
 		},
 		{
 			name:  "only header",
-			input: "v2|",
+			input: "23|",
 		},
 	}
 

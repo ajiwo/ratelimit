@@ -4,7 +4,6 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/ajiwo/ratelimit/utils/builderpool"
 )
 
@@ -13,13 +12,15 @@ type TokenBucket struct {
 	LastRefill time.Time `json:"last_refill"`
 }
 
+// encodeState serializes TokenBucket into a compact ASCII format:
+// 12|tokens|lastrefill_unix_nano
 func encodeState(b TokenBucket) string {
 	sb := builderpool.Get()
 	defer func() {
 		builderpool.Put(sb)
 	}()
 
-	sb.WriteString("v2|")
+	sb.WriteString("12|")
 	sb.WriteString(strconv.FormatFloat(b.Tokens, 'g', -1, 64))
 	sb.WriteByte('|')
 	sb.WriteString(strconv.FormatInt(b.LastRefill.UnixNano(), 10))
@@ -27,11 +28,11 @@ func encodeState(b TokenBucket) string {
 }
 
 func decodeState(s string) (TokenBucket, bool) {
-	if !strategies.CheckV2Header(s) {
+	if len(s) < 3 || s[:3] != "12|" {
 		return TokenBucket{}, false
 	}
 
-	data := s[3:]
+	data := s[3:] // Skip "12|"
 
 	tokens, last, ok := parseStateFields(data)
 	if !ok {

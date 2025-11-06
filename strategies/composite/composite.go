@@ -4,43 +4,12 @@ import (
 	"context"
 	"fmt"
 	"maps"
-	"strings"
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
 	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/ajiwo/ratelimit/utils"
-	"github.com/ajiwo/ratelimit/utils/builderpool"
 )
-
-// encodeComposite creates a composite state encoding from primary and secondary states
-// Format: cmp1|<primaryState>$<secondaryState>
-func encodeComposite(primaryState, secondaryState string) string {
-	sb := builderpool.Get()
-	defer builderpool.Put(sb)
-
-	sb.WriteString("cmp1|")
-	sb.WriteString(primaryState)
-	sb.WriteByte('$')
-	sb.WriteString(secondaryState)
-	return sb.String()
-}
-
-// decodeComposite extracts primary and secondary states from composite encoding
-// Returns empty strings for both if decoding fails
-func decodeComposite(compositeState string) (primaryState, secondaryState string) {
-	if !strings.HasPrefix(compositeState, "cmp1|") {
-		return "", ""
-	}
-
-	content := compositeState[5:] // Remove "cmp1|" prefix
-	parts := strings.SplitN(content, "$", 2)
-	if len(parts) != 2 {
-		return "", ""
-	}
-
-	return parts[0], parts[1]
-}
 
 // Strategy implements atomic dual-strategy behavior
 type Strategy struct {
@@ -140,7 +109,7 @@ func (cs *Strategy) tryAllowOnce(ctx context.Context, cfg Config, key string) (s
 	}
 
 	// Decode composite state
-	oldPrimary, oldSecondary := decodeComposite(oldComposite)
+	oldPrimary, oldSecondary := decodeState(oldComposite)
 
 	// Create single-key adapters seeded with current states
 	primaryAdapter := newSingleKeyAdapter(oldPrimary)
@@ -192,7 +161,7 @@ func (cs *Strategy) tryAllowOnce(ctx context.Context, cfg Config, key string) (s
 	}
 
 	// Encode new composite state
-	newComposite := encodeComposite(primaryAdapter.value, secondaryAdapter.value)
+	newComposite := encodeState(primaryAdapter.value, secondaryAdapter.value)
 	ttl := max(primaryAdapter.expiration, secondaryAdapter.expiration)
 
 	// Atomic commit with CAS
@@ -258,7 +227,7 @@ func (cs *Strategy) Peek(ctx context.Context, sci strategies.Config) (strategies
 	}
 
 	// Decode composite state
-	oldPrimary, oldSecondary := decodeComposite(oldComposite)
+	oldPrimary, oldSecondary := decodeState(oldComposite)
 
 	// Create single-key adapters seeded with current states
 	primaryAdapter := newSingleKeyAdapter(oldPrimary)
@@ -310,35 +279,5 @@ func (cs *Strategy) Reset(ctx context.Context, sci strategies.Config) error {
 		return fmt.Errorf("composite key not set, call WithKey first")
 	}
 
-	maxRetries := cfg.MaxRetries()
-	if maxRetries <= 0 {
-		maxRetries = 5 // default retry count
-	}
-
-	for attempt := 0; attempt < maxRetries; attempt++ {
-		// Get current composite state
-		oldComposite, err := cs.storage.Get(ctx, key)
-		if err != nil {
-			return fmt.Errorf("failed to get composite state: %w", err)
-		}
-
-		// Create empty composite state
-		newComposite := encodeComposite("", "")
-		ttl := time.Second // Small TTL for empty value
-
-		// Atomic reset with CAS
-		ok, err := cs.storage.CheckAndSet(ctx, key, oldComposite, newComposite, ttl)
-		if err != nil {
-			return fmt.Errorf("CAS operation failed: %w", err)
-		}
-
-		if ok {
-			// Success!
-			return nil
-		}
-
-		// CAS failed, retry due to contention
-	}
-
-	return fmt.Errorf("max retries (%d) exceeded for composite reset", maxRetries)
+	return cs.storage.Delete(ctx, key)
 }

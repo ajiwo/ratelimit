@@ -14,7 +14,7 @@ type FixedWindow struct {
 }
 
 // encodeState serializes multiple quotas into a combined ASCII format:
-// v2|N|quotaName1|count1|startUnixNano1|...|quotaNameN|countN|startUnixNanoN
+// 23|N|quotaName1|count1|startUnixNano1|...|quotaNameN|countN|startUnixNanoN
 func encodeState(quotaStates map[string]FixedWindow) string {
 	if len(quotaStates) == 0 {
 		return ""
@@ -25,7 +25,7 @@ func encodeState(quotaStates map[string]FixedWindow) string {
 		builderpool.Put(sb)
 	}()
 
-	sb.WriteString("v2|")
+	sb.WriteString("23|")
 	sb.WriteString(strconv.Itoa(len(quotaStates)))
 
 	for name, window := range quotaStates {
@@ -98,11 +98,11 @@ func parseStartTime(data string, isLastQuota bool) (int64, string, bool) {
 }
 
 func decodeState(s string) (map[string]FixedWindow, bool) {
-	if len(s) < 3 || s[:3] != "v2|" {
+	if len(s) < 3 || s[:3] != "23|" {
 		return nil, false
 	}
 
-	data := s[3:] // Skip "v2|"
+	data := s[3:] // Skip "23|"
 
 	// Parse number of quotas
 	n, data, ok := parseQuotaCount(data)

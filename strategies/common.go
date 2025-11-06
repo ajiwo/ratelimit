@@ -10,11 +10,6 @@ const (
 	MaxRetries        = 9390
 )
 
-// CheckV2Header validates that the string starts with "v2|"
-func CheckV2Header(s string) bool {
-	return len(s) >= 3 && s[0] == 'v' && s[1] == '2' && s[2] == '|'
-}
-
 // CalcExpiration calculates an appropriate expiration time for storage operations
 // based on capacity and rate, with a minimum of 1 second
 // it currently is used by leaky/token bucket strategy
