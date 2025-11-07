@@ -30,10 +30,10 @@ func NextDelay(attempt int, feedback time.Duration) time.Duration {
 	// Clamp feedback duration to prevent very short delays that could overwhelm the system
 	// The 30ns lower bound reduces randomness for sub-30ns feedback values but prevents
 	// system overload from rapid retries
-	feedback = min(max(feedback, 30*time.Nanosecond), 30*time.Second)
+	feedback = min(max(feedback, 30*time.Nanosecond), 10*time.Second)
 
 	// Calculate shift amount (capped exponential growth)
-	shift := attempt % 16
+	shift := attempt % 8
 
 	// Calculate delay with linear multiplier and exponential shift
 	mult := time.Duration(attempt + 1)

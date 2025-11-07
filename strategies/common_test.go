@@ -55,12 +55,12 @@ func TestNextDelay(t *testing.T) {
 			maxExpected: 120 * time.Nanosecond, // base delay
 		},
 		{
-			name:        "feedback above maximum (30s) gets clamped",
+			name:        "feedback above maximum (10s) gets clamped",
 			attempt:     1,
 			feedback:    60 * time.Second,
-			baseDelay:   120 * time.Second, // (60s -> 30s * 2) << 1
-			minExpected: 60 * time.Second,  // half of base
-			maxExpected: 120 * time.Second, // base delay
+			baseDelay:   40 * time.Second, // (60s -> 10s * 2) << 1
+			minExpected: 20 * time.Second, // half of base
+			maxExpected: 40 * time.Second, // base delay
 		},
 		{
 			name:        "exponential backoff with shift",
@@ -72,11 +72,11 @@ func TestNextDelay(t *testing.T) {
 		},
 		{
 			name:        "higher attempt with shift wrapping",
-			attempt:     16,
+			attempt:     8,
 			feedback:    100 * time.Millisecond,
-			baseDelay:   1700 * time.Millisecond, // (100ms * 17) << 0 (shift wraps: 16 % 16 = 0)
-			minExpected: 850 * time.Millisecond,  // half of base
-			maxExpected: 1700 * time.Millisecond, // base delay
+			baseDelay:   900 * time.Millisecond, // (100ms * 9) << 0 (shift wraps: 8 % 8 = 0)
+			minExpected: 450 * time.Millisecond, // half of base
+			maxExpected: 900 * time.Millisecond, // base delay
 		},
 		{
 			name:        "large shift value",
@@ -139,14 +139,14 @@ func TestNextDelay_SawtoothPattern(t *testing.T) {
 	assert.True(t, avgDelays[2] > avgDelays[1], "attempt 2 should be > attempt 1")
 	assert.True(t, avgDelays[3] > avgDelays[2], "attempt 3 should be > attempt 2")
 
-	// At attempt 16, shift should wrap around, causing a "reset" in the exponential pattern
-	// avgDelays[16] should be significantly less than avgDelays[15] due to shift reset
-	assert.True(t, avgDelays[16] < avgDelays[15], "attempt 16 should be < attempt 15 due to shift reset")
+	// At attempt 8, shift should wrap around, causing a "reset" in the exponential pattern
+	// avgDelays[8] should be significantly less than avgDelays[7] due to shift reset
+	assert.True(t, avgDelays[8] < avgDelays[7], "attempt 8 should be < attempt 7 due to shift reset")
 	// but still larger than avgDelays[0] due to attempt multiplier
-	assert.True(t, avgDelays[16] > avgDelays[0], "attempt 16 should be > attempt 0 due to attempt multiplier")
+	assert.True(t, avgDelays[8] > avgDelays[0], "attempt 8 should be > attempt 0 due to attempt multiplier")
 
 	// The approximate relationship should hold (with some tolerance for jitter)
-	expectedRatio := 17.0
-	actualRatio := float64(avgDelays[16]) / float64(avgDelays[0])
-	assert.InDelta(t, expectedRatio, actualRatio, 2.0, "attempt 16 should be approximately 17x attempt 0")
+	expectedRatio := 9.0
+	actualRatio := float64(avgDelays[8]) / float64(avgDelays[0])
+	assert.InDelta(t, expectedRatio, actualRatio, 2.0, "attempt 8 should be approximately 9x attempt 0")
 }
