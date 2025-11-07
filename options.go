@@ -75,13 +75,19 @@ func WithBackend(backend backends.Backend) Option {
 //
 // Under high concurrency, CheckAndSet operations may need to retry if the state changes between read and write.
 // The retry loop uses exponential backoff with delays based on time since last failed attempt, clamped
-// between 30ns and 30s, and checks for context cancellation (except for short delays, which bypass context checks)
+// between 30ns and 10s, and checks for context cancellation (except for short delays, which bypass context checks)
 // on each attempt.
 //
-// Recommended values:
-//   - Low contention (< 10 concurrent users): 10-15 retries
-//   - Medium contention (10-100 concurrent users): 100-175 retries
-//   - High contention (100+ concurrent users): (2 x concurrent users) retries
+// Recommended values, not strictly:
+//   - Low contention (< 10 concurrent users): 5-8 retries
+//   - Medium contention (10-100 concurrent users): 75% of concurrent users retries
+//   - High contention (100+ concurrent users): max(30, 75% of concurrent users) retries
+//
+// Examples:
+//   - 20 concurrent users: ~15 retries
+//   - 50 concurrent users: ~38 retries
+//   - 100 concurrent users: 75 retries
+//   - 500 concurrent users: 375 retries
 //
 // If retries is 0 or not set, the default value (30) will be used.
 func WithMaxRetries(retries int) Option {
