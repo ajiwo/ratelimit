@@ -2,14 +2,14 @@ module github.com/ajiwo/ratelimit/examples
 
 go 1.25.0
 
-replace github.com/ajiwo/ratelimit v0.0.6 => ../
+replace github.com/ajiwo/ratelimit v0.0.7 => ../
 
-replace github.com/ajiwo/ratelimit/backends/postgres v0.0.6 => ../backends/postgres
+replace github.com/ajiwo/ratelimit/backends/postgres v0.0.7 => ../backends/postgres
 
-replace github.com/ajiwo/ratelimit/backends/redis v0.0.6 => ../backends/redis
+replace github.com/ajiwo/ratelimit/backends/redis v0.0.7 => ../backends/redis
 
 require (
-	github.com/ajiwo/ratelimit v0.0.6
+	github.com/ajiwo/ratelimit v0.0.7
 	github.com/labstack/echo/v4 v4.13.4
 )
 

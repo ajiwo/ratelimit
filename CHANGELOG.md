@@ -2,7 +2,30 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.0.7] - 2025-11-07
+
+### Added
+- Direct composite strategy usage example demonstrating standalone strategy composition
+- General purpose `utils.SleepOrWait` helper function for context-aware long waiting or short sleeping
+
+### Changed
+- **Backend interface** `Set` and `CheckAndSet` methods now use `string` values instead of `any` type, removing type assertions
+- **Fixed Window strategy**
+  - improved with combined state approach storing all quotas together under a single key with atomic operations
+  - limited the quota number to maximum 8 quotas per key
+- **Composite strategy** redesigned with atomic operations using single composite state encoding instead of separate primary/secondary keys
+- **Strategy type names** simplified to `StrategyConfig` -> `Config`, `StrategyID` -> `ID`, `StrategyRole` -> `Role` throughout codebase
+- **Composite strategy** moved to dedicated strategies/composite subpackage
+- **Retry backoff** enhanced with centralized NextDelay function and improved context cancellation handling
+- **String Builder pooling** centralized in dedicated utils/builderpool package for better memory management
+- **Strategy data format** replaced generic "v2|" prefix with unique hex identifiers for each strategy type
+
+### Performance
+- **Optimized retry parameters** - adjusted delay ranges and reduced default max retries from 300 to 30 with improved backoff strategy
+
+### Fixed
+- **Context cancellation handling** improved in retry loops with proper short/long delay distinction
+- **Retry duration overflow** capped exponential backoff growth with modulo 8
 
 ## [0.0.6] - 2025-10-26
 
