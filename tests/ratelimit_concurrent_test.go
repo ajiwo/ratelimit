@@ -1,11 +1,14 @@
 package tests
 
 import (
+	"context"
 	"fmt"
+	"math/rand/v2"
 	"testing"
 	"time"
 
 	"github.com/ajiwo/ratelimit"
+	"github.com/ajiwo/ratelimit/backends"
 	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/ajiwo/ratelimit/strategies/fixedwindow"
 	"github.com/ajiwo/ratelimit/strategies/gcra"
@@ -15,43 +18,105 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestFixedWindow_ConcurrentAccessMemory(t *testing.T) {
-	backend := UseBackend(t, "memory")
-	key := fmt.Sprintf("fwm-%d", time.Now().UnixNano())
+var (
+	numGoroutines   = 32
+	maxRetries      = numGoroutines / 2
+	expectedAllowed = rand.IntN(numGoroutines + 1) // #nosec: G404
+	expectedDenied  = numGoroutines - expectedAllowed
+)
 
-	limiter, err := ratelimit.New(
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
+// StrategyConfig defines a test configuration for a rate limiting strategy
+type StrategyConfig struct {
+	name     string
+	strategy strategies.Config
+}
+
+// TestResult holds the results of a concurrent test
+type TestResult struct {
+	allowedCount int
+	deniedCount  int
+	errCount     int
+}
+
+// strategyConfigs defines all strategy configurations to test
+var strategyConfigs = []StrategyConfig{
+	{
+		name: "FixedWindow",
+		strategy: fixedwindow.Config{
 			Key: "test",
 			Quotas: map[string]fixedwindow.Quota{
 				"default": {
-					Limit:  10,
+					Limit:  expectedAllowed,
+					Window: 5 * time.Second,
+				},
+				"hourly": {
+					Limit:  10 * expectedAllowed,
 					Window: 5 * time.Second,
 				},
 			},
-		}),
-		// Slow down, don't spend all 10 allowances at once
-		ratelimit.WithSecondaryStrategy(tokenbucket.Config{
-			BurstSize:  5,
-			RefillRate: 500.0, // fast enough to refil after the burst
-		}),
+		},
+	},
+	{
+		name: "LeakyBucket",
+		strategy: leakybucket.Config{
+			Capacity: expectedAllowed,
+			LeakRate: 0.1,
+		},
+	},
+	{
+		name: "TokenBucket",
+		strategy: tokenbucket.Config{
+			BurstSize:  expectedAllowed,
+			RefillRate: 0.1,
+		},
+	},
+	{
+		name: "GCRA",
+		strategy: gcra.Config{
+			Burst: expectedAllowed,
+			Rate:  0.1,
+		},
+	},
+}
+
+// createLimiter creates a new rate limiter with the given configuration
+func createLimiter(t *testing.T, backend backends.Backend, config StrategyConfig, keyPrefix string) *ratelimit.RateLimiter {
+	key := fmt.Sprintf("%s-%s-%d", keyPrefix, config.name, time.Now().UnixNano())
+
+	limiter, err := ratelimit.New(
+		ratelimit.WithBaseKey(key),
+		ratelimit.WithBackend(backend),
+		ratelimit.WithMaxRetries(maxRetries),
+		ratelimit.WithPrimaryStrategy(config.strategy),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
+
 	t.Cleanup(func() {
 		_ = limiter.Close()
 	})
 
+	return limiter
+}
+
+// runConcurrentTest executes the concurrent test for a given limiter
+func runConcurrentTest(t *testing.T, limiter *ratelimit.RateLimiter, wantResult bool) TestResult {
 	ctx := t.Context()
 
-	// Start multiple goroutines making requests concurrently
-	results := make(chan bool, 20)
-	errors := make(chan error, 20)
+	// Determine channel type based on wantResult
+	if wantResult {
+		return runConcurrentTestWithResult(t, ctx, limiter)
+	}
+	return runConcurrentTestWithoutResult(t, ctx, limiter)
+}
 
-	// Launch 20 goroutines
-	for range 20 {
+// runConcurrentTestWithoutResult runs test using simple boolean return
+func runConcurrentTestWithoutResult(t *testing.T, ctx context.Context, limiter *ratelimit.RateLimiter) TestResult {
+	results := make(chan bool, numGoroutines)
+	errors := make(chan error, numGoroutines)
+
+	// Launch concurrent goroutines
+	for range numGoroutines {
 		go func() {
 			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
 			if err != nil {
@@ -62,542 +127,16 @@ func TestFixedWindow_ConcurrentAccessMemory(t *testing.T) {
 		}()
 	}
 
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case allowed := <-results:
-			if allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
-	}
-
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 5, allowedCount, "Exactly 5 requests should be allowed")
-	assert.Equal(t, 15, deniedCount, "Exactly 15 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
+	return collectResults(t, results, errors)
 }
 
-func TestFixedWindow_ConcurrentAccessPostgres(t *testing.T) {
-	backend := UseBackend(t, "postgres")
-	key := fmt.Sprintf("fwp-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
-			Key: "test",
-			Quotas: map[string]fixedwindow.Quota{
-				"default": {
-					Limit:  10,
-					Window: 5 * time.Second,
-				},
-			},
-		}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan bool, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- allowed
-		}()
-	}
-
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case allowed := <-results:
-			if allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
-	}
-
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
-}
-
-func TestFixedWindow_ConcurrentAccessRedis(t *testing.T) {
-	backend := UseBackend(t, "redis")
-	key := fmt.Sprintf("fwr-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
-			Key: "test",
-			Quotas: map[string]fixedwindow.Quota{
-				"default": {
-					Limit:  10,
-					Window: 5 * time.Second,
-				},
-			},
-		}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan bool, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- allowed
-		}()
-	}
-
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case allowed := <-results:
-			if allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
-	}
-
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
-}
-
-func TestLeakyBucket_ConcurrentAccessMemory(t *testing.T) {
-	backend := UseBackend(t, "memory")
-	key := fmt.Sprintf("lbm-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(leakybucket.Config{Capacity: 10, LeakRate: 0.1}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan bool, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- allowed
-		}()
-	}
-
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case allowed := <-results:
-			if allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
-	}
-
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
-}
-
-func TestLeakyBucket_ConcurrentAccessPostgres(t *testing.T) {
-	backend := UseBackend(t, "postgres")
-	key := fmt.Sprintf("lbp-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(leakybucket.Config{Capacity: 10, LeakRate: 0.1}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan bool, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- allowed
-		}()
-	}
-
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case allowed := <-results:
-			if allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
-	}
-
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
-}
-
-func TestLeakyBucket_ConcurrentAccessRedis(t *testing.T) {
-	backend := UseBackend(t, "redis")
-	key := fmt.Sprintf("lbr-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(leakybucket.Config{Capacity: 10, LeakRate: 0.1}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan bool, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- allowed
-		}()
-	}
-
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case allowed := <-results:
-			if allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
-	}
-
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
-}
-
-func TestTokenBucket_ConcurrentAccessMemory(t *testing.T) {
-	backend := UseBackend(t, "memory")
-	key := fmt.Sprintf("tbm-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(tokenbucket.Config{BurstSize: 10, RefillRate: 0.1}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan bool, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- allowed
-		}()
-	}
-
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case allowed := <-results:
-			if allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
-	}
-
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
-}
-
-func TestTokenBucket_ConcurrentAccessPostgres(t *testing.T) {
-	backend := UseBackend(t, "postgres")
-	key := fmt.Sprintf("tbp-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(tokenbucket.Config{BurstSize: 10, RefillRate: 0.1}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan bool, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- allowed
-		}()
-	}
-
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case allowed := <-results:
-			if allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
-	}
-
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
-}
-
-func TestTokenBucket_ConcurrentAccessRedis(t *testing.T) {
-	backend := UseBackend(t, "redis")
-	key := fmt.Sprintf("tbr-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(tokenbucket.Config{BurstSize: 10, RefillRate: 0.1}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan bool, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- allowed
-		}()
-	}
-
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case allowed := <-results:
-			if allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
-	}
-
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
-}
-
-func TestFixedWindow_ConcurrentAccessMemoryWithResult(t *testing.T) {
-	backend := UseBackend(t, "memory")
-	key := fmt.Sprintf("fw-mwr-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
-			Key: "test",
-			Quotas: map[string]fixedwindow.Quota{
-				"default": {
-					Limit:  10,
-					Window: 5 * time.Second,
-				},
-			},
-		}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan strategies.Result, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
+// runConcurrentTestWithResult runs test using detailed Result return
+func runConcurrentTestWithResult(t *testing.T, ctx context.Context, limiter *ratelimit.RateLimiter) TestResult {
+	results := make(chan strategies.Result, numGoroutines)
+	errors := make(chan error, numGoroutines)
+
+	// Launch concurrent goroutines
+	for range numGoroutines {
 		go func() {
 			var res strategies.Results
 			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
@@ -609,865 +148,96 @@ func TestFixedWindow_ConcurrentAccessMemoryWithResult(t *testing.T) {
 		}()
 	}
 
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case result := <-results:
-			if result.Allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
-	}
-
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
+	return collectResultsWithStrategyResult(t, results, errors)
 }
 
-func TestFixedWindow_ConcurrentAccessPostgresWithResult(t *testing.T) {
-	backend := UseBackend(t, "postgres")
-	key := fmt.Sprintf("fw-pwr-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
-			Key: "test",
-			Quotas: map[string]fixedwindow.Quota{
-				"default": {
-					Limit:  10,
-					Window: 5 * time.Second,
-				},
-			},
-		}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan strategies.Result, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			var res strategies.Results
-			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- res["default"]
-		}()
-	}
-
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case result := <-results:
-			if result.Allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
-	}
-
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
-}
-
-func TestFixedWindow_ConcurrentAccessRedisWithResult(t *testing.T) {
-	backend := UseBackend(t, "redis")
-	key := fmt.Sprintf("fw-rwr-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(fixedwindow.Config{
-			Key: "test",
-			Quotas: map[string]fixedwindow.Quota{
-				"default": {
-					Limit:  10,
-					Window: 5 * time.Second,
-				},
-			},
-		}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan strategies.Result, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			var res strategies.Results
-			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- res["default"]
-		}()
-	}
-
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case result := <-results:
-			if result.Allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
-	}
-
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
-}
-
-func TestLeakyBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
-	backend := UseBackend(t, "memory")
-	key := fmt.Sprintf("lb-mwr-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(leakybucket.Config{Capacity: 10, LeakRate: 0.1}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan strategies.Result, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			var res strategies.Results
-			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- res["default"]
-		}()
-	}
-
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case result := <-results:
-			if result.Allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
-	}
-
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
-}
-
-func TestLeakyBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
-	backend := UseBackend(t, "postgres")
-	key := fmt.Sprintf("lb-pwr-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(leakybucket.Config{Capacity: 10, LeakRate: 0.1}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan strategies.Result, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			var res strategies.Results
-			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- res["default"]
-		}()
-	}
-
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case result := <-results:
-			if result.Allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
-	}
-
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
-}
-
-func TestLeakyBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
-	backend := UseBackend(t, "redis")
-	key := fmt.Sprintf("lb-rwr-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(leakybucket.Config{Capacity: 10, LeakRate: 0.1}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan strategies.Result, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			var res strategies.Results
-			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- res["default"]
-		}()
-	}
-
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case result := <-results:
-			if result.Allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
-	}
-
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
-}
-
-func TestTokenBucket_ConcurrentAccessMemoryWithResult(t *testing.T) {
-	backend := UseBackend(t, "memory")
-	key := fmt.Sprintf("tb-mwr-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(tokenbucket.Config{BurstSize: 10, RefillRate: 0.1}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan strategies.Result, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			var res strategies.Results
-			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- res["default"]
-		}()
-	}
-
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case result := <-results:
-			if result.Allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
-	}
-
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
-}
-
-func TestTokenBucket_ConcurrentAccessPostgresWithResult(t *testing.T) {
-	backend := UseBackend(t, "postgres")
-	key := fmt.Sprintf("tb-pwr-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(tokenbucket.Config{BurstSize: 10, RefillRate: 0.1}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan strategies.Result, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			var res strategies.Results
-			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- res["default"]
-		}()
-	}
-
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case result := <-results:
-			if result.Allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
-	}
-
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
-}
-
-func TestTokenBucket_ConcurrentAccessRedisWithResult(t *testing.T) {
-	backend := UseBackend(t, "redis")
-	key := fmt.Sprintf("tb-rwr-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(tokenbucket.Config{BurstSize: 10, RefillRate: 0.1}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan strategies.Result, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			var res strategies.Results
-			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- res["default"]
-		}()
-	}
-
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case result := <-results:
-			if result.Allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
-	}
-
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
-}
-
-func TestGCRA_ConcurrentAccessMemory(t *testing.T) {
-	backend := UseBackend(t, "memory")
-	key := fmt.Sprintf("gm-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(gcra.Config{Burst: 10, Rate: 0.1}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan bool, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- allowed
-		}()
-	}
-
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
+// collectResults collects results from boolean channels
+func collectResults(t *testing.T, results <-chan bool, errors <-chan error) TestResult {
+	var result TestResult
+
+	for range numGoroutines {
 		select {
 		case allowed := <-results:
 			if allowed {
-				allowedCount++
+				result.allowedCount++
 			} else {
-				deniedCount++
+				result.deniedCount++
 			}
 		case err := <-errors:
-			errCount++
+			result.errCount++
 			t.Logf("Unexpected error: %v", err)
 		}
 	}
 
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
+	return result
 }
 
-func TestGCRA_ConcurrentAccessPostgres(t *testing.T) {
-	backend := UseBackend(t, "postgres")
-	key := fmt.Sprintf("gp-%d", time.Now().UnixNano())
+// collectResultsWithStrategyResult collects results from strategy.Result channels
+func collectResultsWithStrategyResult(t *testing.T, results <-chan strategies.Result, errors <-chan error) TestResult {
+	var result TestResult
 
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(gcra.Config{Burst: 10, Rate: 0.1}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan bool, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- allowed
-		}()
-	}
-
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
+	for range numGoroutines {
 		select {
-		case allowed := <-results:
-			if allowed {
-				allowedCount++
+		case res := <-results:
+			if res.Allowed {
+				result.allowedCount++
 			} else {
-				deniedCount++
+				result.deniedCount++
 			}
 		case err := <-errors:
-			errCount++
+			result.errCount++
 			t.Logf("Unexpected error: %v", err)
 		}
 	}
 
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
+	return result
 }
 
-func TestGCRA_ConcurrentAccessRedis(t *testing.T) {
-	backend := UseBackend(t, "redis")
-	key := fmt.Sprintf("gr-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(gcra.Config{Burst: 10, Rate: 0.1}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan bool, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- allowed
-		}()
-	}
-
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case allowed := <-results:
-			if allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
-	}
-
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
+// assertTestResults validates the test results meet expectations
+func assertTestResults(t *testing.T, result TestResult, testName string) {
+	assert.Equal(t, expectedAllowed, result.allowedCount,
+		"%s: Exactly %d requests should be allowed", testName, expectedAllowed)
+	assert.Equal(t, expectedDenied, result.deniedCount,
+		"%s: Exactly %d requests should be denied", testName, expectedDenied)
+	assert.Equal(t, 0, result.errCount,
+		"%s: No errors should occur", testName)
 }
 
-func TestGCRA_ConcurrentAccessMemoryWithResult(t *testing.T) {
-	backend := UseBackend(t, "memory")
-	key := fmt.Sprintf("gcra-mwr-%d", time.Now().UnixNano())
+// testBackendStrategy runs a single test case for a backend and strategy combination
+func testBackendStrategy(t *testing.T, backendName string, config StrategyConfig, wantResult bool) {
+	backend := UseBackend(t, backendName)
+	limiter := createLimiter(t, backend, config, backendName)
+	result := runConcurrentTest(t, limiter, wantResult)
 
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(gcra.Config{Burst: 10, Rate: 0.1}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan strategies.Result, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			var res strategies.Results
-			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- res["default"]
-		}()
+	testName := fmt.Sprintf("%s_%s", config.name, backendName)
+	if wantResult {
+		testName += "_WithResult"
 	}
-
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case result := <-results:
-			if result.Allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
-		}
-	}
-
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
+	assertTestResults(t, result, testName)
 }
 
-func TestGCRA_ConcurrentAccessPostgresWithResult(t *testing.T) {
-	backend := UseBackend(t, "postgres")
-	key := fmt.Sprintf("gcra-pwr-%d", time.Now().UnixNano())
+// TestConcurrentAccess_Basic tests concurrent access for all strategy and backend combinations
+func TestConcurrentAccess_Basic(t *testing.T) {
+	backends := []string{"memory", "postgres", "redis"}
 
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(gcra.Config{Burst: 10, Rate: 0.1}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan strategies.Result, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			var res strategies.Results
-			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- res["default"]
-		}()
-	}
-
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case result := <-results:
-			if result.Allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
+	for _, config := range strategyConfigs {
+		for _, backend := range backends {
+			t.Run(fmt.Sprintf("%s_%s", config.name, backend), func(t *testing.T) {
+				testBackendStrategy(t, backend, config, false)
+			})
 		}
 	}
-
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
 }
 
-func TestGCRA_ConcurrentAccessRedisWithResult(t *testing.T) {
-	backend := UseBackend(t, "redis")
-	key := fmt.Sprintf("gcra-rwr-%d", time.Now().UnixNano())
+// TestConcurrentAccess_WithResult tests concurrent access with detailed results
+func TestConcurrentAccess_WithResult(t *testing.T) {
+	backends := []string{"memory", "postgres", "redis"}
 
-	limiter, err := ratelimit.New(
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithBackend(backend),
-		ratelimit.WithMaxRetries(7),
-		ratelimit.WithPrimaryStrategy(gcra.Config{Burst: 10, Rate: 0.1}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() {
-		_ = limiter.Close()
-	})
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	results := make(chan strategies.Result, 20)
-	errors := make(chan error, 20)
-
-	// Launch 20 goroutines
-	for range 20 {
-		go func() {
-			var res strategies.Results
-			_, err := limiter.Allow(ctx, ratelimit.AccessOptions{Result: &res})
-			if err != nil {
-				errors <- err
-				return
-			}
-			results <- res["default"]
-		}()
-	}
-
-	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
-	for range 20 {
-		select {
-		case result := <-results:
-			if result.Allowed {
-				allowedCount++
-			} else {
-				deniedCount++
-			}
-		case err := <-errors:
-			errCount++
-			t.Logf("Unexpected error: %v", err)
+	for _, config := range strategyConfigs {
+		for _, backend := range backends {
+			t.Run(fmt.Sprintf("%s_%s_WithResult", config.name, backend), func(t *testing.T) {
+				testBackendStrategy(t, backend, config, true)
+			})
 		}
 	}
-
-	// Should have exactly 10 allowed and 10 denied
-	assert.Equal(t, 10, allowedCount, "Exactly 10 requests should be allowed")
-	assert.Equal(t, 10, deniedCount, "Exactly 10 requests should be denied")
-	assert.Equal(t, 0, errCount, "No errors should occur")
 }

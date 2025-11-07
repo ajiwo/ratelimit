@@ -3,7 +3,6 @@ package tests
 import (
 	"context"
 	"errors"
-	"sync"
 	"testing"
 	"time"
 
@@ -115,59 +114,6 @@ func TestGCRA_Reset(t *testing.T) {
 	require.NoError(t, err, "Unexpected error")
 	assert.True(t, result["default"].Allowed, "Expected request to be allowed after reset")
 	assert.Equal(t, 1, result["default"].Remaining, "Expected 1 remaining after reset")
-}
-
-// TestGCRA_ConcurrentAccess tests concurrent access to GCRA
-func TestGCRA_ConcurrentAccess(t *testing.T) {
-	ctx := t.Context()
-	storage := memory.New()
-	t.Cleanup(func() { storage.Close() })
-
-	strategy := gcra.New(storage)
-	config := gcra.Config{
-		Key:   "test_concurrent",
-		Rate:  100.0, // High rate for concurrent testing
-		Burst: 50,
-	}
-
-	const numGoroutines = 10
-	const requestsPerGoroutine = 20
-
-	var wg sync.WaitGroup
-	var allowedCount int64
-	var errorCount int64
-	var mu sync.Mutex
-
-	// Launch multiple goroutines making concurrent requests
-	for range numGoroutines {
-		wg.Go(func() {
-			for range requestsPerGoroutine {
-				result, err := strategy.Allow(ctx, config)
-				if err != nil {
-					mu.Lock()
-					errorCount++
-					mu.Unlock()
-					continue
-				}
-				if result["default"].Allowed {
-					mu.Lock()
-					allowedCount++
-					mu.Unlock()
-				}
-			}
-		})
-	}
-
-	wg.Wait()
-
-	totalRequests := int64(numGoroutines * requestsPerGoroutine)
-	assert.Equal(t, int64(0), errorCount, "Encountered %d errors during concurrent access", errorCount)
-
-	// Should not have allowed more than burst + rate*time elapsed requests
-	// This is a rough check - the exact number depends on timing
-	if allowedCount > int64(config.Burst) {
-		t.Logf("Allowed %d requests out of %d total", allowedCount, totalRequests)
-	}
 }
 
 // TestGCRA_RateLimiting tests actual rate limiting over time
