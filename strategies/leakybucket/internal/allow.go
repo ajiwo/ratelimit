@@ -46,8 +46,8 @@ func Allow(
 	mode AllowMode,
 
 ) (Result, error) {
-	if ctx.Err() != nil {
-		return Result{}, NewContextCanceledError(ctx.Err())
+	if err := ctx.Err(); err != nil {
+		return Result{}, NewContextCanceledError(err)
 	}
 
 	maxRetries := config.MaxRetries()
@@ -121,8 +121,8 @@ func (p *parameter) allowTryAndUpdate(ctx context.Context) (Result, error) {
 	// Try atomic CheckAndSet operations first
 	for attempt := range p.maxRetries {
 		// Check if context is canceled or timed out
-		if ctx.Err() != nil {
-			return Result{}, NewContextCanceledError(ctx.Err())
+		if err := ctx.Err(); err != nil {
+			return Result{}, NewContextCanceledError(err)
 		}
 
 		// Get current bucket state

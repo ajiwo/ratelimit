@@ -45,8 +45,8 @@ func Allow(
 	mode AllowMode,
 
 ) (map[string]Result, error) {
-	if ctx.Err() != nil {
-		return nil, NewContextCanceledError(ctx.Err())
+	if err := ctx.Err(); err != nil {
+		return nil, NewContextCanceledError(err)
 	}
 
 	maxRetries := config.MaxRetries()
@@ -122,8 +122,8 @@ func (p *parameter) allowTryAndUpdate(ctx context.Context) (map[string]Result, e
 	// Try atomic CheckAndSet operations with combined state
 	for attempt := range p.maxRetries {
 		// Check if context is canceled or timed out
-		if ctx.Err() != nil {
-			return nil, NewContextCanceledError(ctx.Err())
+		if err := ctx.Err(); err != nil {
+			return nil, NewContextCanceledError(err)
 		}
 
 		// Get and parse state

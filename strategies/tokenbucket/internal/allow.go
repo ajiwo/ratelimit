@@ -41,8 +41,8 @@ func Allow(
 	mode AllowMode,
 
 ) (Result, error) {
-	if ctx.Err() != nil {
-		return Result{}, NewContextCanceledError(ctx.Err())
+	if err := ctx.Err(); err != nil {
+		return Result{}, NewContextCanceledError(err)
 	}
 
 	maxRetries := config.MaxRetries()
@@ -104,8 +104,8 @@ func (p *parameter) allowReadOnly(ctx context.Context) (Result, error) {
 
 func (p *parameter) allowTryAndUpdate(ctx context.Context) (Result, error) {
 	for attempt := range p.maxRetries {
-		if ctx.Err() != nil {
-			return Result{}, NewContextCanceledError(ctx.Err())
+		if err := ctx.Err(); err != nil {
+			return Result{}, NewContextCanceledError(err)
 		}
 
 		data, err := p.storage.Get(ctx, p.key)
