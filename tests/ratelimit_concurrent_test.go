@@ -21,7 +21,7 @@ import (
 var (
 	numGoroutines   = 32
 	maxRetries      = numGoroutines / 2
-	expectedAllowed = rand.IntN(numGoroutines + 1) // #nosec: G404
+	expectedAllowed = 1 + rand.IntN(numGoroutines) // #nosec: G404
 	expectedDenied  = numGoroutines - expectedAllowed
 )
 
