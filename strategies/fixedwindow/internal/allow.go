@@ -75,31 +75,10 @@ func Allow(
 func (p *parameter) allowReadOnly(ctx context.Context) (map[string]Result, error) {
 	results := make(map[string]Result, len(p.quotas))
 
-	// Use the base key for combined state (not quota-specific)
-	combinedKey := p.key
-
 	// Get current combined state
-	data, err := p.storage.Get(ctx, combinedKey)
+	quotaStates, _, err := p.getAndParseState(ctx)
 	if err != nil {
-		return nil, NewStateRetrievalError(err)
-	}
-
-	var quotaStates map[string]FixedWindow
-	if data == "" {
-		// No existing state, initialize fresh state
-		quotaStates = make(map[string]FixedWindow, len(p.quotas))
-		for name := range p.quotas {
-			quotaStates[name] = FixedWindow{
-				Count: 0,
-				Start: p.now,
-			}
-		}
-	} else {
-		if states, ok := decodeState(data); ok {
-			quotaStates = states
-		} else {
-			return nil, NewStateParsingError()
-		}
+		return nil, err
 	}
 
 	// Normalize per-quota windows in-memory and calculate results
