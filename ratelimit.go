@@ -150,20 +150,16 @@ func (r *RateLimiter) buildStrategyConfig(dynamicKey string) strategies.Config {
 	}
 
 	// build single strategy config
+	sb := builderpool.Get()
+	defer builderpool.Put(sb)
 
-	prefix := r.basePrefix
-	if prefix == "" {
-		prefix = r.config.BaseKey + ":"
+	if r.basePrefix == "" {
+		sb.WriteString(r.config.BaseKey)
+		sb.WriteString(":")
+	} else {
+		sb.WriteString(r.basePrefix)
 	}
 
-	// Use pooled string builder to reduce allocations
-	sb := builderpool.Get()
-	defer func() {
-		builderpool.Put(sb)
-	}()
-
-	sb.Grow(64)
-	sb.WriteString(prefix)
 	sb.WriteString(dynamicKey)
 
 	return r.config.PrimaryConfig.
