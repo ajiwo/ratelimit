@@ -206,17 +206,6 @@ func (p *parameter) consumeQuota(ctx context.Context) (Result, error) {
 			remaining := 0
 			resetTime := newTAT
 
-			// Update the state even when denying to ensure proper TAT progression
-			// Only if this was a new state (rare case)
-			if oldValue == "" {
-				stateData := encodeState(state)
-				expiration := strategies.CalcExpiration(p.burst, p.rate)
-				_, err := p.storage.CheckAndSet(ctx, p.key, oldValue, stateData, expiration)
-				if err != nil {
-					return Result{}, NewStateSaveError(err)
-				}
-			}
-
 			return Result{
 				Allowed:      false,
 				Remaining:    remaining,

@@ -202,18 +202,6 @@ func (p *parameter) allowTryAndUpdate(ctx context.Context) (Result, error) {
 			// Request denied, return current remaining capacity
 			remaining := max(p.capacity-int(bucket.Requests), 0)
 
-			// Save the current bucket state (even when denying, to handle leaks)
-			bucketData := encodeState(bucket)
-			expiration := strategies.CalcExpiration(p.capacity, p.leakRate)
-
-			// If this was a new bucket (rare case), set it
-			if oldValue == "" {
-				_, err := p.storage.CheckAndSet(ctx, p.key, oldValue, bucketData, expiration)
-				if err != nil {
-					return Result{}, NewStateSaveError(err)
-				}
-			}
-
 			return Result{
 				Allowed:      false,
 				Remaining:    remaining,

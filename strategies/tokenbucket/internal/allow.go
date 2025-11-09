@@ -172,15 +172,6 @@ func (p *parameter) allowTryAndUpdate(ctx context.Context) (Result, error) {
 		}
 
 		remaining := max(int(bucket.Tokens), 0)
-		bucketData := encodeState(bucket)
-		expiration := strategies.CalcExpiration(p.burstSize, p.refillRate)
-
-		if oldValue == "" {
-			_, err := p.storage.CheckAndSet(ctx, p.key, oldValue, bucketData, expiration)
-			if err != nil {
-				return Result{}, NewStateSaveError(err)
-			}
-		}
 
 		return Result{
 			Allowed:      false,
