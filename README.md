@@ -93,14 +93,14 @@ When using dual strategy, the per-quota names in results are prefixed by `primar
 
 - Base key: global prefix applied to all rate-limiting keys (e.g., `api:`)
 - Dynamic key: runtime dimension like user ID, client IP, or API key
-- Strategy config: algorithm-specific configuration implementing `strategies.StrategyConfig`
+- Strategy config: algorithm-specific configuration implementing `strategies.Config`
 - Results: per-quota `strategies.Results` entries with `Allowed`, `Remaining`, `Reset`
 
 
 ## API overview
 
-- `ratelimit.New(opts ...Option) (*RateLimiter, error)`
-  - Options: `WithBackend(Backend)`, `WithPrimaryStrategy(StrategyConfig)`, `WithSecondaryStrategy(StrategyConfig)`, `WithBaseKey(string)`, `WithMaxRetries(int)`
+- `New(opts ...Option) (*RateLimiter, error)`
+  - Options: `WithBackend(backends.Backend)`, `WithPrimaryStrategy(strategies.Config)`, `WithSecondaryStrategy(strategies.Config)`, `WithBaseKey(string)`, `WithMaxRetries(int)`
 - `(*RateLimiter) Allow(ctx, AccessOptions) (bool, error)`
   - Consumes quota. If `AccessOptions.Result` is provided, receives `strategies.Results`.
 - `(*RateLimiter) Peek(ctx, AccessOptions) (bool, error)`
@@ -150,7 +150,7 @@ Available strategy IDs and capabilities:
   - Config: `gcra.Config{Rate: float64, Burst: int}`
 
 Notes:
-- Only Fixed Window supports multiple named quotas simultaneously.
+- Only Fixed Window supports multiple named quotas simultaneously. See [additional multi-quota documentation](strategies/fixedwindow/MULTI_QUOTA.md).
 - When setting a secondary strategy via `WithSecondaryStrategy`, it must advertise `CapSecondary`.
 - If a secondary strategy is specified, the primary strategy must not itself be a `CapSecondary`-only secondary in this composite context; the library validates incompatible combinations.
 
@@ -170,7 +170,11 @@ limiter, err := ratelimit.New(
     ratelimit.WithBackend(memory.New()),
     ratelimit.WithBaseKey("api"),
     ratelimit.WithPrimaryStrategy(
-        fixedwindow.NewConfig().SetKey("user").AddQuota("default", 10, time.Minute).Build(),
+        fixedwindow.NewConfig().
+            SetKey("user").
+            AddQuota("minute", 10, time.Minute).    // 10 requests per minute
+            AddQuota("hour", 100, time.Hour).       // 100 requests per hour
+            Build(),
     ),
 )
 ```
@@ -240,7 +244,7 @@ The repository includes runnable examples for Echo and net/http.
 - Echo: `examples/middleware/echo`
 - net/http stdlib: `examples/middleware/stdlib`
 
-Both demonstrate:
+Which demonstrate:
 - calling `Allow` to enforce
 - on 429, calling `Peek` to populate standard headers like `X-RateLimit-Remaining` and `Retry-After`
 
