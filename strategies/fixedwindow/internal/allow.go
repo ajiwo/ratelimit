@@ -140,12 +140,8 @@ func (p *parameter) allowTryAndUpdate(ctx context.Context) (map[string]Result, e
 		// Evaluate allow for all quotas
 		allAllowed := p.areAllQuotasAllowed(normalizedStates)
 
-		// Calculate results for all quotas
-		tempResults := p.calculateResults(normalizedStates)
-
 		if !allAllowed {
-			// At least one quota denied, refresh expired windows via CAS (best-effort) and return deny
-			return p.handleDeniedQuota(ctx, normalizedStates, oldValue, tempResults)
+			return p.calculateResults(normalizedStates), nil
 		}
 
 		// All quotas allowed, increment counts
@@ -264,25 +260,6 @@ func (p *parameter) calculateResults(normalizedStates map[string]FixedWindow) ma
 		}
 	}
 	return tempResults
-}
-
-// handleDeniedQuota handles the case when at least one quota is denied
-func (p *parameter) handleDeniedQuota(
-	ctx context.Context,
-	normalizedStates map[string]FixedWindow,
-	oldValue string,
-	tempResults map[string]Result,
-
-) (map[string]Result, error) {
-	newValue := encodeState(normalizedStates)
-	ttl := computeMaxResetTTL(normalizedStates, p.quotas, p.now)
-
-	// Try to update to refresh expired windows, but don't retry on failure
-	if oldValue != newValue {
-		_, _ = p.storage.CheckAndSet(ctx, p.key, oldValue, newValue, ttl)
-	}
-
-	return tempResults, nil
 }
 
 // incrementAllQuotas increments the count for all quotas
