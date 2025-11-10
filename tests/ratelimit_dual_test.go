@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"sync"
 	"testing"
-	"testing/synctest"
 	"time"
 
 	"github.com/ajiwo/ratelimit"
+	"github.com/ajiwo/ratelimit/backends"
 	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/ajiwo/ratelimit/strategies/fixedwindow"
 	"github.com/ajiwo/ratelimit/strategies/leakybucket"
@@ -16,35 +16,137 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDualStrategy_FixedWindow1Quota_LeakyBucket tests Fixed Window (1 quota) + Leaky Bucket secondary
-func TestDualStrategy_FixedWindow1Quota_LeakyBucket_Memory(t *testing.T) {
-	backend := UseBackend(t, "memory")
-	key := fmt.Sprintf("ds-fw1-lb-%d", time.Now().UnixNano())
+// DualStrategyConfig defines a test configuration for dual rate limiting strategies
+type DualStrategyConfig struct {
+	name              string
+	primaryStrategy   strategies.Config
+	secondaryStrategy strategies.Config
+	testType          string // "basic", "multiQuota", "concurrent", "peek", "reset", "error", "differentUsers"
+}
+
+// createDualLimiter creates a new rate limiter with dual strategies
+func createDualLimiter(t *testing.T, backend backends.Backend, config DualStrategyConfig, keyPrefix string) *ratelimit.RateLimiter {
+	key := fmt.Sprintf("%s-%s-%d", keyPrefix, config.name, time.Now().UnixNano())
 
 	limiter, err := ratelimit.New(
-		ratelimit.WithBackend(backend),
 		ratelimit.WithBaseKey(key),
-		// Primary: hard limits with 1 quota
-		ratelimit.WithPrimaryStrategy(
-			fixedwindow.NewConfig().
-				SetKey("user").
-				AddQuota("default", 5, 10*time.Second).
-				Build(),
-		),
-		// Secondary: smoothing with leaky bucket
-		ratelimit.WithSecondaryStrategy(leakybucket.Config{
-			Capacity: 3,
-			LeakRate: 0.5, // 0.5 requests per second
-		}),
+		ratelimit.WithBackend(backend),
+		ratelimit.WithMaxRetries(11),
+		ratelimit.WithPrimaryStrategy(config.primaryStrategy),
+		ratelimit.WithSecondaryStrategy(config.secondaryStrategy),
 	)
 	require.NoError(t, err)
 	require.NotNil(t, limiter)
-	t.Cleanup(func() { limiter.Close() })
 
+	t.Cleanup(func() {
+		_ = limiter.Close()
+	})
+
+	return limiter
+}
+
+// dualStrategyConfigs defines all dual strategy configurations to test
+var dualStrategyConfigs = []DualStrategyConfig{
+	{
+		name: "FixedWindow1Quota_LeakyBucket",
+		primaryStrategy: fixedwindow.NewConfig().
+			SetKey("user").
+			AddQuota("default", 5, 10*time.Second).
+			Build(),
+		secondaryStrategy: leakybucket.Config{
+			Capacity: 3,
+			LeakRate: 0.5, // 0.5 requests per second
+		},
+		testType: "basic",
+	},
+	{
+		name: "FixedWindow3Quota_TokenBucket",
+		primaryStrategy: fixedwindow.NewConfig().
+			SetKey("user").
+			AddQuota("requests", 10, time.Minute).    // 10 requests per minute
+			AddQuota("bandwidth", 1000, time.Minute). // 1000 units per minute
+			AddQuota("connections", 5, time.Minute).  // 5 connections per minute
+			Build(),
+		secondaryStrategy: tokenbucket.Config{
+			BurstSize:  5,   // max burst tokens
+			RefillRate: 2.0, // 2 tokens per second
+		},
+		testType: "multiQuota",
+	},
+	{
+		name: "FixedWindow_Concurrent",
+		primaryStrategy: fixedwindow.NewConfig().
+			SetKey("user").
+			AddQuota("default", 10, 5*time.Second).
+			Build(),
+		secondaryStrategy: tokenbucket.Config{
+			BurstSize:  5,
+			RefillRate: 1.0,
+		},
+		testType: "concurrent",
+	},
+	{
+		name: "FixedWindow_Peek",
+		primaryStrategy: fixedwindow.NewConfig().
+			SetKey("user").
+			AddQuota("default", 3, 10*time.Second).
+			Build(),
+		secondaryStrategy: tokenbucket.Config{
+			BurstSize:  2,
+			RefillRate: 0.1,
+		},
+		testType: "peek",
+	},
+	{
+		name: "FixedWindow_Reset",
+		primaryStrategy: fixedwindow.NewConfig().
+			SetKey("user").
+			AddQuota("default", 2, 10*time.Second).
+			Build(),
+		secondaryStrategy: tokenbucket.Config{
+			BurstSize:  2,
+			RefillRate: 0.1,
+		},
+		testType: "reset",
+	},
+	{
+		name: "FixedWindow_DifferentUsers",
+		primaryStrategy: fixedwindow.NewConfig().
+			AddQuota("default", 2, 10*time.Second).
+			Build(),
+		secondaryStrategy: tokenbucket.Config{
+			BurstSize:  1,
+			RefillRate: 0.1,
+		},
+		testType: "differentUsers",
+	},
+}
+
+// testDualStrategyBackend runs a single test case for a backend and dual strategy configuration
+func testDualStrategyBackend(t *testing.T, backendName string, config DualStrategyConfig) {
+	backend := UseBackend(t, backendName)
+	limiter := createDualLimiter(t, backend, config, backendName)
+
+	switch config.testType {
+	case "basic":
+		testBasicDualStrategy(t, limiter)
+	case "multiQuota":
+		testMultiQuotaDualStrategy(t, limiter)
+	case "concurrent":
+		testConcurrentDualStrategy(t, limiter, backendName)
+	case "peek":
+		testPeekDualStrategy(t, limiter)
+	case "reset":
+		testResetDualStrategy(t, limiter)
+	case "differentUsers":
+		testDifferentUsersDualStrategy(t, limiter)
+	}
+}
+
+// testBasicDualStrategy tests basic dual strategy functionality
+func testBasicDualStrategy(t *testing.T, limiter *ratelimit.RateLimiter) {
 	ctx := t.Context()
 	userID := "testuser"
-
-	// Test that both strategies work together
 	var results strategies.Results
 
 	// First few requests should be allowed (both strategies allow)
@@ -79,257 +181,52 @@ func TestDualStrategy_FixedWindow1Quota_LeakyBucket_Memory(t *testing.T) {
 	assert.Greater(t, deniedCount, 0, "Some requests should be denied")
 }
 
-// TestDualStrategy_FixedWindow1Quota_LeakyBucket_Postgres tests the same with Postgres backend
-func TestDualStrategy_FixedWindow1Quota_LeakyBucket_Postgres(t *testing.T) {
-	backend := UseBackend(t, "postgres")
-	key := fmt.Sprintf("ds-fw1-lb-pg-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBackend(backend),
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(
-			fixedwindow.NewConfig().
-				SetKey("user").
-				AddQuota("default", 5, 10*time.Second).
-				Build(),
-		),
-		ratelimit.WithSecondaryStrategy(leakybucket.Config{
-			Capacity: 3,
-			LeakRate: 0.5,
-		}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() { limiter.Close() })
-
+// testMultiQuotaDualStrategy tests dual strategy with multiple quotas
+func testMultiQuotaDualStrategy(t *testing.T, limiter *ratelimit.RateLimiter) {
 	ctx := t.Context()
 	userID := "testuser"
-
-	// Test basic functionality
 	var results strategies.Results
+
+	// First request should be allowed
 	allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
 	require.NoError(t, err)
 	assert.True(t, allowed)
-	assert.Contains(t, results, "primary_default")
-	assert.Contains(t, results, "secondary_default")
-}
 
-// TestDualStrategy_FixedWindow1Quota_LeakyBucket_Redis tests the same with Redis backend
-func TestDualStrategy_FixedWindow1Quota_LeakyBucket_Redis(t *testing.T) {
-	backend := UseBackend(t, "redis")
-	key := fmt.Sprintf("ds-fw1-lb-redis-%d", time.Now().UnixNano())
+	// Check that we get all primary results plus secondary
+	assert.Contains(t, results, "primary_requests", "Should have primary_requests result")
+	assert.Contains(t, results, "primary_bandwidth", "Should have primary_bandwidth result")
+	assert.Contains(t, results, "primary_connections", "Should have primary_connections result")
+	assert.Contains(t, results, "secondary_default", "Should have secondary_default result")
 
-	limiter, err := ratelimit.New(
-		ratelimit.WithBackend(backend),
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(
-			fixedwindow.NewConfig().
-				SetKey("user").
-				AddQuota("default", 5, 10*time.Second).
-				Build(),
-		),
-		ratelimit.WithSecondaryStrategy(leakybucket.Config{
-			Capacity: 3,
-			LeakRate: 0.5,
-		}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() { limiter.Close() })
+	// Verify all quotas were consumed
+	assert.Equal(t, 9, results["primary_requests"].Remaining, "requests quota should be consumed")
+	assert.Equal(t, 999, results["primary_bandwidth"].Remaining, "bandwidth quota should be consumed")
+	assert.Equal(t, 4, results["primary_connections"].Remaining, "connections quota should be consumed")
+	assert.Equal(t, 4, results["secondary_default"].Remaining, "secondary tokens should be consumed")
 
-	ctx := t.Context()
-	userID := "testuser"
+	t.Logf("Initial request: requests=%d/10, bandwidth=%d/1000, connections=%d/5, secondary=%d/5",
+		10-results["primary_requests"].Remaining,
+		1000-results["primary_bandwidth"].Remaining,
+		5-results["primary_connections"].Remaining,
+		5-results["secondary_default"].Remaining)
 
-	// Test basic functionality
-	var results strategies.Results
-	allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
-	require.NoError(t, err)
-	assert.True(t, allowed)
-	assert.Contains(t, results, "primary_default")
-	assert.Contains(t, results, "secondary_default")
-}
-
-// TestDualStrategy_FixedWindow3Quota_TokenBucket tests Fixed Window (3 quotas) + Token Bucket secondary
-func TestDualStrategy_FixedWindow3Quota_TokenBucket_Memory(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		backend := UseBackend(t, "memory")
-		key := fmt.Sprintf("ds-fw3-tb-%d", time.Now().UnixNano())
-
-		limiter, err := ratelimit.New(
-			ratelimit.WithBackend(backend),
-			ratelimit.WithBaseKey(key),
-			// Primary: hard limits with 3 quotas
-			ratelimit.WithPrimaryStrategy(
-				fixedwindow.NewConfig().
-					SetKey("user").
-					AddQuota("requests", 10, time.Minute).    // 10 requests per minute
-					AddQuota("bandwidth", 1000, time.Minute). // 1000 units per minute
-					AddQuota("connections", 5, time.Minute).  // 5 connections per minute
-					Build(),
-			),
-			// Secondary: smoothing with token bucket
-			ratelimit.WithSecondaryStrategy(tokenbucket.Config{
-				BurstSize:  5,   // max burst tokens
-				RefillRate: 2.0, // 2 tokens per second
-			}),
-		)
+	// Consume remaining connection quota (should be limited by connections)
+	for i := range 4 {
+		allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID})
 		require.NoError(t, err)
-		require.NotNil(t, limiter)
-		t.Cleanup(func() { limiter.Close() })
+		assert.True(t, allowed, "Request %d should be allowed", i+2)
+	}
 
-		ctx := t.Context()
-		userID := "testuser"
-
-		// Test that all 3 primary quotas work
-		var results strategies.Results
-
-		// First request should be allowed
-		allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
-		require.NoError(t, err)
-		assert.True(t, allowed)
-
-		// Check that we get all primary results plus secondary
-		assert.Contains(t, results, "primary_requests", "Should have primary_requests result")
-		assert.Contains(t, results, "primary_bandwidth", "Should have primary_bandwidth result")
-		assert.Contains(t, results, "primary_connections", "Should have primary_connections result")
-		assert.Contains(t, results, "secondary_default", "Should have secondary_default result")
-
-		// Verify all quotas were consumed
-		assert.Equal(t, 9, results["primary_requests"].Remaining, "requests quota should be consumed")
-		assert.Equal(t, 999, results["primary_bandwidth"].Remaining, "bandwidth quota should be consumed")
-		assert.Equal(t, 4, results["primary_connections"].Remaining, "connections quota should be consumed")
-		assert.Equal(t, 4, results["secondary_default"].Remaining, "secondary tokens should be consumed")
-
-		t.Logf("Initial request: requests=%d/10, bandwidth=%d/1000, connections=%d/5, secondary=%d/5",
-			10-results["primary_requests"].Remaining,
-			1000-results["primary_bandwidth"].Remaining,
-			5-results["primary_connections"].Remaining,
-			5-results["secondary_default"].Remaining)
-
-		// Consume remaining connection quota (should be limited by connections)
-		for i := range 4 {
-			allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID})
-			require.NoError(t, err)
-			assert.True(t, allowed, "Request %d should be allowed", i+2)
-		}
-
-		// Next request should be denied (connections exhausted)
-		allowed, err = limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
-		require.NoError(t, err)
-		assert.False(t, allowed, "Should be denied when connections quota exhausted")
-		assert.Equal(t, 0, results["primary_connections"].Remaining, "Connections should be exhausted")
-	})
+	// Next request should be denied (connections exhausted)
+	allowed, err = limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
+	require.NoError(t, err)
+	assert.False(t, allowed, "Should be denied when connections quota exhausted")
+	assert.Equal(t, 0, results["primary_connections"].Remaining, "Connections should be exhausted")
 }
 
-// TestDualStrategy_FixedWindow3Quota_TokenBucket_Postgres tests the same with Postgres backend
-func TestDualStrategy_FixedWindow3Quota_TokenBucket_Postgres(t *testing.T) {
-	backend := UseBackend(t, "postgres")
-	key := fmt.Sprintf("ds-fw3-tb-pg-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBackend(backend),
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(
-			fixedwindow.NewConfig().
-				SetKey("user").
-				AddQuota("requests", 10, time.Minute).
-				AddQuota("bandwidth", 1000, time.Minute).
-				AddQuota("connections", 5, time.Minute).
-				Build(),
-		),
-		ratelimit.WithSecondaryStrategy(tokenbucket.Config{
-			BurstSize:  5,
-			RefillRate: 2.0,
-		}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() { limiter.Close() })
-
+// runConcurrentDualTest runs concurrent test with specified parameters
+func runConcurrentDualTest(t *testing.T, limiter *ratelimit.RateLimiter, numGoroutines, requestsPerGoroutine, userDivisor int) {
 	ctx := t.Context()
-	userID := "testuser"
-
-	// Test that all 3 quotas work
-	var results strategies.Results
-	allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
-	require.NoError(t, err)
-	assert.True(t, allowed)
-
-	assert.Contains(t, results, "primary_requests")
-	assert.Contains(t, results, "primary_bandwidth")
-	assert.Contains(t, results, "primary_connections")
-	assert.Contains(t, results, "secondary_default")
-}
-
-// TestDualStrategy_FixedWindow3Quota_TokenBucket_Redis tests the same with Redis backend
-func TestDualStrategy_FixedWindow3Quota_TokenBucket_Redis(t *testing.T) {
-	backend := UseBackend(t, "redis")
-	key := fmt.Sprintf("ds-fw3-tb-redis-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBackend(backend),
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(
-			fixedwindow.NewConfig().
-				SetKey("user").
-				AddQuota("requests", 10, time.Minute).
-				AddQuota("bandwidth", 1000, time.Minute).
-				AddQuota("connections", 5, time.Minute).
-				Build(),
-		),
-		ratelimit.WithSecondaryStrategy(tokenbucket.Config{
-			BurstSize:  5,
-			RefillRate: 2.0,
-		}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() { limiter.Close() })
-
-	ctx := t.Context()
-	userID := "testuser"
-
-	// Test that all 3 quotas work
-	var results strategies.Results
-	allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
-	require.NoError(t, err)
-	assert.True(t, allowed)
-
-	assert.Contains(t, results, "primary_requests")
-	assert.Contains(t, results, "primary_bandwidth")
-	assert.Contains(t, results, "primary_connections")
-	assert.Contains(t, results, "secondary_default")
-}
-
-// TestDualStrategy_ConcurrentAccess tests concurrent access with dual strategies
-func TestDualStrategy_ConcurrentAccess_Memory(t *testing.T) {
-	backend := UseBackend(t, "memory")
-	key := fmt.Sprintf("ds-concurrent-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBackend(backend),
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithMaxRetries(11),
-		ratelimit.WithPrimaryStrategy(
-			fixedwindow.NewConfig().
-				SetKey("user").
-				AddQuota("default", 10, 5*time.Second).
-				Build(),
-		),
-		ratelimit.WithSecondaryStrategy(tokenbucket.Config{
-			BurstSize:  5,
-			RefillRate: 1.0,
-		}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() { limiter.Close() })
-
-	ctx := t.Context()
-
-	// Start multiple goroutines making requests concurrently
-	const numGoroutines = 20
-	const requestsPerGoroutine = 5
 
 	results := make(chan bool, numGoroutines*requestsPerGoroutine)
 	errors := make(chan error, numGoroutines*requestsPerGoroutine)
@@ -342,7 +239,7 @@ func TestDualStrategy_ConcurrentAccess_Memory(t *testing.T) {
 		go func(goroutineID int) {
 			defer wg.Done()
 			for range requestsPerGoroutine {
-				userID := fmt.Sprintf("user%d", goroutineID%5) // 5 different users
+				userID := fmt.Sprintf("user%d", goroutineID%userDivisor)
 				allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID})
 				if err != nil {
 					errors <- err
@@ -358,9 +255,7 @@ func TestDualStrategy_ConcurrentAccess_Memory(t *testing.T) {
 	close(errors)
 
 	// Collect results
-	var allowedCount, deniedCount int
-	var errCount int
-
+	var allowedCount, deniedCount, errCount int
 	for allowed := range results {
 		if allowed {
 			allowedCount++
@@ -368,17 +263,13 @@ func TestDualStrategy_ConcurrentAccess_Memory(t *testing.T) {
 			deniedCount++
 		}
 	}
-
-	for err := range errors {
+	for range errors {
 		errCount++
-		t.Logf("Unexpected error: %v", err)
 	}
 
 	totalRequests := numGoroutines * requestsPerGoroutine
 	assert.Equal(t, totalRequests, allowedCount+deniedCount, "All requests should be accounted for")
 	assert.Equal(t, 0, errCount, "No errors should occur")
-
-	// Some requests should be allowed, some denied (due to rate limiting)
 	assert.Greater(t, allowedCount, 0, "Some requests should be allowed")
 	assert.Greater(t, deniedCount, 0, "Some requests should be denied")
 
@@ -386,175 +277,24 @@ func TestDualStrategy_ConcurrentAccess_Memory(t *testing.T) {
 		allowedCount, deniedCount, totalRequests)
 }
 
-// TestDualStrategy_ConcurrentAccess_Postgres tests concurrent access with Postgres
-func TestDualStrategy_ConcurrentAccess_Postgres(t *testing.T) {
-	backend := UseBackend(t, "postgres")
-	key := fmt.Sprintf("ds-concurrent-pg-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBackend(backend),
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithMaxRetries(11),
-		ratelimit.WithPrimaryStrategy(
-			fixedwindow.NewConfig().
-				SetKey("user").
-				AddQuota("default", 10, 5*time.Second).
-				Build(),
-		),
-		ratelimit.WithSecondaryStrategy(tokenbucket.Config{
-			BurstSize:  5,
-			RefillRate: 1.0,
-		}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() { limiter.Close() })
-
-	ctx := t.Context()
-
-	// Test with fewer concurrent requests for Postgres to avoid overwhelming it
-	const numGoroutines = 10
-	const requestsPerGoroutine = 3
-
-	results := make(chan bool, numGoroutines*requestsPerGoroutine)
-	errors := make(chan error, numGoroutines*requestsPerGoroutine)
-
-	var wg sync.WaitGroup
-
-	for range numGoroutines {
-		wg.Add(1)
-		go func(goroutineID int) {
-			defer wg.Done()
-			for range requestsPerGoroutine {
-				userID := fmt.Sprintf("user%d", goroutineID%3)
-				allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID})
-				if err != nil {
-					errors <- err
-					return
-				}
-				results <- allowed
-			}
-		}(len(results))
+// testConcurrentDualStrategy tests concurrent access with dual strategies
+func testConcurrentDualStrategy(t *testing.T, limiter *ratelimit.RateLimiter, backendName string) {
+	// Adjust concurrent parameters based on backend
+	switch backendName {
+	case "memory":
+		runConcurrentDualTest(t, limiter, 20, 5, 5)
+	case "postgres", "redis":
+		runConcurrentDualTest(t, limiter, 16, 3, 3)
 	}
-
-	wg.Wait()
-	close(results)
-	close(errors)
-
-	var allowedCount, deniedCount, errCount int
-	for allowed := range results {
-		if allowed {
-			allowedCount++
-		} else {
-			deniedCount++
-		}
-	}
-	for range errors {
-		errCount++
-	}
-
-	assert.Equal(t, 0, errCount, "No errors should occur")
-	assert.Greater(t, allowedCount, 0, "Some requests should be allowed")
 }
 
-// TestDualStrategy_ConcurrentAccess_Redis tests concurrent access with Redis
-func TestDualStrategy_ConcurrentAccess_Redis(t *testing.T) {
-	backend := UseBackend(t, "redis")
-	key := fmt.Sprintf("ds-concurrent-redis-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBackend(backend),
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithMaxRetries(11),
-		ratelimit.WithPrimaryStrategy(
-			fixedwindow.NewConfig().
-				SetKey("user").
-				AddQuota("default", 10, 5*time.Second).
-				Build(),
-		),
-		ratelimit.WithSecondaryStrategy(tokenbucket.Config{
-			BurstSize:  5,
-			RefillRate: 1.0,
-		}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() { limiter.Close() })
-
-	ctx := t.Context()
-
-	const numGoroutines = 10
-	const requestsPerGoroutine = 3
-
-	results := make(chan bool, numGoroutines*requestsPerGoroutine)
-	errors := make(chan error, numGoroutines*requestsPerGoroutine)
-
-	var wg sync.WaitGroup
-
-	for range numGoroutines {
-		wg.Add(1)
-		go func(goroutineID int) {
-			defer wg.Done()
-			for range requestsPerGoroutine {
-				userID := fmt.Sprintf("user%d", goroutineID%3)
-				allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID})
-				if err != nil {
-					errors <- err
-					return
-				}
-				results <- allowed
-			}
-		}(len(results))
-	}
-
-	wg.Wait()
-	close(results)
-	close(errors)
-
-	var allowedCount, deniedCount, errCount int
-	for allowed := range results {
-		if allowed {
-			allowedCount++
-		} else {
-			deniedCount++
-		}
-	}
-	for range errors {
-		errCount++
-	}
-
-	assert.Equal(t, 0, errCount, "No errors should occur")
-	assert.Greater(t, allowedCount, 0, "Some requests should be allowed")
-}
-
-// TestDualStrategy_PeekBehavior tests Peek vs Allow behavior with dual strategies
-func TestDualStrategy_PeekBehavior(t *testing.T) {
-	backend := UseBackend(t, "memory")
-	key := fmt.Sprintf("ds-peek-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBackend(backend),
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(
-			fixedwindow.NewConfig().
-				SetKey("user").
-				AddQuota("default", 3, 10*time.Second).
-				Build(),
-		),
-		ratelimit.WithSecondaryStrategy(tokenbucket.Config{
-			BurstSize:  2,
-			RefillRate: 0.1,
-		}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() { limiter.Close() })
-
+// testPeekDualStrategy tests Peek vs Allow behavior with dual strategies
+func testPeekDualStrategy(t *testing.T, limiter *ratelimit.RateLimiter) {
 	ctx := t.Context()
 	userID := "testuser"
+	var results strategies.Results
 
 	// Initial peek should show full capacity
-	var results strategies.Results
 	allowed, err := limiter.Peek(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
 	require.NoError(t, err)
 	assert.True(t, allowed, "Peek should show request as allowed")
@@ -583,34 +323,12 @@ func TestDualStrategy_PeekBehavior(t *testing.T) {
 	assert.Equal(t, 1, results["secondary_default"].Remaining, "Peek should reflect consumed secondary state")
 }
 
-// TestDualStrategy_ResetBehavior tests reset functionality with dual strategies
-func TestDualStrategy_ResetBehavior(t *testing.T) {
-	backend := UseBackend(t, "memory")
-	key := fmt.Sprintf("ds-reset-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBackend(backend),
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(
-			fixedwindow.NewConfig().
-				SetKey("user").
-				AddQuota("default", 2, 10*time.Second).
-				Build(),
-		),
-		ratelimit.WithSecondaryStrategy(tokenbucket.Config{
-			BurstSize:  2,
-			RefillRate: 0.1,
-		}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() { limiter.Close() })
-
+// testResetDualStrategy tests reset functionality with dual strategies
+func testResetDualStrategy(t *testing.T, limiter *ratelimit.RateLimiter) {
 	ctx := t.Context()
 	userID := "testuser"
 
 	// Consume all quota
-	var results strategies.Results
 	for i := range 2 {
 		allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID})
 		require.NoError(t, err)
@@ -627,11 +345,105 @@ func TestDualStrategy_ResetBehavior(t *testing.T) {
 	require.NoError(t, err, "Reset should not error")
 
 	// Should now be allowed again with full capacity
+	var results strategies.Results
 	allowed, err = limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
 	require.NoError(t, err)
 	assert.True(t, allowed, "Should be allowed after reset")
 	assert.Equal(t, 1, results["primary_default"].Remaining, "Primary should have 1 remaining after reset")
 	assert.Equal(t, 1, results["secondary_default"].Remaining, "Secondary should have 1 remaining after reset")
+}
+
+// testDifferentUsersDualStrategy tests that dual strategies work independently for different users
+func testDifferentUsersDualStrategy(t *testing.T, limiter *ratelimit.RateLimiter) {
+	ctx := t.Context()
+
+	// User1 should be limited independently of User2
+	user1 := "user1"
+	user2 := "user2"
+
+	// User1 consumes quota - only 1 request should be allowed due to token bucket burst size of 1
+	allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: user1})
+	require.NoError(t, err)
+	assert.True(t, allowed, "User1 first request should be allowed")
+
+	// User1 should now be denied (token bucket burst exhausted)
+	allowed, err = limiter.Allow(ctx, ratelimit.AccessOptions{Key: user1})
+	require.NoError(t, err)
+	assert.False(t, allowed, "User1 should be denied after consuming token bucket burst")
+
+	// User2 should still be allowed (different key)
+	allowed, err = limiter.Allow(ctx, ratelimit.AccessOptions{Key: user2})
+	require.NoError(t, err)
+	assert.True(t, allowed, "User2 should be allowed (independent of User1)")
+}
+
+// TestDualStrategy_Basic tests basic dual strategy functionality across all backends
+func TestDualStrategy_Basic(t *testing.T) {
+	backends := []string{"memory", "postgres", "redis"}
+	config := dualStrategyConfigs[0] // FixedWindow1Quota_LeakyBucket
+
+	for _, backend := range backends {
+		if isCI() {
+			time.Sleep(100 * time.Millisecond)
+		}
+		t.Run(fmt.Sprintf("%s_%s", config.name, backend), func(t *testing.T) {
+			testDualStrategyBackend(t, backend, config)
+		})
+	}
+}
+
+// TestDualStrategy_MultiQuota tests dual strategy with multiple quotas across all backends
+func TestDualStrategy_MultiQuota(t *testing.T) {
+	backends := []string{"memory", "postgres", "redis"}
+	config := dualStrategyConfigs[1] // FixedWindow3Quota_TokenBucket
+
+	for _, backend := range backends {
+		if isCI() {
+			time.Sleep(100 * time.Millisecond)
+		}
+		t.Run(fmt.Sprintf("%s_%s", config.name, backend), func(t *testing.T) {
+			testDualStrategyBackend(t, backend, config)
+		})
+	}
+}
+
+// TestDualStrategy_ConcurrentAccess tests concurrent access across all backends
+func TestDualStrategy_ConcurrentAccess(t *testing.T) {
+	backends := []string{"memory", "postgres", "redis"}
+	config := dualStrategyConfigs[2] // FixedWindow_Concurrent
+
+	for _, backend := range backends {
+		if isCI() {
+			time.Sleep(100 * time.Millisecond)
+		}
+		t.Run(fmt.Sprintf("%s_%s", config.name, backend), func(t *testing.T) {
+			testDualStrategyBackend(t, backend, config)
+		})
+	}
+}
+
+// TestDualStrategy_PeekBehavior tests Peek vs Allow behavior
+func TestDualStrategy_PeekBehavior(t *testing.T) {
+	config := dualStrategyConfigs[3] // FixedWindow_Peek
+	t.Run(config.name, func(t *testing.T) {
+		testDualStrategyBackend(t, "memory", config)
+	})
+}
+
+// TestDualStrategy_ResetBehavior tests reset functionality
+func TestDualStrategy_ResetBehavior(t *testing.T) {
+	config := dualStrategyConfigs[4] // FixedWindow_Reset
+	t.Run(config.name, func(t *testing.T) {
+		testDualStrategyBackend(t, "memory", config)
+	})
+}
+
+// TestDualStrategy_DifferentUsers tests that dual strategies work independently for different users
+func TestDualStrategy_DifferentUsers(t *testing.T) {
+	config := dualStrategyConfigs[5] // FixedWindow_DifferentUsers
+	t.Run(config.name, func(t *testing.T) {
+		testDualStrategyBackend(t, "memory", config)
+	})
 }
 
 // TestDualStrategy_ErrorHandling tests error scenarios with dual strategies
@@ -656,48 +468,4 @@ func TestDualStrategy_ErrorHandling(t *testing.T) {
 	)
 	assert.Error(t, err, "Should error when secondary strategy doesn't support CapSecondary")
 	assert.Contains(t, err.Error(), "secondary", "Error should mention secondary strategy")
-}
-
-// TestDualStrategy_DifferentUsers tests that dual strategies work independently for different users
-func TestDualStrategy_DifferentUsers(t *testing.T) {
-	backend := UseBackend(t, "memory")
-	key := fmt.Sprintf("ds-users-%d", time.Now().UnixNano())
-
-	limiter, err := ratelimit.New(
-		ratelimit.WithBackend(backend),
-		ratelimit.WithBaseKey(key),
-		ratelimit.WithPrimaryStrategy(
-			fixedwindow.NewConfig().
-				AddQuota("default", 2, 10*time.Second).
-				Build(),
-		),
-		ratelimit.WithSecondaryStrategy(tokenbucket.Config{
-			BurstSize:  1,
-			RefillRate: 0.1,
-		}),
-	)
-	require.NoError(t, err)
-	require.NotNil(t, limiter)
-	t.Cleanup(func() { limiter.Close() })
-
-	ctx := t.Context()
-
-	// User1 should be limited independently of User2
-	user1 := "user1"
-	user2 := "user2"
-
-	// User1 consumes quota - only 1 request should be allowed due to token bucket burst size of 1
-	allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: user1})
-	require.NoError(t, err)
-	assert.True(t, allowed, "User1 first request should be allowed")
-
-	// User1 should now be denied (token bucket burst exhausted)
-	allowed, err = limiter.Allow(ctx, ratelimit.AccessOptions{Key: user1})
-	require.NoError(t, err)
-	assert.False(t, allowed, "User1 should be denied after consuming token bucket burst")
-
-	// User2 should still be allowed (different key)
-	allowed, err = limiter.Allow(ctx, ratelimit.AccessOptions{Key: user2})
-	require.NoError(t, err)
-	assert.True(t, allowed, "User2 should be allowed (independent of User1)")
 }
