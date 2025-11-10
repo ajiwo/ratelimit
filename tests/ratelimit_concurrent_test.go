@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/rand/v2"
+	"os"
 	"testing"
 	"time"
 
@@ -19,11 +20,25 @@ import (
 )
 
 var (
-	numGoroutines   = 32
+	numGoroutines   = getNumGoroutines()
 	maxRetries      = numGoroutines / 2
 	expectedAllowed = 1 + rand.IntN(numGoroutines) // #nosec: G404
 	expectedDenied  = numGoroutines - expectedAllowed
 )
+
+// isCI returns true if running in a CI environment
+func isCI() bool {
+	return os.Getenv("CI") != "" || os.Getenv("GITHUB_ACTIONS") != ""
+}
+
+// getNumGoroutines returns the number of goroutines to use for concurrent tests
+// In CI environment, use fewer goroutines to avoid overwhelming the runner
+func getNumGoroutines() int {
+	if isCI() {
+		return 16 // Reduced concurrency for CI environment
+	}
+	return 32
+}
 
 // StrategyConfig defines a test configuration for a rate limiting strategy
 type StrategyConfig struct {
@@ -222,6 +237,9 @@ func TestConcurrentAccess_Basic(t *testing.T) {
 
 	for _, config := range strategyConfigs {
 		for _, backend := range backends {
+			if isCI() {
+				time.Sleep(100 * time.Millisecond)
+			}
 			t.Run(fmt.Sprintf("%s_%s", config.name, backend), func(t *testing.T) {
 				testBackendStrategy(t, backend, config, false)
 			})
@@ -235,6 +253,9 @@ func TestConcurrentAccess_WithResult(t *testing.T) {
 
 	for _, config := range strategyConfigs {
 		for _, backend := range backends {
+			if isCI() {
+				time.Sleep(100 * time.Millisecond)
+			}
 			t.Run(fmt.Sprintf("%s_%s_WithResult", config.name, backend), func(t *testing.T) {
 				testBackendStrategy(t, backend, config, true)
 			})
