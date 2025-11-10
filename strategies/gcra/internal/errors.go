@@ -15,10 +15,6 @@ func NewStateRetrievalError(err error) error {
 	return fmt.Errorf("failed to get GCRA state: %w", err)
 }
 
-func NewStateParsingError() error {
-	return ErrStateParsing
-}
-
 func NewStateSaveError(err error) error {
 	return fmt.Errorf("failed to save GCRA state: %w", err)
 }

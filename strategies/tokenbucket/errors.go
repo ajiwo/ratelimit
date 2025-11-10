@@ -31,11 +31,3 @@ func NewInvalidRefillRateError(refillRate float64) error {
 func NewStateRetrievalError(err error) error {
 	return fmt.Errorf("failed to get bucket state: %w", err)
 }
-
-func NewStateSaveError(err error) error {
-	return fmt.Errorf("failed to save bucket state: %w", err)
-}
-
-func NewContextCanceledError(err error) error {
-	return fmt.Errorf("context canceled or timed out: %w", err)
-}

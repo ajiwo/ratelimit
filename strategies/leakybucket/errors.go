@@ -26,16 +26,3 @@ func NewInvalidCapacityError(capacity int) error {
 func NewInvalidLeakRateError(leakRate float64) error {
 	return fmt.Errorf("leaky bucket leak rate must be positive, got %f", leakRate)
 }
-
-// State operation error functions
-func NewStateRetrievalError(err error) error {
-	return fmt.Errorf("failed to get bucket state: %w", err)
-}
-
-func NewStateSaveError(err error) error {
-	return fmt.Errorf("failed to save bucket state: %w", err)
-}
-
-func NewContextCanceledError(err error) error {
-	return fmt.Errorf("context canceled or timed out: %w", err)
-}
