@@ -21,7 +21,9 @@ limiter, _ := ratelimit.New(
 )
 
 // Request passes only if ALL quotas have capacity
-allowed, results := limiter.Allow(ctx, ratelimit.Key("user123"))
+allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{
+    Key: "user123",
+})
 
 ```
 
@@ -48,7 +50,7 @@ limiter, _ := ratelimit.New(
 
 ## Separate Limiters
 
-Because the multi-tier-multi-quota feature is not supported by this library, do these approach instead.
+Because mixing different operation types in one limiter is not supported, do these approach instead.
 
 **Separate limiters for different operations**
 
@@ -113,7 +115,11 @@ premiumLimiter, _ := ratelimit.New(
 ## Response Format
 
 ```go
-allowed, results := limiter.Allow(ctx, ratelimit.Key("user123"))
+var results strategies.Results
+allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{
+    Key: "user123",
+    Result: &results,
+})
 // results contains:
 // {
 //     "minute": {Allowed: true, Remaining: 9, Reset: ...},

@@ -157,7 +157,7 @@ Notes:
 
 ## Backends
 
-Backends implement atomic Get/Set/CheckAndSet/Delete operations. Available implementations:
+Backends implement Get/Set/CheckAndSet/Delete operations. Available implementations:
 
 - In-memory: `github.com/ajiwo/ratelimit/backends/memory`
 - Redis: `github.com/ajiwo/ratelimit/backends/redis`
@@ -253,8 +253,8 @@ Which demonstrate:
 
 The `examples` directory is a Go submodule. Available examples:
 
-- `examples/basic`: single strategy fixed-window limiting
-- `examples/dual`: composite fixed-window + token-bucket
+- `examples/basic`: single-strategy fixedwindow limiting
+- `examples/dual`: dual-strategy fixedwindow + tokenbucket
 - `examples/middleware/echo`, `examples/middleware/stdlib`: ready-to-run middleware
 - `examples/custom`: shows custom composition/decision logic
 

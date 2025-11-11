@@ -63,9 +63,9 @@ var dualStrategyConfigs = []DualStrategyConfig{
 		name: "FixedWindow3Quota_TokenBucket",
 		primaryStrategy: fixedwindow.NewConfig().
 			SetKey("user").
-			AddQuota("requests", 10, time.Minute).    // 10 requests per minute
-			AddQuota("bandwidth", 1000, time.Minute). // 1000 units per minute
-			AddQuota("connections", 5, time.Minute).  // 5 connections per minute
+			AddQuota("minute", 5, time.Minute).  // 5 requests per minute
+			AddQuota("hour", 100, time.Hour).    // 100 requests per hour
+			AddQuota("day", 1000, 24*time.Hour). // 1000 requests per day
 			Build(),
 		secondaryStrategy: tokenbucket.Config{
 			BurstSize:  5,   // max burst tokens
@@ -193,35 +193,35 @@ func testMultiQuotaDualStrategy(t *testing.T, limiter *ratelimit.RateLimiter) {
 	assert.True(t, allowed)
 
 	// Check that we get all primary results plus secondary
-	assert.Contains(t, results, "primary_requests", "Should have primary_requests result")
-	assert.Contains(t, results, "primary_bandwidth", "Should have primary_bandwidth result")
-	assert.Contains(t, results, "primary_connections", "Should have primary_connections result")
+	assert.Contains(t, results, "primary_minute", "Should have primary_minute result")
+	assert.Contains(t, results, "primary_hour", "Should have primary_hour result")
+	assert.Contains(t, results, "primary_day", "Should have primary_day result")
 	assert.Contains(t, results, "secondary_default", "Should have secondary_default result")
 
 	// Verify all quotas were consumed
-	assert.Equal(t, 9, results["primary_requests"].Remaining, "requests quota should be consumed")
-	assert.Equal(t, 999, results["primary_bandwidth"].Remaining, "bandwidth quota should be consumed")
-	assert.Equal(t, 4, results["primary_connections"].Remaining, "connections quota should be consumed")
+	assert.Equal(t, 4, results["primary_minute"].Remaining, "minute quota should be consumed")
+	assert.Equal(t, 99, results["primary_hour"].Remaining, "hour quota should be consumed")
+	assert.Equal(t, 999, results["primary_day"].Remaining, "day quota should be consumed")
 	assert.Equal(t, 4, results["secondary_default"].Remaining, "secondary tokens should be consumed")
 
-	t.Logf("Initial request: requests=%d/10, bandwidth=%d/1000, connections=%d/5, secondary=%d/5",
-		10-results["primary_requests"].Remaining,
-		1000-results["primary_bandwidth"].Remaining,
-		5-results["primary_connections"].Remaining,
+	t.Logf("Initial request: minute=%d/10, hour=%d/100, day=%d/1000, secondary=%d/5",
+		10-results["primary_minute"].Remaining,
+		100-results["primary_hour"].Remaining,
+		1000-results["primary_day"].Remaining,
 		5-results["secondary_default"].Remaining)
 
-	// Consume remaining connection quota (should be limited by connections)
+	// Consume remaining minute quota
 	for i := range 4 {
 		allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID})
 		require.NoError(t, err)
 		assert.True(t, allowed, "Request %d should be allowed", i+2)
 	}
 
-	// Next request should be denied (connections exhausted)
+	// Next request should be denied (minute quota exhausted)
 	allowed, err = limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
 	require.NoError(t, err)
-	assert.False(t, allowed, "Should be denied when connections quota exhausted")
-	assert.Equal(t, 0, results["primary_connections"].Remaining, "Connections should be exhausted")
+	assert.False(t, allowed, "Should be denied when minute quota exhausted")
+	assert.Equal(t, 0, results["primary_minute"].Remaining, "Minute quota should be exhausted")
 }
 
 // runConcurrentDualTest runs concurrent test with specified parameters
