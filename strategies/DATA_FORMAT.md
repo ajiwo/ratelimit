@@ -1,12 +1,13 @@
-# Strategy Data Format Documentation
+# Ratelimit Data Format Documentation
 
-This document describes the compact ASCII storage format used by each rate limiting strategy. All formats use a 2-character header for identification and versioning.
+This document describes the data format used by each rate limiting strategy. All formats use a 2-character header for identification and versioning, and `|` character as field separator.
 
 ## Header Format
 
 **Format:** `AB`
 - **A**: 1-digit hexadecimal strategy ID (see `strategies/config.go` lines 11-16)
 - **B**: 1-digit hexadecimal internal version of the data format
+
 
 ### Strategy ID Mapping
 
@@ -187,6 +188,59 @@ Decoded:
 - Separated by `$` delimiter
 
 ---
+
+## Internal Version History
+
+Each strategy maintains its own independent internal version history for its data storage format. The version numbers track the evolution of each strategy's serialization format.
+
+### Token Bucket Strategy (ID: 1)
+- **Version 1** (`c55598d`): Initial custom ASCII format - `v1|tokens|lastrefill_ns|capacity|refill_rate`
+- **Version 2** (`fddf090`): Optimized format - `v2|tokens|lastrefill_ns|` (removed runtime config)
+
+### Fixed Window Strategy (ID: 2)
+- **Version 1** (`c55598d`): Initial custom ASCII format - `v1|count|start_ns|duration_ns`
+- **Version 2** (`fddf090`): Optimized format - `v2|count|start_ns|` (removed runtime config)
+- **Version 3** (`88ecdd9`): Multi-quota combined format - `23|N|quotaName1|count1|startNano1|...|quotaNameN|countN|startNanoN`
+
+### Leaky Bucket Strategy (ID: 3)
+- **Version 1** (`c55598d`): Initial custom ASCII format - `v1|level|lastleak_ns|capacity|leak_rate`
+- **Version 2** (`fddf090`): Optimized format - `v2|requests|lastleak_ns|` (removed runtime config)
+
+### GCRA Strategy (ID: 4)
+- **Version 1** (`ce0191a`): Initial custom ASCII format - `v1|tat_ns|emission_interval_ns|limit_ns`
+- **Version 2** (`fddf090`): Optimized format - `v2|tat_ns|` (removed runtime config: emission_interval, limit)
+
+### Composite Strategy (ID: 5)
+- **Version 1** (`6d22bc7`): Initial composite format - `cmp1|<primaryState>$<secondaryState>` (atomic container for dual strategies)
+
+### Key Transitions
+
+#### `c55598d` - Performance Optimization (v1)
+- Replaced JSON serialization with custom ASCII format
+- Added version validation with `checkV1Header()`
+- Improved performance and reduced storage overhead
+
+#### `fddf090` - Runtime Config Removal (v2)
+- Removed redundant fields from state storage
+- Used configuration values instead of stored state values
+- Simplified serialization format across all strategies
+
+#### `88ecdd9` - Multi-Quota Support (Fixed Window v3)
+- Implemented combined state approach for Fixed Window
+- Added support for multiple quotas per key with atomic operations
+- Replaced separate keys per quota with single combined state
+
+#### `6d22bc7` - Composite Strategy Birth (v1)
+- Introduced composite strategy for dual-strategy rate limiting
+- Initial format: `cmp1|<primaryState>$<secondaryState>`
+- Atomic container for primary and secondary strategy states
+- Replaced separate primary/secondary keys with single composite key
+
+#### `b467fa2` - Standardized Headers
+- Replaced generic `"v2|"` and `"cmp1|"` headers with strategy-specific hex headers
+- Implemented documented scheme: `{strategyID}{version}|`
+- Composite changed from `"cmp1|"` to `"51|"`
+- Added this DATA_FORMAT.md documentation
 
 ## References
 
