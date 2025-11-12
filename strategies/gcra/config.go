@@ -9,6 +9,7 @@ type Config struct {
 	Rate       float64 // Requests per second
 	Burst      int     // Maximum burst size
 	maxRetries int     // Maximum retry attempts for atomic operations, 0 means use default
+	role       strategies.Role
 }
 
 func (c Config) Validate() error {
@@ -26,14 +27,15 @@ func (c Config) ID() strategies.ID {
 }
 
 func (c Config) Capabilities() strategies.CapabilityFlags {
-	return strategies.CapPrimary
+	return strategies.CapPrimary | strategies.CapSecondary
 }
 
 func (c Config) GetRole() strategies.Role {
-	return strategies.RolePrimary
+	return c.role
 }
 
 func (c Config) WithRole(role strategies.Role) strategies.Config {
+	c.role = role
 	return c
 }
 

@@ -146,7 +146,7 @@ Available strategy IDs and capabilities:
   - Capabilities: Primary, Secondary
   - Config: `leakybucket.Config{Capacity: int, LeakRate: float64}`
 - gcra
-  - Capabilities: Primary
+  - Capabilities: Primary, Secondary
   - Config: `gcra.Config{Rate: float64, Burst: int}`
 
 Notes:

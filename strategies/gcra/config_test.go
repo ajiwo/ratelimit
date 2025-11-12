@@ -105,17 +105,19 @@ func TestConfig_Properties(t *testing.T) {
 	require.Equal(t, strategies.StrategyGCRA, config.ID(),
 		"Config should return GCRA strategy ID")
 
-	// GCRA only supports primary role, for now.
+	// GCRA supports primary role.
 	require.Equal(t, strategies.RolePrimary, config.GetRole(),
 		"GCRA config should have primary role by default")
 
 	require.True(t, config.Capabilities().Has(strategies.CapPrimary),
 		"GCRA config should have primary capability")
+	require.True(t, config.Capabilities().Has(strategies.CapSecondary),
+		"GCRA config should have secondary capability")
 
-	// Verify that attempting to change to secondary role doesn't work (GCRA only supports primary)
-	stillPrimary := config.WithRole(strategies.RoleSecondary)
-	require.Equal(t, strategies.RolePrimary, stillPrimary.GetRole(),
-		"GCRA config should maintain primary role regardless of requested role",
+	// Verify that GCRA config can be set to secondary role
+	secondaryConfig := config.WithRole(strategies.RoleSecondary)
+	require.Equal(t, strategies.RoleSecondary, secondaryConfig.GetRole(),
+		"GCRA config should be able to take secondary role",
 	)
 
 	// Test WithKey method to verify it properly updates the key

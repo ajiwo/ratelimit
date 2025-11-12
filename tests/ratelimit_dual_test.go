@@ -10,6 +10,7 @@ import (
 	"github.com/ajiwo/ratelimit/backends"
 	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/ajiwo/ratelimit/strategies/fixedwindow"
+	"github.com/ajiwo/ratelimit/strategies/gcra"
 	"github.com/ajiwo/ratelimit/strategies/leakybucket"
 	"github.com/ajiwo/ratelimit/strategies/tokenbucket"
 	"github.com/stretchr/testify/assert"
@@ -119,6 +120,20 @@ var dualStrategyConfigs = []DualStrategyConfig{
 			RefillRate: 0.1,
 		},
 		testType: "differentUsers",
+	},
+	{
+		name: "FixedWindow3Quota_GCRA",
+		primaryStrategy: fixedwindow.NewConfig().
+			SetKey("user").
+			AddQuota("minute", 5, time.Minute).  // 5 requests per minute
+			AddQuota("hour", 100, time.Hour).    // 100 requests per hour
+			AddQuota("day", 1000, 24*time.Hour). // 100 requests per hour
+			Build(),
+		secondaryStrategy: gcra.Config{
+			Rate:  5.0,
+			Burst: 5,
+		},
+		testType: "multiQuota",
 	},
 }
 
@@ -395,15 +410,20 @@ func TestDualStrategy_Basic(t *testing.T) {
 // TestDualStrategy_MultiQuota tests dual strategy with multiple quotas across all backends
 func TestDualStrategy_MultiQuota(t *testing.T) {
 	backends := []string{"memory", "postgres", "redis"}
-	config := dualStrategyConfigs[1] // FixedWindow3Quota_TokenBucket
+	configs := []DualStrategyConfig{
+		dualStrategyConfigs[1], // FixedWindow3Quota_TokenBucket
+		dualStrategyConfigs[6], // FixedWindow3Quota_GCRA
+	}
 
 	for _, backend := range backends {
-		if isCI() {
-			time.Sleep(100 * time.Millisecond)
+		for _, config := range configs {
+			if isCI() {
+				time.Sleep(100 * time.Millisecond)
+			}
+			t.Run(fmt.Sprintf("%s_%s", config.name, backend), func(t *testing.T) {
+				testDualStrategyBackend(t, backend, config)
+			})
 		}
-		t.Run(fmt.Sprintf("%s_%s", config.name, backend), func(t *testing.T) {
-			testDualStrategyBackend(t, backend, config)
-		})
 	}
 }
 
