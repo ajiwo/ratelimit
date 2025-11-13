@@ -5,8 +5,6 @@ A Go rate-limiting library with pluggable storage backends and multiple algorith
 - Storage backends: in-memory, Redis, Postgres
 - Algorithms ("strategies"): Fixed Window (multi-quota), Token Bucket, Leaky Bucket, GCRA
 - Dual strategy mode: combine a primary hard limiter with a secondary smoother
-- Simple API: Allow, Peek, Reset, Close
-
 
 ## Installation
 
@@ -15,6 +13,14 @@ go get github.com/ajiwo/ratelimit
 ```
 
 ## Quick start
+
+Using the library involves these main steps:
+
+1. **Choose a backend** - Select a storage backend (memory, Redis, or Postgres)
+2. **Create a limiter** - Configure rate limiting strategies using `ratelimit.New()`
+3. **Make access requests** - Call `Allow()` to consume quota or `Peek()` to check status
+4. **Handle results** - Check the allowed status and examine quota information
+5. **Clean up** - Call `Close()` to release backend resources
 
 ### Single strategy (Fixed Window, in-memory)
 
@@ -75,7 +81,7 @@ limiter, err := ratelimit.New(
     ratelimit.WithPrimaryStrategy(
         fixedwindow.NewConfig().
             SetKey("user").
-            AddQuota("default", 100, time.Hour).
+            AddQuota("hourly", 100, time.Hour).
             Build(),
     ),
     // Secondary: smoothing/burst window (must support CapSecondary)
@@ -86,7 +92,7 @@ limiter, err := ratelimit.New(
 )
 ```
 
-When using dual strategy, the per-quota names in results are prefixed by `primary_` and `secondary_` respectively (e.g., `primary_default`, `secondary_default`).
+When using dual strategy, the per-quota names in results are prefixed by `primary_` and `secondary_` respectively (e.g., `primary_hourly`, `secondary_default`).
 
 
 ## Concepts
