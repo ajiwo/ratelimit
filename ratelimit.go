@@ -18,10 +18,6 @@ type RateLimiter struct {
 	basePrefix string // cached BaseKey + ":" for fast key construction
 }
 
-func Ptr[T any](val T) *T {
-	return &val
-}
-
 // New creates a new rate limiter with functional options
 func New(opts ...Option) (*RateLimiter, error) {
 	// Create default configuration

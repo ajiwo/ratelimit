@@ -108,7 +108,7 @@ When using dual strategy, the per-quota names in results are prefixed by `primar
 - `(*RateLimiter) Reset(ctx, AccessOptions) error`
   - Resets counters; mainly for testing.
 - `(*RateLimiter) Close() error`
-  - Releases backend resources.
+  - Releases backend resources, does nothing if backend has been closed.
 
 `AccessOptions`:
 
