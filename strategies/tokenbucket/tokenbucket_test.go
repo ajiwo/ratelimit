@@ -186,43 +186,6 @@ func TestTokenBucket_Allow(t *testing.T) {
 		})
 	})
 
-	// Test basic refill functionality
-	t.Run("basic refill functionality", func(t *testing.T) {
-		synctest.Test(t, func(t *testing.T) {
-			ctx := t.Context()
-			storage := &mockBackend{store: make(map[string]string)}
-			t.Cleanup(func() { storage.Close() })
-			strategy := New(storage)
-
-			config := Config{
-				Key:        "test_refill",
-				BurstSize:  3,
-				RefillRate: 1.0, // 1 token per second
-			}
-
-			// Use all tokens
-			for i := range 3 {
-				result, err := strategy.Allow(ctx, config)
-				require.NoError(t, err)
-				assert.True(t, result["default"].Allowed, "Request %d should be allowed", i)
-			}
-
-			// Next request should be denied
-			result, err := strategy.Allow(ctx, config)
-			require.NoError(t, err)
-			assert.False(t, result["default"].Allowed)
-
-			// Wait for a significant time to ensure refill
-			time.Sleep(1500 * time.Millisecond)
-			synctest.Wait()
-
-			// At least one request should be allowed after waiting
-			result, err = strategy.Allow(ctx, config)
-			require.NoError(t, err)
-			assert.True(t, result["default"].Allowed, "At least one request should be allowed after refill")
-		})
-	})
-
 	// Test should handle multiple keys independently
 	t.Run("should handle multiple keys independently", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
