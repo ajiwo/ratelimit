@@ -52,6 +52,13 @@ func New(config Config) (*Backend, error) {
 	return &Backend{pool: pool}, nil
 }
 
+// NewWithClient initializes a new PostgresBackend with a pre-configured connection pool.
+//
+// The pool is assumed to be already connected and ready for use.
+func NewWithClient(pool *pgxpool.Pool) *Backend {
+	return &Backend{pool: pool}
+}
+
 func createTable(ctx context.Context, pool *pgxpool.Pool) error {
 	_, err := pool.Exec(ctx, `
 		CREATE TABLE IF NOT EXISTS ratelimit_kv (

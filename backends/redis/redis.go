@@ -16,10 +16,10 @@ type Config struct {
 }
 
 type Backend struct {
-	client *redis.Client
+	client redis.UniversalClient
 }
 
-func (r *Backend) GetClient() *redis.Client {
+func (r *Backend) GetClient() redis.UniversalClient {
 	return r.client
 }
 
@@ -37,6 +37,13 @@ func New(config Config) (*Backend, error) {
 	}
 
 	return &Backend{client: client}, nil
+}
+
+// NewWithClient initializes a new Backend with a pre-configured Redis universal client.
+//
+// The client is assumed to be already connected and ready for use.
+func NewWithClient(client redis.UniversalClient) *Backend {
+	return &Backend{client: client}
 }
 
 func (r *Backend) Get(ctx context.Context, key string) (string, error) {
