@@ -143,7 +143,7 @@ Validation rules (applied to both base and dynamic keys unless explicitly skippe
 Available strategy IDs and capabilities:
 
 - fixed_window
-  - Capabilities: Primary, Quotas (multi-quota)
+  - Capabilities: Primary, Up to 8 Quotas per key
   - Builder: `fixedwindow.NewConfig().SetKey(k).AddQuota(name, limit, window).Build()`
 - token_bucket
   - Capabilities: Primary, Secondary
