@@ -183,8 +183,9 @@ func (m *Backend) Close() error {
 
 	m.cleanupWG.Wait()
 
-	m.values = sync.Map{} // Clear the values map
-	m.locks = sync.Map{}  // Clear the locks map
+	m.values.Clear() // Clear the values map
+	m.locks.Clear()  // Clear the locks map
+
 	return nil
 }
 
