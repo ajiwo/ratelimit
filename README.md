@@ -12,7 +12,7 @@ A Go rate-limiting library with pluggable storage backends and multiple algorith
 go get github.com/ajiwo/ratelimit
 ```
 
-## Quick start
+## Usage
 
 Using the library involves these main steps:
 
@@ -279,6 +279,39 @@ Run the full test suite (root + strategies/backends/tests):
 ```bash
 ./test.sh
 ```
+
+## Adjusting Max retries
+
+The `WithMaxRetries` option controls retry attempts for atomic CheckAndSet operations under high contention. While general recommendations exist, optimal values vary by workload.
+
+**Experiment with concurrent tests** to fine-tune for your use case:
+
+```bash
+# Modify tests/ratelimit_concurrent_test.go
+# Adjust these variables and observe behavior:
+numGoroutines = 100      # your expected/predicted concurrent users
+maxRetries = numGoroutines / 2  # start with 50% of concurrent users
+```
+
+Configure backend connections for testing with environment variables:
+
+```bash
+# For PostgreSQL backend tests
+export TEST_POSTGRES_DSN="postgres://user:pass@localhost:5432/testdb"
+
+# For Redis backend tests
+export REDIS_ADDR="localhost:6379"
+export REDIS_PASSWORD=""  # optional, if Redis requires auth
+```
+
+Run the concurrent test to validate your configuration:
+
+```bash
+cd tests
+go test -v -run=TestConcurrent -count=5
+```
+
+Monitor for failed requests and adjust `maxRetries` accordingly. Start with 50-75% of expected concurrent users and increase only if you observe request failures under load.
 
 ## License
 
