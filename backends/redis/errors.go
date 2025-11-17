@@ -22,6 +22,7 @@ var (
 	// CheckAndSet specific errors
 	ErrCheckAndSetFailed = errors.New("failed to perform check-and-set operation")
 	ErrInvalidValueType  = errors.New("invalid value type for check-and-set")
+	ErrScriptSHAInvalid  = errors.New("invalid script SHA hash for lua script")
 )
 
 // Configuration error functions

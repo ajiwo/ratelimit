@@ -3,7 +3,10 @@ package redis
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
+
+	_ "embed"
 
 	"github.com/redis/go-redis/v9"
 )
@@ -15,12 +18,35 @@ type Config struct {
 	PoolSize int
 }
 
+const checkAndSetSHA = "31f0e6b6c096d994958b631fc6251ffa77352e89"
+
+//go:embed cns.lua
+var cnsScript string
+
 type Backend struct {
 	client redis.UniversalClient
 }
 
 func (r *Backend) GetClient() redis.UniversalClient {
 	return r.client
+}
+
+// loadCheckAndSetScript loads and caches the CheckAndSet Lua script in Redis.
+//
+// The script (cns.lua) implements atomic compare-and-swap semantics:
+// - KEYS[1]: Redis storage key
+// - ARGV[1]: Expected current value (oldValue)
+// - ARGV[2]: New value to set (newValue)
+// - ARGV[3]: Expiration in milliseconds ("0" = no expiration)
+func (r *Backend) loadCheckAndSetScript(ctx context.Context) error {
+	sha, err := r.client.ScriptLoad(ctx, cnsScript).Result()
+	if err != nil {
+		return NewEvalFailedError("load check-and-set script", err)
+	}
+	if sha != checkAndSetSHA {
+		return ErrScriptSHAInvalid
+	}
+	return nil
 }
 
 // New initializes a new RedisStorage with the given configuration.
@@ -98,36 +124,6 @@ func (r *Backend) Close() error {
 //   - Expired keys are treated as non-existent for comparison purposes
 //   - All values are stored and compared as strings
 func (r *Backend) CheckAndSet(ctx context.Context, key, oldValue, newValue string, expiration time.Duration) (bool, error) {
-	// Use Lua script for atomicity
-	luaScript := `
-	local current = redis.call('GET', KEYS[1])
-
-	-- If oldValue is empty, only set if key doesn't exist
-	if ARGV[1] == '' then
-		if current == false then
-			if ARGV[3] == '0' then
-				redis.call('SET', KEYS[1], ARGV[2])
-			else
-				redis.call('SET', KEYS[1], ARGV[2], 'PX', ARGV[3])
-			end
-			return 1
-		end
-		return 0
-	end
-
-	-- Check if current value matches oldValue
-	if current == ARGV[1] then
-		if ARGV[3] == '0' then
-			redis.call('SET', KEYS[1], ARGV[2])
-		else
-			redis.call('SET', KEYS[1], ARGV[2], 'PX', ARGV[3])
-		end
-		return 1
-	end
-
-	return 0
-	`
-
 	oldStr := oldValue
 	newStr := newValue
 	var expMs string
@@ -137,9 +133,24 @@ func (r *Backend) CheckAndSet(ctx context.Context, key, oldValue, newValue strin
 		expMs = fmt.Sprintf("%d", expiration.Milliseconds())
 	}
 
-	result, err := r.client.Eval(ctx, luaScript, []string{key}, oldStr, newStr, expMs).Result()
+	result, err := r.client.
+		EvalSha(ctx, checkAndSetSHA, []string{key}, oldStr, newStr, expMs).
+		Result()
 	if err != nil {
-		return false, NewEvalFailedError("check-and-set lua script", err)
+		// If script was not cached or flushed from Redis, load it and retry
+		if strings.Contains(err.Error(), "NOSCRIPT") {
+			if loadErr := r.loadCheckAndSetScript(ctx); loadErr != nil {
+				return false, NewEvalFailedError("reload check-and-set script", loadErr)
+			}
+			result, err = r.client.
+				EvalSha(ctx, checkAndSetSHA, []string{key}, oldStr, newStr, expMs).
+				Result()
+			if err != nil {
+				return false, NewEvalFailedError("check-and-set cached script", err)
+			}
+		} else {
+			return false, NewEvalFailedError("check-and-set cached script", err)
+		}
 	}
 
 	return result.(int64) == 1, nil
