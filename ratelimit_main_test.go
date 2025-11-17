@@ -258,10 +258,9 @@ func TestAllowAndResultFlow_SingleStrategy(t *testing.T) {
 		"q2": {Allowed: true},
 	}}
 
-	rl := &RateLimiter{
-		config:   Config{BaseKey: "base", Storage: mb, PrimaryConfig: primCfg},
-		strategy: ms,
-	}
+	rl, err := newRateLimiter(Config{BaseKey: "base", Storage: mb, PrimaryConfig: primCfg})
+	require.NoError(t, err, "RateLimiter should be created")
+	rl.strategy = ms
 
 	// request without explicit result
 	user := "user"

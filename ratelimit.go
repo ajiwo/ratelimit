@@ -149,13 +149,7 @@ func (r *RateLimiter) buildStrategyConfig(dynamicKey string) strategies.Config {
 	sb := builderpool.Get()
 	defer builderpool.Put(sb)
 
-	if r.basePrefix == "" {
-		sb.WriteString(r.config.BaseKey)
-		sb.WriteString(":")
-	} else {
-		sb.WriteString(r.basePrefix)
-	}
-
+	sb.WriteString(r.basePrefix)
 	sb.WriteString(dynamicKey)
 
 	return r.config.PrimaryConfig.
