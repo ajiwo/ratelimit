@@ -262,7 +262,6 @@ The `examples` directory is a Go submodule. Available examples:
 - `examples/basic`: single-strategy fixedwindow limiting
 - `examples/dual`: dual-strategy fixedwindow + tokenbucket
 - `examples/middleware/echo`, `examples/middleware/stdlib`: ready-to-run middleware
-- `examples/custom`: shows custom composition/decision logic
 
 Run an example from the `examples` directory:
 
