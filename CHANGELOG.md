@@ -2,6 +2,33 @@
 
 All notable changes to this project will be documented in this file.
 
+## [0.0.8] - 2025-11-19
+
+### Added
+- GCRA strategy support in secondary role for dual-mode rate limiting
+- `NewWithClient` function for remote backends to accept pre-configured clients
+- Benchmark tests for rate limiting 
+
+### Performance
+- Optimized Redis `CheckAndSet` operations using cached Lua script
+
+### Changed
+- Simplified dual-strategy benchmark tests with configuration-driven approach
+- Enhanced context error handling in allow functions
+- Simplified state retrieval in fixed window `allowReadOnly` operations
+
+### Fixed
+- Fixed memory backend cleanup using proper Clear() method for sync.Map
+- Prevented zero rate limit values in concurrent access tests
+- Adjusted concurrent test settings for CI environment stability
+
+### Removed
+- Unreachable conditional logic in `buildStrategyConfig`
+- Unreachable dead code from rate limiting strategies
+- Unused error functions from strategy packages
+- Duplicate basic refill test in token bucket
+- Outdated custom example
+
 ## [0.0.7] - 2025-11-07
 
 ### Added

@@ -2,10 +2,10 @@ module github.com/ajiwo/ratelimit/backends/redis
 
 go 1.25.0
 
-replace github.com/ajiwo/ratelimit v0.0.7 => ../..
+replace github.com/ajiwo/ratelimit v0.0.8 => ../..
 
 require (
-	github.com/ajiwo/ratelimit v0.0.7
+	github.com/ajiwo/ratelimit v0.0.8
 	github.com/redis/go-redis/v9 v9.14.0
 	github.com/stretchr/testify v1.11.1
 )

@@ -2,16 +2,16 @@ module github.com/ajiwo/ratelimit/tests
 
 go 1.25.0
 
-replace github.com/ajiwo/ratelimit v0.0.7 => ../
+replace github.com/ajiwo/ratelimit v0.0.8 => ../
 
-replace github.com/ajiwo/ratelimit/backends/postgres v0.0.7 => ../backends/postgres
+replace github.com/ajiwo/ratelimit/backends/postgres v0.0.8 => ../backends/postgres
 
-replace github.com/ajiwo/ratelimit/backends/redis v0.0.7 => ../backends/redis
+replace github.com/ajiwo/ratelimit/backends/redis v0.0.8 => ../backends/redis
 
 require (
-	github.com/ajiwo/ratelimit v0.0.7
-	github.com/ajiwo/ratelimit/backends/postgres v0.0.7
-	github.com/ajiwo/ratelimit/backends/redis v0.0.7
+	github.com/ajiwo/ratelimit v0.0.8
+	github.com/ajiwo/ratelimit/backends/postgres v0.0.8
+	github.com/ajiwo/ratelimit/backends/redis v0.0.8
 	github.com/stretchr/testify v1.11.1
 )
 
