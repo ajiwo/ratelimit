@@ -1,6 +1,6 @@
 # ratelimit
 
-A Go rate-limiting library with pluggable storage backends and multiple algorithms. 
+Go library for application-level rate limiting with multiple algorithm and storage options. 
 
 - Storage backends: in-memory, Redis, Postgres
 - Algorithms ("strategies"): Fixed Window (multi-quota), Token Bucket, Leaky Bucket, GCRA
