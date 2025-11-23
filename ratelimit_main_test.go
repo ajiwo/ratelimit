@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
+	"github.com/ajiwo/ratelimit/internal/strategies/composite"
 	"github.com/ajiwo/ratelimit/strategies"
-	"github.com/ajiwo/ratelimit/strategies/composite"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

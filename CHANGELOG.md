@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Changed
+- **Breaking**: Move composite strategy implementation to internal package
+  - Move strategies/composite/* files to internal/strategies/composite/*
+  - Internal composite strategy packages are now private and not part of public API
+  - Update import paths in main ratelimit and test files
+  - Use "dual-strategy" terminology in public API and documentation
+  - Keep "composite strategy" terminology for internal/maintainer documentation
+
 ## [0.0.8] - 2025-11-19
 
 ### Added

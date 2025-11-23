@@ -69,7 +69,7 @@ func main() {
 }
 ```
 
-### Dual strategy (Composite: Fixed Window + Token Bucket)
+### Dual strategy (Fixed Window + Token Bucket)
 
 Use a strict primary limiter and a burst-smoothing secondary limiter. Both must allow for the request to pass.
 
@@ -158,7 +158,7 @@ Available strategy IDs and capabilities:
 Notes:
 - Only Fixed Window supports multiple named quotas simultaneously. See [additional multi-quota documentation](strategies/fixedwindow/MULTI_QUOTA.md).
 - When setting a secondary strategy via `WithSecondaryStrategy`, it must advertise `CapSecondary`.
-- If a secondary strategy is specified, the primary strategy must not itself be a `CapSecondary`-only secondary in this composite context; the library validates incompatible combinations.
+- If a secondary strategy is specified, the primary strategy must not itself be a `CapSecondary`-only secondary in this dual strategy context; the library validates incompatible combinations.
 
 
 ## Backends

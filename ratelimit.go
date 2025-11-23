@@ -4,8 +4,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/ajiwo/ratelimit/internal/strategies/composite"
 	"github.com/ajiwo/ratelimit/strategies"
-	"github.com/ajiwo/ratelimit/strategies/composite"
 	"github.com/ajiwo/ratelimit/utils/builderpool"
 )
 

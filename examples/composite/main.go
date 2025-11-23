@@ -7,13 +7,13 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends/memory"
+	"github.com/ajiwo/ratelimit/internal/strategies/composite"
 	"github.com/ajiwo/ratelimit/strategies"
-	"github.com/ajiwo/ratelimit/strategies/composite"
 	"github.com/ajiwo/ratelimit/strategies/fixedwindow"
 	"github.com/ajiwo/ratelimit/strategies/tokenbucket"
 )
 
-// This example demonstrates using the composite (dual) strategy directly
+// This example demonstrates using the internal composite strategy directly
 // without the ratelimit.RateLimiter wrapper and without building your own
 // manual composer. You construct primary and secondary configs, then execute
 // the composite strategy with a composite config and dynamic key.
