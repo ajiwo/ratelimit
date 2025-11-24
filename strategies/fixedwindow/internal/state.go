@@ -16,17 +16,16 @@ type FixedWindow struct {
 // encodeState serializes multiple quotas into a combined ASCII format:
 // 23|N|quotaName1|count1|startUnixNano1|...|quotaNameN|countN|startUnixNanoN
 func encodeState(quotaStates map[string]FixedWindow) string {
-	if len(quotaStates) == 0 {
+	count := len(quotaStates)
+	if count == 0 {
 		return ""
 	}
 
 	sb := builderpool.Get()
-	defer func() {
-		builderpool.Put(sb)
-	}()
+	defer builderpool.Put(sb)
 
 	sb.WriteString("23|")
-	sb.WriteString(strconv.Itoa(len(quotaStates)))
+	sb.WriteString(strconv.Itoa(count))
 
 	for name, window := range quotaStates {
 		sb.WriteByte('|')
@@ -42,26 +41,23 @@ func encodeState(quotaStates map[string]FixedWindow) string {
 
 // findPipeSeparator finds the next pipe separator in data and returns its position
 func findPipeSeparator(data string) (int, bool) {
+	dataLen := len(data)
 	pos := 0
-	for pos < len(data) && data[pos] != '|' {
+	for pos < dataLen && data[pos] != '|' {
 		pos++
 	}
-	return pos, pos < len(data)
+	return pos, pos < dataLen
 }
 
 // parseQuotaCount parses the quota count from the beginning of data
 func parseQuotaCount(data string) (int, string, bool) {
-	pos, found := findPipeSeparator(data)
-	if !found {
+	// Since N is max 8 (single digit), we can check first char directly
+	if data[0] < '1' || data[0] > '8' {
 		return 0, "", false
 	}
 
-	n, err := strconv.Atoi(data[:pos])
-	if err != nil || n <= 0 || n > MaxQuota {
-		return 0, "", false
-	}
-
-	return n, data[pos+1:], true
+	n := int(data[0] - '0')
+	return n, data[2:], true
 }
 
 // parseQuotaField parses a single field (name or count) and returns the value and remaining data
@@ -98,7 +94,9 @@ func parseStartTime(data string, isLastQuota bool) (int64, string, bool) {
 }
 
 func decodeState(s string) (map[string]FixedWindow, bool) {
-	if len(s) < 3 || s[:3] != "23|" {
+	// example minimal valid state:
+	// "23|1|a|1|0"
+	if len(s) < 10 || s[:3] != "23|" || s[4:5] != "|" {
 		return nil, false
 	}
 
@@ -114,10 +112,6 @@ func decodeState(s string) (map[string]FixedWindow, bool) {
 
 	// Parse each quota
 	for i := range n {
-		if len(data) == 0 {
-			return nil, false
-		}
-
 		// Parse quota name
 		name, remainingData, ok := parseQuotaField(data)
 		if !ok {
