@@ -2,8 +2,12 @@ package ratelimit
 
 import (
 	"fmt"
+	"math"
+	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
+	"github.com/ajiwo/ratelimit/backends/memory"
+	"github.com/ajiwo/ratelimit/internal/backends/composite"
 	"github.com/ajiwo/ratelimit/strategies"
 )
 
@@ -102,6 +106,137 @@ func WithMaxRetries(retries int) Option {
 			)
 		}
 		config.maxRetries = retries
+		return nil
+	}
+}
+
+// MemoryFailoverOption configures memory failover behavior
+type MemoryFailoverOption func(*failoverConfig)
+
+// failoverConfig holds configuration for memory failover
+type failoverConfig struct {
+	failureThreshold int32
+	recoveryTimeout  time.Duration
+	healthInterval   time.Duration
+	healthTimeout    time.Duration
+	healthTestKey    string
+}
+
+// WithFailureThreshold configures the number of consecutive failures before opening circuit
+func WithFailureThreshold(threshold int) MemoryFailoverOption {
+	return func(fc *failoverConfig) {
+		if threshold > math.MaxInt32 {
+			// Clamp to maximum int32 value to prevent overflow
+			threshold = math.MaxInt32
+		}
+		// #nosec G115 -- overflow is prevented by the clamping above
+		fc.failureThreshold = int32(threshold)
+	}
+}
+
+// WithRecoveryTimeout configures how long to wait in OPEN state before attempting recovery
+func WithRecoveryTimeout(timeout time.Duration) MemoryFailoverOption {
+	return func(fc *failoverConfig) {
+		fc.recoveryTimeout = timeout
+	}
+}
+
+// WithHealthCheckInterval configures health check frequency
+func WithHealthCheckInterval(interval time.Duration) MemoryFailoverOption {
+	return func(fc *failoverConfig) {
+		fc.healthInterval = interval
+	}
+}
+
+// WithHealthCheckTimeout configures individual health check timeout
+func WithHealthCheckTimeout(timeout time.Duration) MemoryFailoverOption {
+	return func(fc *failoverConfig) {
+		fc.healthTimeout = timeout
+	}
+}
+
+// WithHealthTestKey configures the key used for health checking
+func WithHealthTestKey(key string) MemoryFailoverOption {
+	return func(fc *failoverConfig) {
+		fc.healthTestKey = key
+	}
+}
+
+// WithMemoryFailover configures automatic failover to a memory backend when the primary backend fails.
+// This provides resilience by falling back to in-memory storage during backend outages.
+//
+// The memory backend will be used automatically when:
+//   - The primary backend fails consecutively (default: 5 failures)
+//   - The circuit breaker is OPEN (default recovery timeout: 30s)
+//
+// This option prioritizes service availability over strict state consistency:
+//   - No State Synchronization: Primary and memory backends maintain independent state
+//   - State Fragmentation During Failover: Users may get full or partial quota resets when switching backends
+//   - Self-Correction Over Time: State consistency resumes naturally through normal rate limiting operations
+//
+// Skip this option if you require:
+//   - Strict rate limiting consistency across all storage backends
+//   - Zero tolerance for temporary state fragmentation
+//   - Enterprise-grade state synchronization guarantees
+//
+// This option is designed for:
+//   - Applications prioritizing service availability over perfect rate limiting
+//   - Small teams without infrastructure support for state synchronization
+//   - Systems where temporary over-allocation is preferable to service downtime
+//   - Simple deployments needing basic resilience
+func WithMemoryFailover(opts ...MemoryFailoverOption) Option {
+	return func(config *Config) error {
+		if config.Storage == nil {
+			return fmt.Errorf("primary backend not found - call WithBackend() before WithMemoryFailover()")
+		}
+
+		// Prevent failover from memory to memory
+		if _, ok := config.Storage.(*memory.Backend); ok {
+			return fmt.Errorf("memory failover is not applicable when the primary backend is already a memory backend")
+		}
+
+		// Prevent nested failovers
+		if _, ok := config.Storage.(*composite.Backend); ok {
+			return fmt.Errorf("memory failover cannot be enabled on a composite backend to prevent nested failovers")
+		}
+
+		// Set defaults
+		fc := &failoverConfig{
+			failureThreshold: 5,
+			recoveryTimeout:  30 * time.Second,
+			healthInterval:   10 * time.Second,
+			healthTimeout:    2 * time.Second,
+			healthTestKey:    "health-check-key",
+		}
+
+		// Apply custom options
+		for _, opt := range opts {
+			opt(fc)
+		}
+
+		// Create memory backend as secondary
+		memoryBackend := memory.New()
+
+		// Create composite backend with failover configuration
+		compositeBackend, err := composite.New(composite.Config{
+			Primary:   config.Storage,
+			Secondary: memoryBackend,
+			CircuitBreaker: composite.BreakerConfig{
+				FailureThreshold: fc.failureThreshold,
+				RecoveryTimeout:  fc.recoveryTimeout,
+			},
+			HealthChecker: composite.CheckerConfig{
+				Interval: fc.healthInterval,
+				Timeout:  fc.healthTimeout,
+				TestKey:  fc.healthTestKey,
+			},
+		})
+		if err != nil {
+			return fmt.Errorf("failed to create memory failover backend: %w", err)
+		}
+
+		// Replace the storage backend with the composite backend
+		config.Storage = compositeBackend
 		return nil
 	}
 }

@@ -312,6 +312,113 @@ go test -v -run=TestConcurrent -count=5
 
 Monitor for failed requests and adjust `maxRetries` accordingly. Start with 50-75% of expected concurrent users and increase only if you observe request failures under load.
 
+## Memory failover
+
+Memory failover provides automatic failover from the primary storage backend (for example Redis or Postgres) to an in-memory backend when the primary experiences repeated failures. It is enabled via `ratelimit.WithMemoryFailover(...)`, which wraps the backend configured with `ratelimit.WithBackend(...)` in an internal composite backend with a circuit breaker and background health checks.
+
+### Behind the scenes:
+
+- **Primary backend** – the storage configured with `WithBackend(...)`; all operations go here while the circuit breaker is **CLOSED**.
+- **Secondary (in-memory) backend** – a fresh in-memory backend that is used when the primary is considered unhealthy.
+- **Circuit breaker** – tracks consecutive failures from the primary. After a configurable number of failures it moves to **OPEN** and routes all operations to the in-memory backend. After a configured recovery timeout it moves to **HALF-OPEN** and retries the primary; if that test succeeds the breaker returns to **CLOSED** and normal primary usage resumes.
+- **Health checker** – periodically performs a lightweight `Get` on the primary using a test key and, when successful, helps transition back to using the primary.
+
+By default (when `WithMemoryFailover()` is called with no extra options):
+
+- Failure threshold: **5** consecutive failures before the circuit trips
+- Recovery timeout: **30s** before moving from **OPEN** to **HALF-OPEN**
+- Health check interval: **10s** between health checks
+- Health check timeout: **2s** per health check
+- Health check key: `"health-check-key"`
+
+### Configuration
+
+Enable memory failover when constructing the limiter:
+
+- `WithMemoryFailover(opts ...MemoryFailoverOption)` – turns on memory failover for the primary backend.
+- `WithFailureThreshold(threshold int)` – sets how many consecutive primary failures are required before the circuit breaker opens.
+- `WithRecoveryTimeout(timeout time.Duration)` – controls how long the breaker stays OPEN before it retries the primary in HALF-OPEN state.
+- `WithHealthCheckInterval(interval time.Duration)` – how frequently the background health checker probes the primary.
+- `WithHealthCheckTimeout(timeout time.Duration)` – timeout applied to each health check operation.
+
+If you do not provide any options, the defaults listed above are used. `WithMemoryFailover` must be used with a non-memory primary backend that is not already a composite backend; calling it without a configured primary, or with a memory/composite backend, will return an error.
+
+### Usage example
+
+```go
+package main
+
+import (
+    "context"
+    "fmt"
+    "log"
+    "time"
+
+    "github.com/ajiwo/ratelimit"
+    "github.com/ajiwo/ratelimit/backends/redis"
+    "github.com/ajiwo/ratelimit/strategies"
+    "github.com/ajiwo/ratelimit/strategies/fixedwindow"
+)
+
+func main() {
+    // Primary backend: Redis
+    redisBackend, err := redis.New(redis.Config{
+        Addr: "remotehost:6379",
+        Password: "top-secret",
+        DB: 0,
+    })
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer redisBackend.Close()
+
+    // Rate limiter with memory failover enabled
+    limiter, err := ratelimit.New(
+        ratelimit.WithBackend(redisBackend),
+        ratelimit.WithMemoryFailover(
+            ratelimit.WithFailureThreshold(3),             // Optional, default is 5
+            ratelimit.WithRecoveryTimeout(10*time.Second), // Optional, default is 30s
+        ),
+        ratelimit.WithBaseKey("api"),
+        ratelimit.WithPrimaryStrategy(
+            fixedwindow.NewConfig().
+                AddQuota("default", 5, 3*time.Second).
+                Build(),
+        ),
+    )
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer limiter.Close()
+
+    ctx := context.Background()
+    userID := "user123"
+
+    var results strategies.Results
+    allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
+    if err != nil {
+        log.Fatal(err)
+    }
+    res := results["default"]
+    fmt.Printf("allowed=%v remaining=%d reset=%s\n", allowed, res.Remaining, res.Reset.Format(time.RFC3339))
+}
+```
+
+### Tradeoffs and when to use it
+
+Memory failover favors **availability over strict global consistency**. The primary and in-memory backends maintain independent state; there is no state synchronization between them. During failover and recovery, some users may effectively see temporary quota resets or partial resets as traffic switches between backends. Over time, normal rate-limiting operations naturally realign state, but the system is not strongly consistent across storage backends.
+
+This might be a good fit when:
+
+- Keeping the service available is more important than enforcing perfectly global rate limits.
+- Small, temporary over-allocation of requests is acceptable.
+- Basic resilience is desired without running additional infrastructure for state synchronization.
+
+You should **avoid** memory failover when:
+
+- Strict, globally consistent rate limits across all backends are required.
+- There is zero tolerance for temporary state fragmentation or quota resets during backend failures.
+
 ## License
 
 MIT — see [LICENSE](./LICENSE).
