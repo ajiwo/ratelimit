@@ -248,4 +248,4 @@ Each strategy maintains its own independent internal version history for its dat
 - Token Bucket: `strategies/tokenbucket/internal/state.go`
 - Leaky Bucket: `strategies/leakybucket/internal/state.go`
 - GCRA: `strategies/gcra/internal/state.go`
-- Composite: `strategies/composite/state.go`
+- Composite: `internal/strategies/composite/state.go`
