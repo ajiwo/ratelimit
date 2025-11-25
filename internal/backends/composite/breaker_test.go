@@ -1,7 +1,6 @@
 package composite
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"sync"
@@ -107,7 +106,7 @@ func TestCircuitBreaker_HalfOpenState(t *testing.T) {
 		require.NoError(t, err)
 		defer composite.Close()
 
-		ctx := context.Background()
+		ctx := t.Context()
 
 		// Trip the circuit breaker
 		primary.setFail(true, errors.New("primary failed"))
@@ -150,7 +149,7 @@ func TestCircuitBreaker_ConcurrentStateTransitions(t *testing.T) {
 	require.NoError(t, err)
 	defer composite.Close()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	primary.setFail(true, errors.New("primary failed"))
 
 	const numGoroutines = 10

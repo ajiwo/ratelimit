@@ -182,7 +182,7 @@ func TestCompositeBackend_PrimaryOperations(t *testing.T) {
 	require.NoError(t, err)
 	defer composite.Close()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Test operations work normally when primary is healthy
 	err = composite.Set(ctx, "test", "value", time.Minute)
@@ -217,7 +217,7 @@ func TestCompositeBackend_Failover(t *testing.T) {
 	require.NoError(t, err)
 	defer composite.Close()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Make primary fail
 	primary.setFail(true, errors.New("primary failed"))
@@ -268,7 +268,7 @@ func TestCompositeBackend_Recovery(t *testing.T) {
 	require.NoError(t, err)
 	defer composite.Close()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Make primary fail to trip circuit breaker
 	primary.setFail(true, errors.New("primary failed"))
@@ -404,7 +404,7 @@ func TestCompositeBackend_ConcurrentAccess(t *testing.T) {
 	require.NoError(t, err)
 	defer composite.Close()
 
-	ctx := context.Background()
+	ctx := t.Context()
 	const numGoroutines = 10
 	const numOperations = 100
 
@@ -450,7 +450,7 @@ func TestCompositeBackend_ContextCancellation(t *testing.T) {
 		defer composite.Close()
 
 		// Test with cancelled context - should fail with context error
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		cancel() // Cancel immediately
 
 		_, err = composite.Get(ctx, "test-key")
@@ -479,11 +479,11 @@ func TestCompositeBackend_ContextCancellation(t *testing.T) {
 		primary.setFail(true, errors.New("primary failed"))
 
 		// This should succeed via secondary and trip the circuit
-		err = composite.Set(context.Background(), "test-key", "test-value", time.Minute)
+		err = composite.Set(t.Context(), "test-key", "test-value", time.Minute)
 		assert.NoError(t, err)
 
 		// Now test with cancelled context
-		ctx, cancel := context.WithCancel(context.Background())
+		ctx, cancel := context.WithCancel(t.Context())
 		cancel() // Cancel immediately
 
 		_, err = composite.Get(ctx, "test-key")
@@ -515,7 +515,7 @@ func TestCompositeBackend_StateFragmentation(t *testing.T) {
 	require.NoError(t, err)
 	defer composite.Close()
 
-	ctx := context.Background()
+	ctx := t.Context()
 
 	// Set initial state on primary
 	err = primary.Set(ctx, "key1", "primary-value", time.Minute)
@@ -590,7 +590,7 @@ func TestCompositeBackend_ErrorClassification(t *testing.T) {
 			require.NoError(t, err)
 			defer composite.Close()
 
-			ctx := context.Background()
+			ctx := t.Context()
 			primary.setFail(true, tt.primaryError)
 
 			initialState := composite.GetCircuitBreakerState()
@@ -608,6 +608,135 @@ func TestCompositeBackend_ErrorClassification(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestCompositeBackend_FailureCounter(t *testing.T) {
+	primary := newMockBackend()
+	secondary := newMockBackend()
+
+	config := Config{
+		Primary:   primary,
+		Secondary: secondary,
+		CircuitBreaker: BreakerConfig{
+			FailureThreshold: 5, // Test with threshold of 5
+			RecoveryTimeout:  100 * time.Millisecond,
+		},
+		HealthChecker: CheckerConfig{
+			Interval: 0, // Disable health checking for controlled test
+		},
+	}
+
+	composite, err := New(config)
+	require.NoError(t, err)
+	defer composite.Close()
+
+	ctx := t.Context()
+
+	// Enable detailed logging
+	t.Log("=== Starting Failure Counter Test ===")
+	t.Logf("Initial circuit breaker state: %v", composite.GetCircuitBreakerState())
+	t.Logf("Initial failure count: %d", composite.GetCircuitBreakerFailureCount())
+	t.Logf("Failure threshold: %d", config.CircuitBreaker.FailureThreshold)
+
+	// Make primary fail
+	primary.setFail(true, errors.New("primary failed"))
+	t.Log("> Primary backend set to fail mode")
+
+	// Track the failure counter step by step
+	for i := 1; i <= 8; i++ { // Go beyond threshold to see post-trip behavior
+		t.Logf("\n--- Operation #%d ---", i)
+		t.Logf("Before operation - Circuit state: %v, failure count: %d",
+			composite.GetCircuitBreakerState(), composite.GetCircuitBreakerFailureCount())
+
+		// Perform operation
+		err = composite.Set(ctx, fmt.Sprintf("test-key-%d", i), fmt.Sprintf("value-%d", i), time.Minute)
+
+		t.Logf("Operation #%d result: err=%v", i, err)
+		t.Logf("After operation - Circuit state: %v, failure count: %d",
+			composite.GetCircuitBreakerState(), composite.GetCircuitBreakerFailureCount())
+
+		if i <= 5 {
+			if i < 5 {
+				// First 4 operations should fail and keep circuit CLOSED
+				assert.Error(t, err, "Operation %d should fail (circuit should be CLOSED)", i)
+				assert.Equal(t, stateClosed, composite.GetCircuitBreakerState(),
+					"Circuit should remain CLOSED after %d failures", i)
+				t.Logf("> Expected: Operation %d failed, circuit still CLOSED", i)
+			} else {
+				// 5th operation should trigger failover and succeed via secondary
+				assert.NoError(t, err, "Operation %d should succeed via secondary (circuit should trip to OPEN)", i)
+				assert.Equal(t, stateOpen, composite.GetCircuitBreakerState(),
+					"Circuit should be OPEN after %d failures", i)
+				t.Logf("> Expected: Operation %d succeeded via secondary, circuit tripped to OPEN", i)
+			}
+		} else {
+			// Operations 6+ should succeed via secondary (circuit already OPEN)
+			assert.NoError(t, err, "Operation %d should succeed via secondary (circuit already OPEN)", i)
+			assert.Equal(t, stateOpen, composite.GetCircuitBreakerState(),
+				"Circuit should remain OPEN after operation %d", i)
+			t.Logf("> Expected: Operation %d succeeded via secondary, circuit remains OPEN", i)
+		}
+	}
+
+	// Verify data went to secondary, not primary
+	t.Log("\n=== Verifying Data Storage ===")
+
+	// Check secondary backend
+	for i := 1; i <= 8; i++ {
+		key := fmt.Sprintf("test-key-%d", i)
+		if i >= 5 { // Only operations 5+ should have succeeded
+			val, err := secondary.Get(ctx, key)
+			assert.NoError(t, err, "Secondary should have key %s", key)
+			assert.Equal(t, fmt.Sprintf("value-%d", i), val, "Secondary should have correct value for %s", key)
+			t.Logf("> Secondary has %s = %s", key, val)
+		}
+	}
+
+	// Check primary backend (should be empty since operations failed or went to secondary)
+	primary.setFail(false, nil) // Temporarily enable primary to check
+	for i := 1; i <= 8; i++ {
+		key := fmt.Sprintf("test-key-%d", i)
+		_, err := primary.Get(ctx, key)
+		assert.Error(t, err, "Primary should NOT have key %s", key)
+		t.Logf("> Primary does NOT have %s (as expected)", key)
+	}
+	primary.setFail(true, errors.New("primary failed")) // Re-enable failure
+
+	t.Log("\n=== Recovery Test ===")
+
+	// Wait for recovery timeout
+	t.Logf("Waiting %v for recovery timeout...", config.CircuitBreaker.RecoveryTimeout)
+	time.Sleep(config.CircuitBreaker.RecoveryTimeout + 10*time.Millisecond)
+
+	t.Logf("After timeout - Circuit state: %v", composite.GetCircuitBreakerState())
+
+	// Restore primary
+	primary.setFail(false, nil)
+	t.Log("> Primary backend restored to healthy state")
+
+	// Set up health check for successful recovery
+	err = primary.Set(ctx, config.HealthChecker.TestKey, "health-ok", time.Minute)
+	assert.NoError(t, err)
+	t.Log("> Health check key set on primary")
+
+	// First operation should close circuit breaker and go to primary
+	t.Logf("Before recovery operation - Circuit state: %v", composite.GetCircuitBreakerState())
+	err = composite.Set(ctx, "recovery-key", "recovery-value", time.Minute)
+
+	t.Logf("Recovery operation result: err=%v", err)
+	t.Logf("After recovery operation - Circuit state: %v", composite.GetCircuitBreakerState())
+
+	assert.NoError(t, err, "Recovery operation should succeed")
+	assert.Equal(t, stateClosed, composite.GetCircuitBreakerState(),
+		"Circuit should be CLOSED after successful recovery operation")
+
+	// Verify operation went to primary
+	val, err := primary.Get(ctx, "recovery-key")
+	assert.NoError(t, err)
+	assert.Equal(t, "recovery-value", val)
+	t.Logf("> Primary has recovery-key = %s (confirming operation went to primary)", val)
+
+	t.Log("\n=== Test Complete ===")
 }
 
 func TestCompositeBackend_ConfigurationEdgeCases(t *testing.T) {

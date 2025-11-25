@@ -91,3 +91,8 @@ func (cb *circuitBreaker) Close() {
 func (cb *circuitBreaker) GetState() breakerState {
 	return breakerState(atomic.LoadInt32(&cb.state))
 }
+
+// GetFailureCount returns the current internal failure count (for testing/debugging)
+func (cb *circuitBreaker) GetFailureCount() int32 {
+	return atomic.LoadInt32(&cb.failureCount)
+}

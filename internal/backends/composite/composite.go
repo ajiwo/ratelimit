@@ -193,3 +193,8 @@ func (c *Backend) onPrimaryHealthy() {
 func (c *Backend) GetCircuitBreakerState() breakerState {
 	return c.circuitBreaker.GetState()
 }
+
+// GetCircuitBreakerFailureCount returns the internal failure count (for testing/debugging)
+func (c *Backend) GetCircuitBreakerFailureCount() int32 {
+	return c.circuitBreaker.GetFailureCount()
+}
