@@ -8,6 +8,7 @@ import (
 	"github.com/ajiwo/ratelimit/backends"
 	"github.com/ajiwo/ratelimit/backends/memory"
 	"github.com/ajiwo/ratelimit/internal/backends/composite"
+	"github.com/ajiwo/ratelimit/internal/healthchecker"
 	"github.com/ajiwo/ratelimit/strategies"
 )
 
@@ -225,7 +226,7 @@ func WithMemoryFailover(opts ...MemoryFailoverOption) Option {
 				FailureThreshold: fc.failureThreshold,
 				RecoveryTimeout:  fc.recoveryTimeout,
 			},
-			HealthChecker: composite.CheckerConfig{
+			HealthChecker: healthchecker.Config{
 				Interval: fc.healthInterval,
 				Timeout:  fc.healthTimeout,
 				TestKey:  fc.healthTestKey,

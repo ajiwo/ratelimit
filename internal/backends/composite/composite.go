@@ -6,14 +6,18 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
+	"github.com/ajiwo/ratelimit/internal/healthchecker"
 )
+
+// CheckerConfig is an alias for healthchecker.Config for backward compatibility
+type CheckerConfig = healthchecker.Config
 
 // Config holds configuration for the composite backend
 type Config struct {
 	Primary        backends.Backend // Primary/preferred backend
 	Secondary      backends.Backend // Secondary/fallback backend
 	CircuitBreaker BreakerConfig    // Circuit breaker configuration
-	HealthChecker  CheckerConfig    // Health check configuration
+	HealthChecker  CheckerConfig    // Health check configuration (alias for backward compatibility)
 }
 
 // Backend provides automatic failover capability for rate limiting storage
@@ -22,7 +26,7 @@ type Backend struct {
 	primary        backends.Backend
 	secondary      backends.Backend
 	circuitBreaker *circuitBreaker
-	healthChecker  *healthChecker
+	healthChecker  *healthchecker.Checker
 }
 
 // New creates a new composite backend
@@ -58,9 +62,9 @@ func New(config Config) (*Backend, error) {
 	}
 
 	// Initialize health checker
-	composite.healthChecker = newHealthChecker(
+	composite.healthChecker = healthchecker.New(
 		composite.primary,
-		config.HealthChecker,
+		healthchecker.Config(config.HealthChecker),
 		composite.onPrimaryHealthy,
 	)
 
