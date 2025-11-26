@@ -12,10 +12,17 @@ import (
 )
 
 type Config struct {
-	Addr     string
-	Password string
-	DB       int
-	PoolSize int
+	Addr     string // Redis server address (host:port)
+	Password string // Redis server password
+	DB       int    // Redis database number
+	PoolSize int    // Connection pool size
+	// RedisURL is a connection string in Redis URL format that provides all connection parameters.
+	// When set, it takes precedence over individual Addr, Password, DB, and PoolSize fields.
+	// Format examples:
+	//   - "redis://user:password@localhost:6789/3?dial_timeout=3s&pool_size=10"
+	//   - "unix://user:password@/path/to/redis.sock?db=1"
+	// Individual fields can be used to override URL parameters if explicitly set.
+	RedisURL string
 }
 
 const checkAndSetSHA = "31f0e6b6c096d994958b631fc6251ffa77352e89"
@@ -51,15 +58,46 @@ func (r *Backend) loadCheckAndSetScript(ctx context.Context) error {
 
 // New initializes a new RedisStorage with the given configuration.
 func New(config Config) (*Backend, error) {
-	client := redis.NewClient(&redis.Options{
-		Addr:     config.Addr,
-		Password: config.Password,
-		DB:       config.DB,
-		PoolSize: config.PoolSize,
-	})
+	var client redis.UniversalClient
+
+	if config.RedisURL != "" {
+		// Parse the Redis URL to get configuration options
+		options, err := redis.ParseURL(config.RedisURL)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse Redis URL: %w", err)
+		}
+
+		// Override with explicit config values if provided
+		if config.Addr != "" {
+			options.Addr = config.Addr
+		}
+		if config.Password != "" {
+			options.Password = config.Password
+		}
+		if config.DB != 0 {
+			options.DB = config.DB
+		}
+		if config.PoolSize != 0 {
+			options.PoolSize = config.PoolSize
+		}
+
+		client = redis.NewClient(options)
+	} else {
+		// Use individual configuration fields
+		client = redis.NewClient(&redis.Options{
+			Addr:     config.Addr,
+			Password: config.Password,
+			DB:       config.DB,
+			PoolSize: config.PoolSize,
+		})
+	}
 
 	if _, err := client.Ping(context.Background()).Result(); err != nil {
-		return nil, NewConnectionFailedError(config.Addr, err)
+		addr := config.Addr
+		if config.RedisURL != "" {
+			addr = config.RedisURL
+		}
+		return nil, NewConnectionFailedError(addr, err)
 	}
 
 	return &Backend{client: client}, nil
