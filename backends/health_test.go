@@ -145,80 +145,80 @@ func TestHealthError_ErrorChaining(t *testing.T) {
 
 func TestMaybeConnError(t *testing.T) {
 	tests := []struct {
-		name        string
-		op          string
-		err         error
-		patterns    []string
+		name         string
+		op           string
+		err          error
+		patterns     []string
 		expectHealth bool
-		want        error
+		want         error
 	}{
 		{
-			name:        "nil error",
-			op:          "redis:Get",
-			err:         nil,
-			patterns:    []string{"connection refused"},
+			name:         "nil error",
+			op:           "redis:Get",
+			err:          nil,
+			patterns:     []string{"connection refused"},
 			expectHealth: false,
-			want:        nil,
+			want:         nil,
 		},
 		{
-			name:        "matching pattern",
-			op:          "redis:Get",
-			err:         errors.New("Connection Refused"),
-			patterns:    []string{"connection refused"},
+			name:         "matching pattern",
+			op:           "redis:Get",
+			err:          errors.New("Connection Refused"),
+			patterns:     []string{"connection refused"},
 			expectHealth: true,
 		},
 		{
-			name:        "non-matching pattern",
-			op:          "redis:Get",
-			err:         errors.New("some other error"),
-			patterns:    []string{"connection refused"},
+			name:         "non-matching pattern",
+			op:           "redis:Get",
+			err:          errors.New("some other error"),
+			patterns:     []string{"connection refused"},
 			expectHealth: false,
-			want:        errors.New("some other error"),
+			want:         errors.New("some other error"),
 		},
 		{
-			name:        "nil patterns",
-			op:          "redis:Get",
-			err:         errors.New("connection refused"),
-			patterns:    nil,
+			name:         "nil patterns",
+			op:           "redis:Get",
+			err:          errors.New("connection refused"),
+			patterns:     nil,
 			expectHealth: false,
-			want:        errors.New("connection refused"),
+			want:         errors.New("connection refused"),
 		},
 		{
-			name:        "empty patterns",
-			op:          "redis:Get",
-			err:         errors.New("connection refused"),
-			patterns:    []string{},
+			name:         "empty patterns",
+			op:           "redis:Get",
+			err:          errors.New("connection refused"),
+			patterns:     []string{},
 			expectHealth: false,
-			want:        errors.New("connection refused"),
+			want:         errors.New("connection refused"),
 		},
 		{
-			name:        "multiple patterns match",
-			op:          "redis:Get",
-			err:         errors.New("network timeout"),
-			patterns:    []string{"connection refused", "timeout"},
+			name:         "multiple patterns match",
+			op:           "redis:Get",
+			err:          errors.New("network timeout"),
+			patterns:     []string{"connection refused", "timeout"},
 			expectHealth: true,
 		},
 		{
-			name:        "context deadline exceeded",
-			op:          "redis:Get",
-			err:         context.DeadlineExceeded,
-			patterns:    nil,
+			name:         "context deadline exceeded",
+			op:           "redis:Get",
+			err:          context.DeadlineExceeded,
+			patterns:     nil,
 			expectHealth: true,
 		},
 		{
-			name:        "context canceled",
-			op:          "redis:Get",
-			err:         context.Canceled,
-			patterns:    nil,
+			name:         "context canceled",
+			op:           "redis:Get",
+			err:          context.Canceled,
+			patterns:     nil,
 			expectHealth: true,
 		},
 		{
-			name:        "no pattern match and not context error",
-			op:          "redis:Get",
-			err:         errors.New("invalid syntax"),
-			patterns:    []string{"connection refused", "timeout"},
+			name:         "no pattern match and not context error",
+			op:           "redis:Get",
+			err:          errors.New("invalid syntax"),
+			patterns:     []string{"connection refused", "timeout"},
 			expectHealth: false,
-			want:        errors.New("invalid syntax"),
+			want:         errors.New("invalid syntax"),
 		},
 	}
 
@@ -229,10 +229,10 @@ func TestMaybeConnError(t *testing.T) {
 			if tt.expectHealth {
 				// Check that it's a health error
 				assert.True(t, IsHealthError(got))
-				
+
 				// Check that we can unwrap to the sentinel
 				assert.True(t, errors.Is(got, ErrUnhealthy))
-				
+
 				// Check that we can unwrap to the HealthError
 				var he *HealthError
 				assert.True(t, errors.As(got, &he))
