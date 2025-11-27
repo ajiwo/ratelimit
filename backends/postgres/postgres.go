@@ -5,18 +5,36 @@ import (
 	"errors"
 	"time"
 
+	"github.com/ajiwo/ratelimit/backends"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
+// Config holds configuration for creating a PostgreSQL backend.
 type Config struct {
+	// ConnString is the PostgreSQL connection string.
+	//
+	// Format: "postgres://username:password@hostname:port/database?sslmode=disable"
 	ConnString string
-	MaxConns   int32
-	MinConns   int32
+	// MaxConns is the maximum number of connections in the pool.
+	//
+	// If 0, a sensible default is used.
+	MaxConns int32
+	// MinConns is the minimum number of connections in the pool.
+	//
+	// If 0, defaults to 2.
+	MinConns int32
+	// ConnErrorStrings contains string patterns to identify connectivity-related errors.
+	//
+	// If nil, the default patterns from connErrorStrings are used.
+	// These patterns help distinguish temporary connectivity issues from operational
+	// errors like constraint violations.
+	ConnErrorStrings []string
 }
 
 type Backend struct {
-	pool *pgxpool.Pool
+	pool             *pgxpool.Pool
+	connErrorStrings []string
 }
 
 // New initializes a new PostgresStorage with the given configuration.
@@ -28,9 +46,15 @@ func New(config Config) (*Backend, error) {
 		config.MinConns = 2
 	}
 
+	// Use custom patterns if provided, otherwise fall back to defaults
+	patterns := config.ConnErrorStrings
+	if patterns == nil {
+		patterns = connErrorStrings
+	}
+
 	poolConfig, err := pgxpool.ParseConfig(config.ConnString)
 	if err != nil {
-		return nil, NewInvalidConnStringError(err)
+		return nil, backends.MaybeConnError("postgres:ParseConfig", NewInvalidConnStringError(err), patterns)
 	}
 
 	poolConfig.MaxConns = config.MaxConns
@@ -38,25 +62,31 @@ func New(config Config) (*Backend, error) {
 
 	pool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
 	if err != nil {
-		return nil, NewPoolCreationFailedError(err)
+		return nil, backends.MaybeConnError("postgres:NewPool", NewPoolCreationFailedError(err), patterns)
 	}
 
 	if err := pool.Ping(context.Background()); err != nil {
-		return nil, NewPingFailedError(err)
+		return nil, backends.MaybeConnError("postgres:Ping", NewPingFailedError(err), patterns)
 	}
 
 	if err := createTable(context.Background(), pool); err != nil {
 		return nil, NewTableCreationFailedError(err)
 	}
 
-	return &Backend{pool: pool}, nil
+	return &Backend{
+		pool:             pool,
+		connErrorStrings: patterns,
+	}, nil
 }
 
 // NewWithClient initializes a new PostgresBackend with a pre-configured connection pool.
 //
 // The pool is assumed to be already connected and ready for use.
 func NewWithClient(pool *pgxpool.Pool) *Backend {
-	return &Backend{pool: pool}
+	return &Backend{
+		pool:             pool,
+		connErrorStrings: connErrorStrings, // Use default patterns
+	}
 }
 
 func createTable(ctx context.Context, pool *pgxpool.Pool) error {
@@ -90,7 +120,7 @@ func (p *Backend) Get(ctx context.Context, key string) (string, error) {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", nil
 		}
-		return "", NewGetFailedError(key, err)
+		return "", p.maybeConnError("postgres:Get", NewGetFailedError(key, err))
 	}
 
 	if expiresAt != nil && time.Now().After(*expiresAt) {
@@ -115,7 +145,7 @@ func (p *Backend) Set(ctx context.Context, key string, value string, expiration 
 			expires_at = EXCLUDED.expires_at
 	`, key, value, expiresAt)
 	if err != nil {
-		return NewSetFailedError(key, err)
+		return p.maybeConnError("postgres:Set", NewSetFailedError(key, err))
 	}
 	return nil
 }
@@ -123,7 +153,7 @@ func (p *Backend) Set(ctx context.Context, key string, value string, expiration 
 func (p *Backend) Delete(ctx context.Context, key string) error {
 	_, err := p.pool.Exec(ctx, `DELETE FROM ratelimit_kv WHERE key = $1`, key)
 	if err != nil {
-		return NewDeleteFailedError(key, err)
+		return p.maybeConnError("postgres:Delete", NewDeleteFailedError(key, err))
 	}
 	return nil
 }
@@ -174,7 +204,7 @@ func (p *Backend) CheckAndSet(ctx context.Context, key, oldValue, newValue strin
 			WHERE key = $1 AND expires_at IS NOT NULL AND expires_at <= NOW()
 		`, key)
 		if err != nil {
-			return false, NewCheckAndSetFailedError(key, err)
+			return false, p.maybeConnError("postgres:CheckAndSet:DeleteExpired", NewCheckAndSetFailedError(key, err))
 		}
 
 		// Insert new key only if it doesn't exist (atomic operation)
@@ -184,7 +214,7 @@ func (p *Backend) CheckAndSet(ctx context.Context, key, oldValue, newValue strin
 			ON CONFLICT (key) DO NOTHING
 		`, key, newValue, expiresAt)
 		if err != nil {
-			return false, NewCheckAndSetFailedError(key, err)
+			return false, p.maybeConnError("postgres:CheckAndSet:Insert", NewCheckAndSetFailedError(key, err))
 		}
 
 		// Return true if a row was inserted, false if key already existed
@@ -200,8 +230,16 @@ func (p *Backend) CheckAndSet(ctx context.Context, key, oldValue, newValue strin
 			AND (expires_at IS NULL OR expires_at > NOW())
 	`, newValue, expiresAt, key, oldValue)
 	if err != nil {
-		return false, NewCheckAndSetFailedError(key, err)
+		return false, p.maybeConnError("postgres:CheckAndSet:Update", NewCheckAndSetFailedError(key, err))
 	}
 
 	return result.RowsAffected() == 1, nil
+}
+
+// maybeConnError checks if the error is a connectivity issue and wraps it as a health error.
+//
+// For Postgres, we consider connection timeouts, connection refused, and pool errors as health issues.
+// Operational errors like constraint violations are not considered health errors.
+func (b *Backend) maybeConnError(op string, err error) error {
+	return backends.MaybeConnError(op, err, b.connErrorStrings)
 }

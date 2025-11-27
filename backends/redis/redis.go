@@ -8,6 +8,7 @@ import (
 
 	_ "embed"
 
+	"github.com/ajiwo/ratelimit/backends"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -17,12 +18,19 @@ type Config struct {
 	DB       int    // Redis database number
 	PoolSize int    // Connection pool size
 	// RedisURL is a connection string in Redis URL format that provides all connection parameters.
+	//
 	// When set, it takes precedence over individual Addr, Password, DB, and PoolSize fields.
 	// Format examples:
 	//   - "redis://user:password@localhost:6789/3?dial_timeout=3s&pool_size=10"
 	//   - "unix://user:password@/path/to/redis.sock?db=1"
 	// Individual fields can be used to override URL parameters if explicitly set.
 	RedisURL string
+	// ConnErrorStrings contains string patterns to identify connectivity-related errors.
+	//
+	// If nil, the default patterns from connErrorStrings are used.
+	// These patterns help distinguish temporary connectivity issues from operational errors
+	// like "NOSCRIPT" or "WRONGTYPE".
+	ConnErrorStrings []string
 }
 
 const checkAndSetSHA = "31f0e6b6c096d994958b631fc6251ffa77352e89"
@@ -31,7 +39,8 @@ const checkAndSetSHA = "31f0e6b6c096d994958b631fc6251ffa77352e89"
 var cnsScript string
 
 type Backend struct {
-	client redis.UniversalClient
+	client           redis.UniversalClient
+	connErrorStrings []string
 }
 
 func (r *Backend) GetClient() redis.UniversalClient {
@@ -48,7 +57,7 @@ func (r *Backend) GetClient() redis.UniversalClient {
 func (r *Backend) loadCheckAndSetScript(ctx context.Context) error {
 	sha, err := r.client.ScriptLoad(ctx, cnsScript).Result()
 	if err != nil {
-		return NewEvalFailedError("load check-and-set script", err)
+		return r.maybeConnError("redis:ScriptLoad", NewEvalFailedError("load check-and-set script", err))
 	}
 	if sha != checkAndSetSHA {
 		return ErrScriptSHAInvalid
@@ -92,22 +101,30 @@ func New(config Config) (*Backend, error) {
 		})
 	}
 
-	if _, err := client.Ping(context.Background()).Result(); err != nil {
-		addr := config.Addr
-		if config.RedisURL != "" {
-			addr = config.RedisURL
-		}
-		return nil, NewConnectionFailedError(addr, err)
+	// Use custom patterns if provided, otherwise fall back to defaults
+	patterns := config.ConnErrorStrings
+	if patterns == nil {
+		patterns = connErrorStrings
 	}
 
-	return &Backend{client: client}, nil
+	if _, err := client.Ping(context.Background()).Result(); err != nil {
+		return nil, backends.NewHealthError("redis:Ping", NewPingFailedError(err))
+	}
+
+	return &Backend{
+		client:           client,
+		connErrorStrings: patterns,
+	}, nil
 }
 
 // NewWithClient initializes a new Backend with a pre-configured Redis universal client.
 //
 // The client is assumed to be already connected and ready for use.
 func NewWithClient(client redis.UniversalClient) *Backend {
-	return &Backend{client: client}
+	return &Backend{
+		client:           client,
+		connErrorStrings: connErrorStrings, // Use default patterns
+	}
 }
 
 func (r *Backend) Get(ctx context.Context, key string) (string, error) {
@@ -191,12 +208,20 @@ func (r *Backend) CheckAndSet(ctx context.Context, key, oldValue, newValue strin
 				EvalSha(ctx, checkAndSetSHA, []string{key}, oldStr, newStr, expMs).
 				Result()
 			if err != nil {
-				return false, NewEvalFailedError("check-and-set cached script", err)
+				return false, r.maybeConnError("redis:CheckAndSet", NewEvalFailedError("check-and-set cached script", err))
 			}
 		} else {
-			return false, NewEvalFailedError("check-and-set cached script", err)
+			return false, r.maybeConnError("redis:CheckAndSet", NewEvalFailedError("check-and-set cached script", err))
 		}
 	}
 
 	return result.(int64) == 1, nil
+}
+
+// maybeConnError checks if the error is a connectivity issue and wraps it as a health error.
+//
+// For Redis, we consider connection timeouts, connection refused, and network errors as health issues.
+// Operational errors like NOSCRIPT are not considered health errors.
+func (r *Backend) maybeConnError(op string, err error) error {
+	return backends.MaybeConnError(op, err, r.connErrorStrings)
 }
