@@ -85,7 +85,7 @@ func IsHealthError(err error) bool {
 //	// Returns HealthError if error matches patterns
 //
 //	err := MaybeConnError("myBackend:Get", ioErr, nil)
-//	// Always returns original error (no pattern matching)
+//	// Returns HealthError if context error, otherwise returns original error
 func MaybeConnError(op string, err error, patterns []string) error {
 	if err == nil {
 		return nil
