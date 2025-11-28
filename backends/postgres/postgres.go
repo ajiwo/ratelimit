@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
@@ -198,20 +199,16 @@ func (p *Backend) CheckAndSet(ctx context.Context, key, oldValue, newValue strin
 	}
 
 	if oldValue == "" {
-		// First, delete any expired entries for this key
-		_, err := p.pool.Exec(ctx, `
-			DELETE FROM ratelimit_kv
-			WHERE key = $1 AND expires_at IS NOT NULL AND expires_at <= NOW()
-		`, key)
-		if err != nil {
-			return false, p.maybeConnError("postgres:CheckAndSet:DeleteExpired", NewCheckAndSetFailedError(key, err))
-		}
-
 		// Insert new key only if it doesn't exist (atomic operation)
 		result, err := p.pool.Exec(ctx, `
 			INSERT INTO ratelimit_kv (key, value, expires_at)
 			VALUES ($1, $2, $3)
-			ON CONFLICT (key) DO NOTHING
+			ON CONFLICT (key) DO UPDATE SET
+				value = EXCLUDED.value,
+				expires_at = EXCLUDED.expires_at
+				WHERE ratelimit_kv.expires_at IS NOT NULL
+					AND ratelimit_kv.expires_at <= NOW()
+
 		`, key, newValue, expiresAt)
 		if err != nil {
 			return false, p.maybeConnError("postgres:CheckAndSet:Insert", NewCheckAndSetFailedError(key, err))
@@ -234,6 +231,27 @@ func (p *Backend) CheckAndSet(ctx context.Context, key, oldValue, newValue strin
 	}
 
 	return result.RowsAffected() == 1, nil
+}
+
+// PurgeExpired deletes up to batchSize expired rows and returns the number deleted.
+func (p *Backend) PurgeExpired(ctx context.Context, batchSize int) (int64, error) {
+	if batchSize <= 0 {
+		batchSize = 1000
+	}
+	cmd, err := p.pool.Exec(ctx, `
+		WITH stale AS (
+			SELECT key FROM ratelimit_kv 
+			WHERE expires_at IS NOT NULL AND expires_at <= NOW()
+			LIMIT $1
+		)
+		DELETE FROM ratelimit_kv t
+		USING stale
+		WHERE t.key = stale.key
+	`, batchSize)
+	if err != nil {
+		return 0, fmt.Errorf("purge expired failed: %w", err)
+	}
+	return cmd.RowsAffected(), nil
 }
 
 // maybeConnError checks if the error is a connectivity issue and wraps it as a health error.

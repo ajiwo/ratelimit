@@ -237,6 +237,8 @@ func TestPostgresStorage_CheckAndSet(t *testing.T) {
 	if storage == nil {
 		t.Skip("PostgreSQL not available, skipping CheckAndSet tests")
 	}
+	_, err := storage.PurgeExpired(ctx, 100)
+	require.NoError(t, err)
 
 	t.Run("CheckAndSet with empty oldValue - key doesn't exist", func(t *testing.T) {
 		success, err := storage.CheckAndSet(ctx, "newkey", "", "newvalue", time.Hour)
