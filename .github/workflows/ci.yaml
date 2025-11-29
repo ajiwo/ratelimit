@@ -62,4 +62,4 @@ jobs:
           token: ${{ secrets.CODECOV_TOKEN }}
 
       - name: Run benchmark (memory backend)
-        run: go test -bench -benchmem -benchtime=1s -run=^$
+        run: go test -bench=Allow -benchmem -benchtime=1s -run=^$
