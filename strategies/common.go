@@ -8,8 +8,14 @@ import (
 const (
 	// DefaultMaxRetries is the default maximum number of retry attempts for CheckAndSet operations
 	DefaultMaxRetries = 30
-	MaxRetries        = 9390
-	TTLFactor         = 5
+	// MaxRetries is the maximum number of retry attempts for CheckAndSet operations before giving up.
+	//
+	// The current implementation (with 8-bit shift and 10s max feedback) overflows at 7,205,759 attempts.
+	// This value provides a large safety margin while preventing indefinite retries that could
+	// overwhelm the system. In practice, much lower values  are typically sufficient for
+	// high-contention scenarios. it overflowed at 9,391 atttempt before 0bb1997
+	MaxRetries = 9390
+	TTLFactor  = 5
 )
 
 // CalcExpiration calculates an appropriate expiration time for storage operations

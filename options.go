@@ -95,6 +95,7 @@ func WithBackend(backend backends.Backend) Option {
 //   - 500 concurrent users: 375 retries
 //
 // If retries is 0 or not set, the default value (30) will be used.
+// To disable retries entirely, set retries to 1 (a single attempt without any retries).
 func WithMaxRetries(retries int) Option {
 	return func(config *Config) error {
 		if retries < 0 {
