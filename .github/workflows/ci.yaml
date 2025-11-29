@@ -61,3 +61,5 @@ jobs:
           files: coverage.out
           token: ${{ secrets.CODECOV_TOKEN }}
 
+      - name: Run benchmark (memory backend)
+        run: go test -bench -benchmem -benchtime=1s -run=^$
