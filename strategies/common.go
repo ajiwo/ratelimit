@@ -9,13 +9,14 @@ const (
 	// DefaultMaxRetries is the default maximum number of retry attempts for CheckAndSet operations
 	DefaultMaxRetries = 30
 	MaxRetries        = 9390
+	TTLFactor         = 5
 )
 
 // CalcExpiration calculates an appropriate expiration time for storage operations
 // based on capacity and rate, with a minimum of 1 second
-// it currently is used by leaky/token bucket strategy
+// it's currently used by gcra, leaky bucket, and token bucket strategy
 func CalcExpiration(capacity int, rate float64) time.Duration {
-	expirationSeconds := float64(capacity) / rate * 2
+	expirationSeconds := (float64(capacity) / rate) * TTLFactor
 	if expirationSeconds < 1 {
 		expirationSeconds = 1
 	}

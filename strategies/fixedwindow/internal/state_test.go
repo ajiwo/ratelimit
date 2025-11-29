@@ -119,6 +119,6 @@ func TestComputeMaxResetTTL(t *testing.T) {
 	}
 
 	ttl := computeMaxResetTTL(quotaStates, quotas, now)
-	assert.True(t, ttl >= 30*time.Second) // Default window hasn't expired
-	assert.True(t, ttl <= 60*time.Second) // Shouldn't be more than the max window
+	assert.True(t, ttl >= 30*time.Second)  // Default window hasn't expired
+	assert.True(t, ttl <= 300*time.Second) // Shouldn't be more than the max window
 }

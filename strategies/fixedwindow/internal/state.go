@@ -4,6 +4,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/ajiwo/ratelimit/strategies"
 	"github.com/ajiwo/ratelimit/utils/builderpool"
 )
 
@@ -170,5 +171,5 @@ func computeMaxResetTTL(quotaStates map[string]FixedWindow, quotas map[string]Qu
 		return 1 * time.Second
 	}
 
-	return ttl
+	return ttl * strategies.TTLFactor
 }

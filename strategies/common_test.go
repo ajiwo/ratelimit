@@ -8,17 +8,17 @@ import (
 )
 
 func TestCalcExpiration(t *testing.T) {
-	// capacity 10, rate 5 -> (10/5)*2 = 4 seconds
+	// capacity 10, rate 5 -> (10/5)*5 = 10 seconds
 	d := CalcExpiration(10, 5)
-	assert.Equal(t, 4*time.Second, d)
+	assert.Equal(t, 10*time.Second, d)
 
 	// Very small -> min 1 second
 	d = CalcExpiration(1, 1000)
 	assert.Equal(t, time.Second, d)
 
-	// Non-integer seconds should truncate after multiplication logic: (3/2)*2 = 3 -> 3s
+	// Non-integer seconds should truncate after multiplication logic: (3/2)*5 = 7.5 -> 7s
 	d = CalcExpiration(3, 2)
-	assert.Equal(t, 3*time.Second, d)
+	assert.Equal(t, 7*time.Second, d)
 }
 
 func TestNextDelay(t *testing.T) {
