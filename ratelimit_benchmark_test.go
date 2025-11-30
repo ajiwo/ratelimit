@@ -81,7 +81,7 @@ func runBenchmark(b *testing.B, method benchmarkMethod, concurrent bool) {
 		b.RunParallel(func(pb *testing.PB) {
 			requestNum := 0
 			for pb.Next() {
-				var results map[string]strategies.Result
+				var results strategies.Results
 				allowed, err := method(ctx, AccessOptions{
 					Key:    fmt.Sprintf("concurrent_%d", requestNum%100),
 					Result: &results,
@@ -99,7 +99,7 @@ func runBenchmark(b *testing.B, method benchmarkMethod, concurrent bool) {
 		})
 	} else {
 		for i := 0; b.Loop(); i++ {
-			var results map[string]strategies.Result
+			var results strategies.Results
 			allowed, err := method(ctx, AccessOptions{
 				Key:    fmt.Sprintf("with_results_%d", i%100),
 				Result: &results,

@@ -21,7 +21,7 @@ func New(storage backends.Backend) *Strategy {
 }
 
 // Allow checks if a request is allowed and returns detailed statistics
-func (l *Strategy) Allow(ctx context.Context, config strategies.Config) (map[string]strategies.Result, error) {
+func (l *Strategy) Allow(ctx context.Context, config strategies.Config) (strategies.Results, error) {
 	lbConfig, ok := config.(Config)
 	if !ok {
 		return nil, ErrInvalidConfig
@@ -41,7 +41,7 @@ func (l *Strategy) Allow(ctx context.Context, config strategies.Config) (map[str
 }
 
 // Peek inspects current state without consuming quota
-func (l *Strategy) Peek(ctx context.Context, config strategies.Config) (map[string]strategies.Result, error) {
+func (l *Strategy) Peek(ctx context.Context, config strategies.Config) (strategies.Results, error) {
 	lbConfig, ok := config.(Config)
 	if !ok {
 		return nil, ErrInvalidConfig

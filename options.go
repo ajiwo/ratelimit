@@ -53,9 +53,9 @@ func WithBaseKey(key string) Option {
 
 // AccessOptions holds the configuration for a rate limiter access operation
 type AccessOptions struct {
-	Key            string                        // Dynamic key
-	SkipValidation bool                          // Skip key validation
-	Result         *map[string]strategies.Result // Optional results pointer
+	Key            string              // Dynamic key
+	SkipValidation bool                // Skip key validation
+	Result         *strategies.Results // Optional results pointer
 }
 
 // WithBackend configures the rate limiter to use a custom backend
