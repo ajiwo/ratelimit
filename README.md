@@ -63,7 +63,7 @@ func main() {
         var results strategies.Results
         allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
         if err != nil { log.Fatal(err) }
-        res := results["default"]
+        res := results.Default()
         fmt.Printf("req %d => allowed=%v remaining=%d reset=%s\n", i, allowed, res.Remaining, res.Reset.Format(time.RFC3339))
     }
 }
@@ -80,7 +80,6 @@ limiter, err := ratelimit.New(
     // Primary: hard limits
     ratelimit.WithPrimaryStrategy(
         fixedwindow.NewConfig().
-            SetKey("user").
             AddQuota("hourly", 100, time.Hour).
             Build(),
     ),
@@ -102,6 +101,32 @@ When using dual strategy, the per-quota names in results are prefixed by `primar
 - Strategy config: algorithm-specific configuration implementing `strategies.Config`
 - Results: per-quota `strategies.Results` entries with `Allowed`, `Remaining`, `Reset`
 
+
+## Results helper methods
+
+The `strategies.Results` type provides convenient helper methods for accessing quota results:
+
+```go
+// For single quota scenarios
+result := results.Default()  // Get the "default" quota result
+
+// For dual strategy scenarios
+primaryResult := results.PrimaryDefault()   // Get "primary_default"
+secondaryResult := results.SecondaryDefault() // Get "secondary_default"
+
+// For specific named quotas
+result := results.Quota("hourly")  // Get a specific quota by name
+primaryHourly := results.Primary("hourly")  // Get "primary_hourly"
+
+// Check if a quota exists
+if results.HasQuota("primary_daily") { ... }
+
+// Utility methods
+anyAllowed := results.AnyAllowed()  // true if any quota allows the request
+allAllowed := results.AllAllowed()  // true if all quotas allow the request
+firstResult := results.First()      // get first result (use with caution)
+count := results.Len()              // number of quotas in results
+```
 
 ## API overview
 
@@ -135,7 +160,7 @@ Two kinds of keys exist:
 
 Validation rules (applied to both base and dynamic keys unless explicitly skipped for dynamic keys):
 - Non-empty and at most 64 bytes
-- Allowed characters: ASCII alphanumeric, underscore (_), hyphen (-), colon (:), period (.), and at (@)
+- Allowed characters: ASCII alphanumeric, underscore (_), hyphen (-), colon (:), period (.), at (@), and plus (+)
 
 
 ## Strategies
@@ -225,7 +250,7 @@ func main() {
     if err != nil {
         panic(err)
     }
-    r := results["default"]
+    r := results.Default()
     fmt.Printf("allowed=%v remaining=%d reset=%s\n", r.Allowed, r.Remaining, r.Reset.Format(time.RFC3339))
 
     // Peek inspects current state without consuming quota
@@ -233,7 +258,7 @@ func main() {
     if err != nil {
         panic(err)
     }
-    pr := peek["default"]
+    pr := peek.Default()
     fmt.Printf("peek remaining=%d reset=%s\n", pr.Remaining, pr.Reset.Format(time.RFC3339))
 }
 ```
@@ -320,7 +345,7 @@ Memory failover provides automatic failover from the primary storage backend (fo
 
 - **Primary backend** – the storage configured with `WithBackend(...)`; all operations go here while the circuit breaker is **CLOSED**.
 - **Secondary (in-memory) backend** – a fresh in-memory backend that is used when the primary is considered unhealthy.
-- **Circuit breaker** – tracks consecutive failures from the primary. After a configurable number of failures it moves to **OPEN** and routes all operations to the in-memory backend. After a configured recovery timeout it moves to **HALF-OPEN** and retries the primary; if that test succeeds the breaker returns to **CLOSED** and normal primary usage resumes.
+- **Circuit breaker** – tracks consecutive failures from the primary. After a configurable number of failures it moves to **OPEN** and routes all operations to the in-memory backend. After a configured recovery timeout it moves to **HALF-OPEN** and retries the primary; if that test succeeds the breaker returns to **CLOSED** and normal primary usage resumes. It doesn't categorize error types - any error from the primary counts as a failure toward the threshold.
 - **Health checker** – periodically performs a lightweight `Get` on the primary using a test key and, when successful, helps transition back to using the primary.
 
 By default (when `WithMemoryFailover()` is called with no extra options):
@@ -399,7 +424,7 @@ func main() {
     if err != nil {
         log.Fatal(err)
     }
-    res := results["default"]
+    res := results.Default()
     fmt.Printf("allowed=%v remaining=%d reset=%s\n", allowed, res.Remaining, res.Reset.Format(time.RFC3339))
 }
 ```
