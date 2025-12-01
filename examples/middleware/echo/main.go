@@ -93,8 +93,8 @@ func RateLimitMiddleware(limiter *ratelimit.RateLimiter) echo.MiddlewareFunc {
 						Result: &stats,
 					},
 				)
-				if err == nil && statsOK && len(stats) > 0 {
-					result := stats["default"]
+				if err == nil && statsOK && stats.HasQuota("default") {
+					result := stats.Default()
 					c.Response().Header().Set("X-RateLimit-Limit", "10")
 					c.Response().Header().Set("X-RateLimit-Remaining", fmt.Sprintf("%d", result.Remaining))
 					c.Response().Header().Set("X-RateLimit-Reset", fmt.Sprintf("%d", result.Reset.Unix()))

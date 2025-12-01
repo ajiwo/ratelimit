@@ -60,8 +60,8 @@ func main() {
 			continue
 		}
 
-		primaryResult := results["primary_default"]
-		secondaryResult := results["secondary_default"]
+		primaryResult := results.PrimaryDefault()
+		secondaryResult := results.SecondaryDefault()
 
 		status := "DENIED"
 		if allowed {
@@ -98,7 +98,7 @@ func main() {
 			burstDenied++
 		}
 
-		secondaryResult := results["secondary_default"]
+		secondaryResult := results.SecondaryDefault()
 		fmt.Printf("Burst request %d: %s (Secondary tokens: %.1f)\n",
 			i, map[bool]string{true: "ALLOWED", false: "DENIED"}[allowed],
 			float64(secondaryResult.Remaining))
@@ -122,8 +122,8 @@ func main() {
 		return
 	}
 
-	primaryResult := results["primary_default"]
-	secondaryResult := results["secondary_default"]
+	primaryResult := results.PrimaryDefault()
+	secondaryResult := results.SecondaryDefault()
 
 	status := "DENIED"
 	if allowed {
@@ -153,8 +153,8 @@ func main() {
 			continue
 		}
 
-		primaryResult := results["primary_default"]
-		secondaryResult := results["secondary_default"]
+		primaryResult := results.PrimaryDefault()
+		secondaryResult := results.SecondaryDefault()
 
 		status := "DENIED"
 		if allowed {

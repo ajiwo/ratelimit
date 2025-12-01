@@ -122,7 +122,7 @@ func allowedStr(b bool) string {
 
 // printCompositeResults prints primary_*/secondary_* entries succinctly
 func printCompositeResults(r strategies.Results) {
-	p, s := r["primary_default"], r["secondary_default"]
+	p, s := r.PrimaryDefault(), r.SecondaryDefault()
 	fmt.Printf("  primary_default  => allowed=%v remaining=%d reset=%s\n", p.Allowed, p.Remaining, p.Reset.Format(time.RFC3339))
 	fmt.Printf("  secondary_default=> allowed=%v remaining=%d reset=%s\n", s.Allowed, s.Remaining, s.Reset.Format(time.RFC3339))
 }
