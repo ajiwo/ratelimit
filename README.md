@@ -85,8 +85,8 @@ limiter, err := ratelimit.New(
     ),
     // Secondary: smoothing/burst window (must support CapSecondary)
     ratelimit.WithSecondaryStrategy(tokenbucket.Config{
-        BurstSize:  10,   // max burst tokens
-        RefillRate: 1.0,  // tokens per second
+        Burst: 10,     // max burst tokens
+        Rate:  1.0,    // tokens per second
     }),
 )
 ```
@@ -172,13 +172,13 @@ Available strategy IDs and capabilities:
   - Builder: `fixedwindow.NewConfig().SetKey(k).AddQuota(name, limit, window).Build()`
 - token_bucket
   - Capabilities: Primary, Secondary
-  - Config: `tokenbucket.Config{BurstSize: int, RefillRate: float64}`
+  - Config: `tokenbucket.Config{Burst: int, Rate: float64}`
 - leaky_bucket
   - Capabilities: Primary, Secondary
-  - Config: `leakybucket.Config{Capacity: int, LeakRate: float64}`
+  - Config: `leakybucket.Config{Burst: int, Rate: float64}`
 - gcra
   - Capabilities: Primary, Secondary
-  - Config: `gcra.Config{Rate: float64, Burst: int}`
+  - Config: `gcra.Config{Burst: int, Rate: float64}`
 
 Notes:
 - Only Fixed Window supports multiple named quotas simultaneously. See [additional multi-quota documentation](strategies/fixedwindow/MULTI_QUOTA.md).

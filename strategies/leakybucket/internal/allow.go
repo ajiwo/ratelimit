@@ -59,8 +59,8 @@ func Allow(
 		storage:    storage,
 		key:        config.GetKey(),
 		now:        time.Now(),
-		leakRate:   config.GetLeakRate(),
-		capacity:   config.GetCapacity(),
+		leakRate:   config.GetRate(),
+		capacity:   config.GetBurst(),
 		maxRetries: maxRetries,
 	}
 

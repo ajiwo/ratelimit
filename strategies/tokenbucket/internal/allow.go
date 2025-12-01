@@ -51,12 +51,12 @@ func Allow(
 	}
 
 	p := &parameter{
-		burstSize:  config.GetBurstSize(),
-		capacity:   float64(config.GetBurstSize()),
+		burstSize:  config.GetBurst(),
+		capacity:   float64(config.GetBurst()),
 		key:        config.GetKey(),
 		maxRetries: maxRetries,
 		now:        time.Now(),
-		refillRate: config.GetRefillRate(),
+		refillRate: config.GetRate(),
 		storage:    storage,
 	}
 

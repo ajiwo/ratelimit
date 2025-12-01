@@ -35,16 +35,16 @@ var dualStrategyConfigs = []dualStrategyConfig{
 		Name:          "FixedWindow3Quotas_TokenBucket",
 		SecondaryType: "tokenbucket",
 		SecondaryConfig: tokenbucket.Config{
-			BurstSize:  50,
-			RefillRate: 10.0,
+			Burst: 50,
+			Rate:  10.0,
 		}.WithRole(strategies.RoleSecondary),
 	},
 	{
 		Name:          "FixedWindow3Quotas_LeakyBucket",
 		SecondaryType: "leakybucket",
 		SecondaryConfig: leakybucket.Config{
-			Capacity: 50,
-			LeakRate: 10.0,
+			Burst: 50,
+			Rate:  10.0,
 		}.WithRole(strategies.RoleSecondary),
 	},
 	{
@@ -173,15 +173,15 @@ var singleStrategyConfigs = []singleStrategyConfig{
 	{
 		Name: "TokenBucket",
 		Config: tokenbucket.Config{
-			BurstSize:  100,
-			RefillRate: 10.0,
+			Burst: 100,
+			Rate:  10.0,
 		},
 	},
 	{
 		Name: "LeakyBucket",
 		Config: leakybucket.Config{
-			Capacity: 100,
-			LeakRate: 10.0,
+			Burst: 100,
+			Rate:  10.0,
 		},
 	},
 	{

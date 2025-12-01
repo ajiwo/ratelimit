@@ -11,8 +11,8 @@ import (
 // up to a maximum burst size. Each request consumes one token.
 type Config struct {
 	Key        string          // Storage key for the token bucket state
-	BurstSize  int             // Maximum tokens the bucket can hold
-	RefillRate float64         // Tokens to add per second (rate limit)
+	Burst      int             // Maximum tokens the bucket can hold
+	Rate       float64         // Tokens to add per second (rate limit)
 	role       strategies.Role // Strategy role (primary or secondary)
 	maxRetries int             // Maximum retry attempts for atomic operations, 0 means use default
 }
@@ -20,17 +20,17 @@ type Config struct {
 // Validate performs configuration validation for the token bucket.
 //
 // Returns an error if any of the following conditions are met:
-//   - BurstSize <= 0 (NewInvalidBurstSizeError)
-//   - RefillRate <= 0 (NewInvalidRefillRateError)
+//   - Burst <= 0 (NewInvalidBurstError)
+//   - Rate <= 0 (NewInvalidRateError)
 //
 // Note: The Key field is not validated here as it may be set later
 // using WithKey() for dynamic key assignment.
 func (c Config) Validate() error {
-	if c.BurstSize <= 0 {
-		return NewInvalidBurstSizeError(c.BurstSize)
+	if c.Burst <= 0 {
+		return NewInvalidBurstError(c.Burst)
 	}
-	if c.RefillRate <= 0 {
-		return NewInvalidRefillRateError(c.RefillRate)
+	if c.Rate <= 0 {
+		return NewInvalidRateError(c.Rate)
 	}
 	return nil
 }
@@ -97,22 +97,22 @@ func (c Config) GetKey() string {
 	return c.Key
 }
 
-// GetBurstSize returns the maximum number of tokens the bucket can hold.
+// GetBurst returns the maximum number of tokens the bucket can hold.
 //
 // This method implements the internal.Config interface used by the token bucket
 // algorithm and defines the burst capacity of the token bucket for managing
 // concurrent requests.
-func (c Config) GetBurstSize() int {
-	return c.BurstSize
+func (c Config) GetBurst() int {
+	return c.Burst
 }
 
-// GetRefillRate returns the rate at which tokens are added to the bucket.
+// GetRate returns the rate at which tokens are added to the bucket.
 //
 // This method implements the internal.Config interface used by the token bucket
 // algorithm and defines the sustained rate limit in tokens per second for
 // long-term request processing.
-func (c Config) GetRefillRate() float64 {
-	return c.RefillRate
+func (c Config) GetRate() float64 {
+	return c.Rate
 }
 
 // MaxRetries returns the configured maximum retry attempts for atomic operations.

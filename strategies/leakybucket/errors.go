@@ -19,10 +19,10 @@ var (
 )
 
 // Configuration validation error functions
-func NewInvalidCapacityError(capacity int) error {
-	return fmt.Errorf("leaky bucket capacity must be positive, got %d", capacity)
+func NewInvalidBurstError(burst int) error {
+	return fmt.Errorf("leaky bucket burst must be positive, got %d", burst)
 }
 
-func NewInvalidLeakRateError(leakRate float64) error {
-	return fmt.Errorf("leaky bucket leak rate must be positive, got %f", leakRate)
+func NewInvalidRateError(rate float64) error {
+	return fmt.Errorf("leaky bucket rate must be positive, got %f", rate)
 }

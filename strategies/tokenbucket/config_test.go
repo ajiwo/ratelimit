@@ -18,54 +18,54 @@ func TestConfig_Validate(t *testing.T) {
 		{
 			name: "Valid config",
 			config: Config{
-				Key:        "valid",
-				BurstSize:  10,
-				RefillRate: 1.0,
+				Key:   "valid",
+				Burst: 10,
+				Rate:  1.0,
 			},
 			expectError: false,
 		},
 		{
 			name: "Zero burst size",
 			config: Config{
-				Key:        "zero_burst",
-				BurstSize:  0,
-				RefillRate: 1.0,
+				Key:   "zero_burst",
+				Burst: 0,
+				Rate:  1.0,
 			},
-			expectError: true, // BurstSize must be positive
+			expectError: true, // Burst must be positive
 		},
 		{
 			name: "Negative burst size",
 			config: Config{
-				Key:        "neg_burst",
-				BurstSize:  -5,
-				RefillRate: 1.0,
+				Key:   "neg_burst",
+				Burst: -5,
+				Rate:  1.0,
 			},
-			expectError: true, // BurstSize must be positive
+			expectError: true, // Burst must be positive
 		},
 		{
 			name: "Zero refill rate",
 			config: Config{
-				Key:        "zero_refill_rate",
-				BurstSize:  10,
-				RefillRate: 0.0,
+				Key:   "zero_refill_rate",
+				Burst: 10,
+				Rate:  0.0,
 			},
-			expectError: true, // RefillRate must be positive
+			expectError: true, // Rate must be positive
 		},
 		{
 			name: "Negative refill rate",
 			config: Config{
-				Key:        "neg_refill_rate",
-				BurstSize:  10,
-				RefillRate: -1.0,
+				Key:   "neg_refill_rate",
+				Burst: 10,
+				Rate:  -1.0,
 			},
-			expectError: true, // RefillRate must be positive
+			expectError: true, // Rate must be positive
 		},
 		{
 			name: "Empty key",
 			config: Config{
-				Key:        "",
-				BurstSize:  10,
-				RefillRate: 1.0,
+				Key:   "",
+				Burst: 10,
+				Rate:  1.0,
 			},
 			expectError: false, // Empty key should be valid (handled by RateLimiter wrapper)
 		},
@@ -85,9 +85,9 @@ func TestConfig_Validate(t *testing.T) {
 
 func TestConfig_Properties(t *testing.T) {
 	config := Config{
-		Key:        "test_key",
-		BurstSize:  10,
-		RefillRate: 5.0,
+		Key:   "test_key",
+		Burst: 10,
+		Rate:  5.0,
 	}
 
 	// Test ID()
@@ -115,9 +115,9 @@ func TestConfig_Properties(t *testing.T) {
 	updatedConfig := config.WithKey("new_key")
 	require.Equal(t, "new_key", updatedConfig.(Config).Key,
 		"WithKey should update the config key")
-	require.Equal(t, config.BurstSize, updatedConfig.(Config).BurstSize,
+	require.Equal(t, config.Burst, updatedConfig.(Config).Burst,
 		"WithKey should not change other config properties")
-	require.Equal(t, config.RefillRate, updatedConfig.(Config).RefillRate,
+	require.Equal(t, config.Rate, updatedConfig.(Config).Rate,
 		"WithKey should not change other config properties")
 	require.Equal(t, "test_key", config.GetKey(),
 		"WithKey should not modify the original config")
@@ -134,10 +134,10 @@ func TestConfig_Properties(t *testing.T) {
 	// Test getters
 	require.Equal(t, "test_key", config.GetKey(),
 		"GetKey should return the correct key")
-	require.Equal(t, 10, config.GetBurstSize(),
-		"GetBurstSize should return the correct burst size")
-	require.Equal(t, 5.0, config.GetRefillRate(),
-		"GetRefillRate should return the correct refill rate")
+	require.Equal(t, 10, config.GetBurst(),
+		"GetBurst should return the correct burst")
+	require.Equal(t, 5.0, config.GetRate(),
+		"GetRate should return the correct rate")
 	require.Equal(t, 0, config.MaxRetries(),
 		"MaxRetries should return the correct max retries")
 }

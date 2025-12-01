@@ -63,9 +63,9 @@ func TestTokenBucket_Peek(t *testing.T) {
 		strategy := New(storage)
 
 		config := Config{
-			Key:        "result-test-key",
-			BurstSize:  10,
-			RefillRate: 10.0, // 10 tokens per second
+			Key:   "result-test-key",
+			Burst: 10,
+			Rate:  10.0, // 10 tokens per second
 		}
 
 		// Test Peek with no existing data
@@ -109,9 +109,9 @@ func TestTokenBucket_Reset(t *testing.T) {
 		strategy := New(storage)
 
 		config := Config{
-			Key:        "reset-test-key",
-			BurstSize:  4,
-			RefillRate: 1.0, // 1 token per second
+			Key:   "reset-test-key",
+			Burst: 4,
+			Rate:  1.0, // 1 token per second
 		}
 
 		// Use all tokens
@@ -147,9 +147,9 @@ func TestTokenBucket_Allow(t *testing.T) {
 			strategy := New(storage)
 
 			config := Config{
-				Key:        "test_initial",
-				BurstSize:  10,
-				RefillRate: 10.0, // 10 tokens per second
+				Key:   "test_initial",
+				Burst: 10,
+				Rate:  10.0, // 10 tokens per second
 			}
 
 			result, err := strategy.Allow(ctx, config)
@@ -167,9 +167,9 @@ func TestTokenBucket_Allow(t *testing.T) {
 			strategy := New(storage)
 
 			config := Config{
-				Key:        "test_capacity",
-				BurstSize:  3,
-				RefillRate: 1.0, // 1 token per second
+				Key:   "test_capacity",
+				Burst: 3,
+				Rate:  1.0, // 1 token per second
 			}
 
 			// First 3 requests should be allowed
@@ -195,14 +195,14 @@ func TestTokenBucket_Allow(t *testing.T) {
 			strategy := New(storage)
 
 			config1 := Config{
-				Key:        "user1",
-				BurstSize:  2,
-				RefillRate: 2.0, // 2 tokens per second
+				Key:   "user1",
+				Burst: 2,
+				Rate:  2.0, // 2 tokens per second
 			}
 			config2 := Config{
-				Key:        "user2",
-				BurstSize:  2,
-				RefillRate: 2.0, // 2 tokens per second
+				Key:   "user2",
+				Burst: 2,
+				Rate:  2.0, // 2 tokens per second
 			}
 
 			// Use all tokens for key1
@@ -240,9 +240,9 @@ func TestTokenBucket_Allow(t *testing.T) {
 			strategy := New(storage)
 
 			config := Config{
-				Key:        "test_fractional",
-				BurstSize:  10,
-				RefillRate: 2.0, // 2 tokens per second
+				Key:   "test_fractional",
+				Burst: 10,
+				Rate:  2.0, // 2 tokens per second
 			}
 
 			// Use all tokens
@@ -276,9 +276,9 @@ func TestTokenBucket_ConcurrentAccess(t *testing.T) {
 		strategy := New(storage)
 
 		config := Config{
-			Key:        "concurrent-key",
-			BurstSize:  5,
-			RefillRate: 5.0,
+			Key:   "concurrent-key",
+			Burst: 5,
+			Rate:  5.0,
 		}
 
 		ctx := t.Context()

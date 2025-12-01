@@ -18,54 +18,54 @@ func TestConfig_Validate(t *testing.T) {
 		{
 			name: "Valid config",
 			config: Config{
-				Key:      "valid",
-				Capacity: 10,
-				LeakRate: 1.0,
+				Key:   "valid",
+				Burst: 10,
+				Rate:  1.0,
 			},
 			expectError: false,
 		},
 		{
 			name: "Zero capacity",
 			config: Config{
-				Key:      "zero_capacity",
-				Capacity: 0,
-				LeakRate: 1.0,
+				Key:   "zero_capacity",
+				Burst: 0,
+				Rate:  1.0,
 			},
-			expectError: true, // Capacity must be positive
+			expectError: true, // Burst must be positive
 		},
 		{
 			name: "Negative capacity",
 			config: Config{
-				Key:      "neg_capacity",
-				Capacity: -5,
-				LeakRate: 1.0,
+				Key:   "neg_capacity",
+				Burst: -5,
+				Rate:  1.0,
 			},
-			expectError: true, // Capacity must be positive
+			expectError: true, // Burst must be positive
 		},
 		{
 			name: "Zero leak rate",
 			config: Config{
-				Key:      "zero_leak_rate",
-				Capacity: 10,
-				LeakRate: 0.0,
+				Key:   "zero_leak_rate",
+				Burst: 10,
+				Rate:  0.0,
 			},
-			expectError: true, // LeakRate must be positive
+			expectError: true, // Rate must be positive
 		},
 		{
 			name: "Negative leak rate",
 			config: Config{
-				Key:      "neg_leak_rate",
-				Capacity: 10,
-				LeakRate: -1.0,
+				Key:   "neg_leak_rate",
+				Burst: 10,
+				Rate:  -1.0,
 			},
-			expectError: true, // LeakRate must be positive
+			expectError: true, // Rate must be positive
 		},
 		{
 			name: "Empty key",
 			config: Config{
-				Key:      "",
-				Capacity: 10,
-				LeakRate: 1.0,
+				Key:   "",
+				Burst: 10,
+				Rate:  1.0,
 			},
 			expectError: false, // Empty key should be valid (handled by RateLimiter wrapper)
 		},
@@ -85,9 +85,9 @@ func TestConfig_Validate(t *testing.T) {
 
 func TestConfig_Properties(t *testing.T) {
 	config := Config{
-		Key:      "test_key",
-		Capacity: 10,
-		LeakRate: 5.0,
+		Key:   "test_key",
+		Burst: 10,
+		Rate:  5.0,
 	}
 
 	// Test ID()
@@ -115,9 +115,9 @@ func TestConfig_Properties(t *testing.T) {
 	updatedConfig := config.WithKey("new_key")
 	require.Equal(t, "new_key", updatedConfig.(Config).Key,
 		"WithKey should update the config key")
-	require.Equal(t, config.Capacity, updatedConfig.(Config).Capacity,
+	require.Equal(t, config.Burst, updatedConfig.(Config).Burst,
 		"WithKey should not change other config properties")
-	require.Equal(t, config.LeakRate, updatedConfig.(Config).LeakRate,
+	require.Equal(t, config.Rate, updatedConfig.(Config).Rate,
 		"WithKey should not change other config properties")
 	require.Equal(t, "test_key", config.GetKey(),
 		"WithKey should not modify the original config")
@@ -134,10 +134,10 @@ func TestConfig_Properties(t *testing.T) {
 	// Test getters
 	require.Equal(t, "test_key", config.GetKey(),
 		"GetKey should return the correct key")
-	require.Equal(t, 10, config.GetCapacity(),
-		"GetCapacity should return the correct capacity")
-	require.Equal(t, 5.0, config.GetLeakRate(),
-		"GetLeakRate should return the correct leak rate")
+	require.Equal(t, 10, config.GetBurst(),
+		"GetBurst should return the correct burst")
+	require.Equal(t, 5.0, config.GetRate(),
+		"GetRate should return the correct rate")
 	require.Equal(t, 0, config.MaxRetries(),
 		"MaxRetries should return the correct max retries")
 }

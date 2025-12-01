@@ -33,8 +33,8 @@ func Example() error {
 
 	// Secondary: Token Bucket (burst smoother)
 	secondaryCfg := tokenbucket.Config{
-		BurstSize:  5,    // up to 5 requests burst
-		RefillRate: 1.25, // ~1.25 tokens per second
+		Burst: 5,    // up to 5 requests burst
+		Rate:  1.25, // ~1.25 tokens per second
 	}
 
 	// 3) Create composite strategy bound to backend

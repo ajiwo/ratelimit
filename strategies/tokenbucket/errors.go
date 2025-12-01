@@ -19,12 +19,12 @@ var (
 )
 
 // Configuration validation error functions
-func NewInvalidBurstSizeError(burstSize int) error {
-	return fmt.Errorf("token bucket burst size must be positive, got %d", burstSize)
+func NewInvalidBurstError(burst int) error {
+	return fmt.Errorf("token bucket burst must be positive, got %d", burst)
 }
 
-func NewInvalidRefillRateError(refillRate float64) error {
-	return fmt.Errorf("token bucket refill rate must be positive, got %f", refillRate)
+func NewInvalidRateError(rate float64) error {
+	return fmt.Errorf("token bucket rate must be positive, got %f", rate)
 }
 
 // State operation error functions

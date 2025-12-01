@@ -11,8 +11,8 @@ import (
 // leak out at a constant rate. If the bucket overflows, requests are rejected.
 type Config struct {
 	Key        string          // Storage key for the leaky bucket state
-	Capacity   int             // Maximum requests the bucket can hold
-	LeakRate   float64         // Requests to process per second (output rate)
+	Burst      int             // Maximum requests the bucket can hold
+	Rate       float64         // Requests to process per second (output rate)
 	role       strategies.Role // Strategy role (primary or secondary)
 	maxRetries int             // Maximum retry attempts for atomic operations, 0 means use default
 }
@@ -20,17 +20,17 @@ type Config struct {
 // Validate performs configuration validation for the leaky bucket.
 //
 // Returns an error if any of the following conditions are met:
-//   - Capacity <= 0 (NewInvalidCapacityError)
-//   - LeakRate <= 0 (NewInvalidLeakRateError)
+//   - Burst <= 0 (NewInvalidBurstError)
+//   - Rate <= 0 (NewInvalidRateError)
 //
 // Note: The Key field is not validated here as it may be set later
 // using WithKey() for dynamic key assignment.
 func (c Config) Validate() error {
-	if c.Capacity <= 0 {
-		return NewInvalidCapacityError(c.Capacity)
+	if c.Burst <= 0 {
+		return NewInvalidBurstError(c.Burst)
 	}
-	if c.LeakRate <= 0 {
-		return NewInvalidLeakRateError(c.LeakRate)
+	if c.Rate <= 0 {
+		return NewInvalidRateError(c.Rate)
 	}
 	return nil
 }
@@ -97,22 +97,22 @@ func (c Config) GetKey() string {
 	return c.Key
 }
 
-// GetCapacity returns the maximum number of requests the bucket can hold.
+// GetBurst returns the maximum number of requests the bucket can hold.
 //
 // This method implements the internal.Config interface used by the leaky bucket
 // algorithm and defines the maximum burst capacity for absorbing temporary
 // request spikes.
-func (c Config) GetCapacity() int {
-	return c.Capacity
+func (c Config) GetBurst() int {
+	return c.Burst
 }
 
-// GetLeakRate returns the rate at which requests leak out of the bucket.
+// GetRate returns the rate at which requests leak out of the bucket.
 //
 // This method implements the internal.Config interface used by the leaky bucket
 // algorithm and defines the sustained output rate in requests per second for
 // steady-state traffic processing.
-func (c Config) GetLeakRate() float64 {
-	return c.LeakRate
+func (c Config) GetRate() float64 {
+	return c.Rate
 }
 
 // MaxRetries returns the configured maximum retry attempts for atomic operations.

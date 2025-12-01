@@ -51,7 +51,7 @@ Decoded:
 ### Key Characteristics
 - Tokens as float64 (supports fractional values)
 - Single logical limit (no multiple quotas)
-- Burst size = initial token count
+- Burst = initial token count
 
 ---
 
@@ -123,7 +123,7 @@ Decoded:
 ### Key Characteristics
 - Requests as float64
 - Single logical limit (no multiple quotas)
-- Capacity = max queue size
+- Burst = max queue size
 
 ---
 

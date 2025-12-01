@@ -63,9 +63,9 @@ func TestLeakyBucketAllowWithResult(t *testing.T) {
 	strategy := New(storage)
 
 	config := Config{
-		Key:      "test-user",
-		Capacity: 5,
-		LeakRate: 1.0, // 1 request per second
+		Key:   "test-user",
+		Burst: 5,
+		Rate:  1.0, // 1 request per second
 	}
 
 	// Fill up the bucket
@@ -90,9 +90,9 @@ func TestLeakyBucketLeak(t *testing.T) {
 		strategy := New(storage)
 
 		config := Config{
-			Key:      "test-user-2",
-			Capacity: 3,
-			LeakRate: 1.0, // 1 request per second
+			Key:   "test-user-2",
+			Burst: 3,
+			Rate:  1.0, // 1 request per second
 		}
 
 		// Fill the bucket
@@ -125,9 +125,9 @@ func TestLeakyBucketPeek(t *testing.T) {
 	strategy := New(storage)
 
 	config := Config{
-		Key:      "result-test-user",
-		Capacity: 5,
-		LeakRate: 1.0, // 1 request per second
+		Key:   "result-test-user",
+		Burst: 5,
+		Rate:  1.0, // 1 request per second
 	}
 
 	// Test Peek with no existing data
@@ -171,9 +171,9 @@ func TestLeakyBucketReset(t *testing.T) {
 	strategy := New(storage)
 
 	config := Config{
-		Key:      "reset-test-user",
-		Capacity: 3,
-		LeakRate: 1.0, // 1 request per second
+		Key:   "reset-test-user",
+		Burst: 3,
+		Rate:  1.0, // 1 request per second
 	}
 
 	// Fill the bucket

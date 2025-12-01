@@ -51,12 +51,12 @@ func (m *mockConfigOne) GetKey() string {
 	return args.String(0)
 }
 
-func (m *mockConfigOne) GetBurstSize() int {
+func (m *mockConfigOne) GetBurst() int {
 	args := m.Called()
 	return args.Int(0)
 }
 
-func (m *mockConfigOne) GetRefillRate() float64 {
+func (m *mockConfigOne) GetRate() float64 {
 	args := m.Called()
 	return args.Get(0).(float64)
 }
@@ -79,9 +79,9 @@ func TestAllow(t *testing.T) {
 			config := new(mockConfigOne)
 
 			config.On("GetKey").Return(key)
-			config.On("GetBurstSize").Return(burstSize)
+			config.On("GetBurst").Return(burstSize)
 			config.On("MaxRetries").Return(maxRetries)
-			config.On("GetRefillRate").Return(refillRate)
+			config.On("GetRate").Return(refillRate)
 			storage.On("Get", ctx, key).Return("", nil)
 
 			res, err := Allow(ctx, storage, config, ReadOnly)
@@ -103,9 +103,9 @@ func TestAllow(t *testing.T) {
 			encodedState := encodeState(bucket)
 
 			config.On("GetKey").Return(key)
-			config.On("GetBurstSize").Return(burstSize)
+			config.On("GetBurst").Return(burstSize)
 			config.On("MaxRetries").Return(maxRetries)
-			config.On("GetRefillRate").Return(refillRate)
+			config.On("GetRate").Return(refillRate)
 			storage.On("Get", ctx, key).Return(encodedState, nil)
 
 			res, err := Allow(ctx, storage, config, ReadOnly)
@@ -125,9 +125,9 @@ func TestAllow(t *testing.T) {
 			config := new(mockConfigOne)
 
 			config.On("GetKey").Return(key)
-			config.On("GetBurstSize").Return(burstSize)
+			config.On("GetBurst").Return(burstSize)
 			config.On("MaxRetries").Return(maxRetries)
-			config.On("GetRefillRate").Return(refillRate)
+			config.On("GetRate").Return(refillRate)
 			storage.On("Get", ctx, key).Return("", errors.New("storage error"))
 
 			_, err := Allow(ctx, storage, config, ReadOnly)
@@ -140,9 +140,9 @@ func TestAllow(t *testing.T) {
 			config := new(mockConfigOne)
 
 			config.On("GetKey").Return(key)
-			config.On("GetBurstSize").Return(burstSize)
+			config.On("GetBurst").Return(burstSize)
 			config.On("MaxRetries").Return(maxRetries)
-			config.On("GetRefillRate").Return(refillRate)
+			config.On("GetRate").Return(refillRate)
 			storage.On("Get", ctx, key).Return("invalid-state", nil)
 
 			_, err := Allow(ctx, storage, config, ReadOnly)
@@ -157,9 +157,9 @@ func TestAllow(t *testing.T) {
 			config := new(mockConfigOne)
 
 			config.On("GetKey").Return(key)
-			config.On("GetBurstSize").Return(burstSize)
+			config.On("GetBurst").Return(burstSize)
 			config.On("MaxRetries").Return(maxRetries)
-			config.On("GetRefillRate").Return(refillRate)
+			config.On("GetRate").Return(refillRate)
 			storage.On("Get", ctx, key).Return("", nil)
 
 			newBucket := TokenBucket{
@@ -192,9 +192,9 @@ func TestAllow(t *testing.T) {
 			encodedState := encodeState(bucket)
 
 			config.On("GetKey").Return(key)
-			config.On("GetBurstSize").Return(burstSize)
+			config.On("GetBurst").Return(burstSize)
 			config.On("MaxRetries").Return(maxRetries)
-			config.On("GetRefillRate").Return(refillRate)
+			config.On("GetRate").Return(refillRate)
 			storage.On("Get", ctx, key).Return(encodedState, nil)
 
 			storage.On("CheckAndSet", ctx, key, encodedState, mock.AnythingOfType("string"), mock.AnythingOfType("time.Duration")).Return(true, nil)
@@ -217,9 +217,9 @@ func TestAllow(t *testing.T) {
 			encodedState := encodeState(bucket)
 
 			config.On("GetKey").Return(key)
-			config.On("GetBurstSize").Return(burstSize)
+			config.On("GetBurst").Return(burstSize)
 			config.On("MaxRetries").Return(maxRetries)
-			config.On("GetRefillRate").Return(refillRate)
+			config.On("GetRate").Return(refillRate)
 			storage.On("Get", ctx, key).Return(encodedState, nil)
 
 			res, err := Allow(ctx, storage, config, TryUpdate)
@@ -234,9 +234,9 @@ func TestAllow(t *testing.T) {
 			config := new(mockConfigOne)
 
 			config.On("GetKey").Return(key)
-			config.On("GetBurstSize").Return(burstSize)
+			config.On("GetBurst").Return(burstSize)
 			config.On("MaxRetries").Return(maxRetries)
-			config.On("GetRefillRate").Return(refillRate)
+			config.On("GetRate").Return(refillRate)
 
 			// First Get returns empty
 			storage.On("Get", ctx, key).Return("", nil).Once()
@@ -262,9 +262,9 @@ func TestAllow(t *testing.T) {
 			config := new(mockConfigOne)
 
 			config.On("GetKey").Return(key)
-			config.On("GetBurstSize").Return(burstSize)
+			config.On("GetBurst").Return(burstSize)
 			config.On("MaxRetries").Return(maxRetries)
-			config.On("GetRefillRate").Return(refillRate)
+			config.On("GetRate").Return(refillRate)
 
 			storage.On("Get", ctx, key).Return("", nil)
 			storage.On("CheckAndSet", ctx, key, "", mock.AnythingOfType("string"), mock.AnythingOfType("time.Duration")).Return(false, nil)
@@ -281,9 +281,9 @@ func TestAllow(t *testing.T) {
 			cancel()
 
 			config.On("GetKey").Return(key)
-			config.On("GetBurstSize").Return(burstSize)
+			config.On("GetBurst").Return(burstSize)
 			config.On("MaxRetries").Return(maxRetries)
-			config.On("GetRefillRate").Return(refillRate)
+			config.On("GetRate").Return(refillRate)
 
 			_, err := Allow(canceledCtx, storage, config, TryUpdate)
 			assert.Error(t, err)

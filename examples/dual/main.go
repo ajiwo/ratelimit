@@ -31,8 +31,8 @@ func main() {
 		),
 		// Secondary strategy: burst smoother
 		ratelimit.WithSecondaryStrategy(tokenbucket.Config{
-			BurstSize:  10,  // Allow up to 10 requests in a burst
-			RefillRate: 1.0, // Refill at 1 token per second
+			Burst: 10,  // Allow up to 10 requests in a burst
+			Rate:  1.0, // Refill at 1 token per second
 		}),
 		ratelimit.WithBaseKey("api"),
 	)

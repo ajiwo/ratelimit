@@ -74,15 +74,15 @@ var strategyConfigs = []StrategyConfig{
 	{
 		name: "LeakyBucket",
 		strategy: leakybucket.Config{
-			Capacity: expectedAllowed,
-			LeakRate: 0.1,
+			Burst: expectedAllowed,
+			Rate:  0.1,
 		},
 	},
 	{
 		name: "TokenBucket",
 		strategy: tokenbucket.Config{
-			BurstSize:  expectedAllowed,
-			RefillRate: 0.1,
+			Burst: expectedAllowed,
+			Rate:  0.1,
 		},
 	},
 	{

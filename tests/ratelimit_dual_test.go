@@ -55,8 +55,8 @@ var dualStrategyConfigs = []DualStrategyConfig{
 			AddQuota("default", 5, 10*time.Second).
 			Build(),
 		secondaryStrategy: leakybucket.Config{
-			Capacity: 3,
-			LeakRate: 0.5, // 0.5 requests per second
+			Burst: 3,
+			Rate:  0.5, // 0.5 requests per second
 		},
 		testType: "basic",
 	},
@@ -69,8 +69,8 @@ var dualStrategyConfigs = []DualStrategyConfig{
 			AddQuota("day", 1000, 24*time.Hour). // 1000 requests per day
 			Build(),
 		secondaryStrategy: tokenbucket.Config{
-			BurstSize:  5,   // max burst tokens
-			RefillRate: 2.0, // 2 tokens per second
+			Burst: 5,   // max burst tokens
+			Rate:  2.0, // 2 tokens per second
 		},
 		testType: "multiQuota",
 	},
@@ -81,8 +81,8 @@ var dualStrategyConfigs = []DualStrategyConfig{
 			AddQuota("default", 10, 5*time.Second).
 			Build(),
 		secondaryStrategy: tokenbucket.Config{
-			BurstSize:  5,
-			RefillRate: 1.0,
+			Burst: 5,
+			Rate:  1.0,
 		},
 		testType: "concurrent",
 	},
@@ -93,8 +93,8 @@ var dualStrategyConfigs = []DualStrategyConfig{
 			AddQuota("default", 3, 10*time.Second).
 			Build(),
 		secondaryStrategy: tokenbucket.Config{
-			BurstSize:  2,
-			RefillRate: 0.1,
+			Burst: 2,
+			Rate:  0.1,
 		},
 		testType: "peek",
 	},
@@ -105,8 +105,8 @@ var dualStrategyConfigs = []DualStrategyConfig{
 			AddQuota("default", 2, 10*time.Second).
 			Build(),
 		secondaryStrategy: tokenbucket.Config{
-			BurstSize:  2,
-			RefillRate: 0.1,
+			Burst: 2,
+			Rate:  0.1,
 		},
 		testType: "reset",
 	},
@@ -116,8 +116,8 @@ var dualStrategyConfigs = []DualStrategyConfig{
 			AddQuota("default", 2, 10*time.Second).
 			Build(),
 		secondaryStrategy: tokenbucket.Config{
-			BurstSize:  1,
-			RefillRate: 0.1,
+			Burst: 1,
+			Rate:  0.1,
 		},
 		testType: "differentUsers",
 	},
