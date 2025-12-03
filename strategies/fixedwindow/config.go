@@ -39,7 +39,7 @@ type Config struct {
 // algorithm. The key is set by the top-level ratelimit package via WithKey()
 // during rate limiter construction and is used for storing rate limit counters
 // and window timestamps in the backend.
-func (c Config) GetKey() string {
+func (c *Config) GetKey() string {
 	return c.Key
 }
 
@@ -49,7 +49,7 @@ func (c Config) GetKey() string {
 // algorithm and provides access to all named quotas that will be tracked
 // independently for this key. Each quota maintains its own counter and window
 // state.
-func (c Config) GetQuotas() map[string]internal.Quota {
+func (c *Config) GetQuotas() map[string]internal.Quota {
 	return c.Quotas
 }
 
@@ -66,7 +66,7 @@ func (c Config) GetQuotas() map[string]internal.Quota {
 // Rate ratio validation ensures each quota enforces a distinct rate limit
 // by checking that requests per second values are unique (with 1e-9 tolerance
 // for floating-point precision).
-func (c Config) Validate() error {
+func (c *Config) Validate() error {
 	if len(c.Quotas) == 0 {
 		return ErrNoQuotas
 	}
@@ -102,7 +102,7 @@ func (c Config) Validate() error {
 // This method calculates the rate ratio (requests per second) for each quota
 // and ensures no two quotas have identical rates. This prevents redundant
 // quotas that would enforce the same rate limit with different names.
-func (c Config) validateUniqueRateRatios() error {
+func (c *Config) validateUniqueRateRatios() error {
 	// Map to track rate ratios: normalized requests per second
 	rateRatios := make(map[float64]string)
 
@@ -128,7 +128,7 @@ func (c Config) validateUniqueRateRatios() error {
 //
 // This method implements the Config interface and returns StrategyFixedWindow,
 // which is used for logging, debugging, and strategy selection.
-func (c Config) ID() strategies.ID {
+func (c *Config) ID() strategies.ID {
 	return strategies.StrategyFixedWindow
 }
 
@@ -140,7 +140,7 @@ func (c Config) ID() strategies.ID {
 //
 // Note: This strategy does NOT support CapSecondary and cannot be used
 // as a secondary smoothing strategy in dual-strategy configurations.
-func (c Config) Capabilities() strategies.CapabilityFlags {
+func (c *Config) Capabilities() strategies.CapabilityFlags {
 	return strategies.CapPrimary | strategies.CapQuotas
 }
 
@@ -148,7 +148,7 @@ func (c Config) Capabilities() strategies.CapabilityFlags {
 //
 // Fixed window strategy always returns RolePrimary since it only supports
 // primary operation and cannot be used as a secondary strategy.
-func (c Config) GetRole() strategies.Role {
+func (c *Config) GetRole() strategies.Role {
 	return strategies.RolePrimary
 }
 
@@ -157,17 +157,18 @@ func (c Config) GetRole() strategies.Role {
 // For fixed window strategy, this method ignores the role parameter and
 // returns the original config since this strategy only supports primary roles.
 // Attempting to use it as a secondary strategy will fail validation.
-func (c Config) WithRole(role strategies.Role) strategies.Config {
-	return c
+func (c *Config) WithRole(role strategies.Role) strategies.Config {
+	return c // Fixed window strategy only supports primary role
 }
 
 // WithKey returns a copy of the config with the provided key applied.
 //
 // The key is used as-is for storage without modification or prefixing.
 // This allows direct control over storage keys for backend compatibility.
-func (c Config) WithKey(key string) strategies.Config {
-	c.Key = key
-	return c
+func (c *Config) WithKey(key string) strategies.Config {
+	cfg := *c
+	cfg.Key = key
+	return &cfg
 }
 
 // WithMaxRetries returns a copy of the config with the provided retry limit applied.
@@ -175,16 +176,17 @@ func (c Config) WithKey(key string) strategies.Config {
 // This controls the maximum number of retry attempts for atomic operations
 // (CheckAndSet) when storage conflicts occur. Set to 0 to use the default
 // retry limit. Higher values may help in high-contention scenarios.
-func (c Config) WithMaxRetries(retries int) strategies.Config {
-	c.maxRetries = retries
-	return c
+func (c *Config) WithMaxRetries(retries int) strategies.Config {
+	cfg := *c
+	cfg.maxRetries = retries
+	return &cfg
 }
 
 // MaxRetries returns the configured maximum retry attempts for atomic operations.
 //
 // Returns 0 if not configured, which indicates that `strategies.DefaultMaxRetries`
 // should be used for retry counts.
-func (c Config) MaxRetries() int {
+func (c *Config) MaxRetries() int {
 	return c.maxRetries
 }
 
@@ -217,8 +219,8 @@ func (b *configBuilder) AddQuota(name string, limit int, window time.Duration) *
 }
 
 // Build creates the FixedWindowConfig from the builder
-func (b *configBuilder) Build() Config {
-	return Config{
+func (b *configBuilder) Build() *Config {
+	return &Config{
 		Key:    b.key,
 		Quotas: b.quotas,
 	}

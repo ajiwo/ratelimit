@@ -3,7 +3,6 @@ package composite
 import (
 	"context"
 	"errors"
-	"reflect"
 	"testing"
 	"time"
 
@@ -64,31 +63,31 @@ func TestCompositeConfigValidate(t *testing.T) {
 	sec := compMockConfig{caps: strategies.CapSecondary}
 
 	t.Run("baseKey and Presence", func(t *testing.T) {
-		err := (Config{}).Validate()
+		err := (&Config{}).Validate()
 		require.Error(t, err, "expected error for empty base key and nil strategies")
-		err = (Config{BaseKey: "k", Secondary: sec}).Validate()
+		err = (&Config{BaseKey: "k", Secondary: sec}).Validate()
 		require.Error(t, err, "expected error when primary is nil")
 
-		err = (Config{BaseKey: "k", Primary: pri}).Validate()
+		err = (&Config{BaseKey: "k", Primary: pri}).Validate()
 		require.Error(t, err, "expected error when secondary is nil")
 
-		err = (Config{BaseKey: "k", Primary: pri, Secondary: sec}).Validate()
+		err = (&Config{BaseKey: "k", Primary: pri, Secondary: sec}).Validate()
 		require.NoError(t, err, "unexpected: %v", err)
 	})
 
 	t.Run("inner validate", func(t *testing.T) {
 		bad := compMockConfig{caps: strategies.CapPrimary, valid: errors.New("bad")}
-		err := (Config{BaseKey: "k", Primary: bad, Secondary: sec}).Validate()
+		err := (&Config{BaseKey: "k", Primary: bad, Secondary: sec}).Validate()
 		require.Error(t, err, "expected error from primary validate")
 	})
 
 	t.Run("capabilities", func(t *testing.T) {
 		noPriCap := compMockConfig{}
-		err := (Config{BaseKey: "k", Primary: noPriCap, Secondary: sec}).Validate()
+		err := (&Config{BaseKey: "k", Primary: noPriCap, Secondary: sec}).Validate()
 		require.Error(t, err, "expected error for primary missing CapPrimary")
 
 		noSecCap := compMockConfig{caps: strategies.CapPrimary}
-		err = (Config{BaseKey: "k", Primary: pri, Secondary: noSecCap}).Validate()
+		err = (&Config{BaseKey: "k", Primary: pri, Secondary: noSecCap}).Validate()
 		require.Error(t, err, "expected error for secondary missing CapSecondary")
 	})
 }
@@ -106,7 +105,7 @@ func TestCompositeConfigHelpers_IDCapsRole(t *testing.T) {
 	if cc.GetRole() != strategies.RolePrimary {
 		t.Fatalf("GetRole should be primary")
 	}
-	if got := cc.WithRole(strategies.RoleSecondary).(Config); !reflect.DeepEqual(got, cc) {
+	if got := cc.WithRole(strategies.RoleSecondary).(*Config); got.GetRole() != cc.GetRole() {
 		t.Fatalf("WithRole should return same config")
 	}
 }
@@ -115,7 +114,7 @@ func TestCompositeConfigHelpers_WithKey(t *testing.T) {
 	pri := compMockConfig{caps: strategies.CapPrimary}
 	sec := compMockConfig{caps: strategies.CapSecondary}
 	cc := Config{BaseKey: "k", Primary: pri, Secondary: sec}
-	applied := cc.WithKey("fully:qualified").(Config)
+	applied := cc.WithKey("fully:qualified").(*Config)
 	if applied.CompositeKey() != "k:fully:qualified:c" {
 		t.Fatalf("composite key not applied correctly, got: %s", applied.CompositeKey())
 	}
@@ -143,17 +142,17 @@ func TestCompositeStrategyFlows(t *testing.T) {
 	comp, err := New(storage, priConfig, secConfig)
 	require.NoError(t, err, "Failed to create composite strategy")
 
-	cfg := Config{BaseKey: "k", Primary: priConfig, Secondary: secConfig}
-	cfg = cfg.WithKey("test").(Config)
+	cfg := &Config{BaseKey: "k", Primary: priConfig, Secondary: secConfig}
+	cfg = cfg.WithKey("test").(*Config)
 
 	// Test Peek - should work even with no state
-	res, err := comp.Peek(context.Background(), cfg)
+	res, err := comp.Peek(t.Context(), cfg)
 	require.NoError(t, err, "Peek error: %v", err)
 	require.Contains(t, res, "primary_p", "expected primary_p in results")
 	require.Contains(t, res, "secondary_s", "expected secondary_s in results")
 
 	// Test Allow path where both allow
-	res, err = comp.Allow(context.Background(), cfg)
+	res, err = comp.Allow(t.Context(), cfg)
 	require.NoError(t, err, "Allow error: %v", err)
 	require.Contains(t, res, "primary_p", "expected primary_p in results")
 	require.Contains(t, res, "secondary_s", "expected secondary_s in results")
@@ -168,10 +167,10 @@ func TestCompositeStrategyFlows(t *testing.T) {
 	compDeny, err := New(storage, primDenyConfig, secConfig)
 	require.NoError(t, err, "Failed to create composite with denying primary")
 
-	cfgDeny := Config{BaseKey: "k", Primary: primDenyConfig, Secondary: secConfig}
-	cfgDeny = cfgDeny.WithKey("deny").(Config)
+	cfgDeny := &Config{BaseKey: "k", Primary: primDenyConfig, Secondary: secConfig}
+	cfgDeny = cfgDeny.WithKey("deny").(*Config)
 
-	res, err = compDeny.Allow(context.Background(), cfgDeny)
+	res, err = compDeny.Allow(t.Context(), cfgDeny)
 	require.NoError(t, err, "Allow error: %v", err)
 	require.Contains(t, res, "primary_p", "expected primary results present on denial")
 	require.False(t, res["primary_p"].Allowed, "primary should deny")
@@ -184,16 +183,16 @@ func TestCompositeStrategyFlows(t *testing.T) {
 	compSecDeny, err := New(storage, priConfig, secDenyConfig)
 	require.NoError(t, err, "Failed to create composite with denying secondary")
 
-	cfgSecDeny := Config{BaseKey: "k", Primary: priConfig, Secondary: secDenyConfig}
-	cfgSecDeny = cfgSecDeny.WithKey("secdeny").(Config)
+	cfgSecDeny := &Config{BaseKey: "k", Primary: priConfig, Secondary: secDenyConfig}
+	cfgSecDeny = cfgSecDeny.WithKey("secdeny").(*Config)
 
-	res, err = compSecDeny.Allow(context.Background(), cfgSecDeny)
+	res, err = compSecDeny.Allow(t.Context(), cfgSecDeny)
 	require.NoError(t, err, "Allow error: %v", err)
 	require.Contains(t, res, "secondary_s", "expected secondary results present on denial")
 	require.False(t, res["secondary_s"].Allowed, "secondary should deny")
 
 	// Test reset functionality
-	err = comp.Reset(context.Background(), cfg)
+	err = comp.Reset(t.Context(), cfg)
 	require.NoError(t, err, "Reset error: %v", err)
 }
 
@@ -321,16 +320,16 @@ func TestCompositeAtomicBehavior(t *testing.T) {
 	comp, err := New(storage, priConfig, secConfig)
 	require.NoError(t, err, "Failed to create composite strategy")
 
-	cfg := Config{BaseKey: "k", Primary: priConfig, Secondary: secConfig}
-	cfg = cfg.WithKey("atomic").(Config)
+	cfg := &Config{BaseKey: "k", Primary: priConfig, Secondary: secConfig}
+	cfg = cfg.WithKey("atomic").(*Config)
 
 	// Test that no state is committed when secondary denies
-	res, err := comp.Allow(context.Background(), cfg)
+	res, err := comp.Allow(t.Context(), cfg)
 	require.NoError(t, err, "Allow error: %v", err)
 	require.False(t, res["secondary_s"].Allowed, "secondary should deny")
 
 	// Verify no composite state was stored
-	compositeValue, err := storage.Get(context.Background(), cfg.CompositeKey())
+	compositeValue, err := storage.Get(t.Context(), cfg.CompositeKey())
 	require.NoError(t, err, "Failed to get composite state")
 	require.Empty(t, compositeValue, "No state should be stored when secondary denies")
 }
@@ -354,11 +353,11 @@ func TestCompositeCASRetry(t *testing.T) {
 	comp, err := New(storage, priConfig, secConfig)
 	require.NoError(t, err, "Failed to create composite strategy")
 
-	cfg := Config{BaseKey: "k", Primary: priConfig, Secondary: secConfig}
-	cfg = cfg.WithKey("retry").(Config)
+	cfg := &Config{BaseKey: "k", Primary: priConfig, Secondary: secConfig}
+	cfg = cfg.WithKey("retry").(*Config)
 
 	// Should succeed after retries
-	res, err := comp.Allow(context.Background(), cfg)
+	res, err := comp.Allow(t.Context(), cfg)
 	require.NoError(t, err, "Allow should succeed after retries")
 	require.True(t, res["primary_p"].Allowed, "primary should allow")
 	require.True(t, res["secondary_s"].Allowed, "secondary should allow")
@@ -381,13 +380,13 @@ func TestCompositeBackwardCompatibility(t *testing.T) {
 	comp, err := New(storage, priConfig, secConfig)
 	require.NoError(t, err, "Failed to create composite strategy")
 
-	cfg := Config{BaseKey: "k", Primary: priConfig, Secondary: secConfig}
-	cfg = cfg.WithKey("compat").(Config)
+	cfg := &Config{BaseKey: "k", Primary: priConfig, Secondary: secConfig}
+	cfg = cfg.WithKey("compat").(*Config)
 
 	// Test with missing/invalid composite state (should treat as empty)
 	storage.data[cfg.CompositeKey()] = mockData{value: "invalid_format", expiration: 0}
 
-	res, err := comp.Peek(context.Background(), cfg)
+	res, err := comp.Peek(t.Context(), cfg)
 	require.NoError(t, err, "Peek should handle invalid state gracefully")
 	require.Contains(t, res, "primary_p", "expected primary_p in results")
 	require.Contains(t, res, "secondary_s", "expected secondary_s in results")

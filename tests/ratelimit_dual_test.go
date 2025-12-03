@@ -54,7 +54,7 @@ var dualStrategyConfigs = []DualStrategyConfig{
 			SetKey("user").
 			AddQuota("default", 5, 10*time.Second).
 			Build(),
-		secondaryStrategy: leakybucket.Config{
+		secondaryStrategy: &leakybucket.Config{
 			Burst: 3,
 			Rate:  0.5, // 0.5 requests per second
 		},
@@ -68,7 +68,7 @@ var dualStrategyConfigs = []DualStrategyConfig{
 			AddQuota("hour", 100, time.Hour).    // 100 requests per hour
 			AddQuota("day", 1000, 24*time.Hour). // 1000 requests per day
 			Build(),
-		secondaryStrategy: tokenbucket.Config{
+		secondaryStrategy: &tokenbucket.Config{
 			Burst: 5,   // max burst tokens
 			Rate:  2.0, // 2 tokens per second
 		},
@@ -80,7 +80,7 @@ var dualStrategyConfigs = []DualStrategyConfig{
 			SetKey("user").
 			AddQuota("default", 10, 5*time.Second).
 			Build(),
-		secondaryStrategy: tokenbucket.Config{
+		secondaryStrategy: &tokenbucket.Config{
 			Burst: 5,
 			Rate:  1.0,
 		},
@@ -92,7 +92,7 @@ var dualStrategyConfigs = []DualStrategyConfig{
 			SetKey("user").
 			AddQuota("default", 3, 10*time.Second).
 			Build(),
-		secondaryStrategy: tokenbucket.Config{
+		secondaryStrategy: &tokenbucket.Config{
 			Burst: 2,
 			Rate:  0.1,
 		},
@@ -104,7 +104,7 @@ var dualStrategyConfigs = []DualStrategyConfig{
 			SetKey("user").
 			AddQuota("default", 2, 10*time.Second).
 			Build(),
-		secondaryStrategy: tokenbucket.Config{
+		secondaryStrategy: &tokenbucket.Config{
 			Burst: 2,
 			Rate:  0.1,
 		},
@@ -115,7 +115,7 @@ var dualStrategyConfigs = []DualStrategyConfig{
 		primaryStrategy: fixedwindow.NewConfig().
 			AddQuota("default", 2, 10*time.Second).
 			Build(),
-		secondaryStrategy: tokenbucket.Config{
+		secondaryStrategy: &tokenbucket.Config{
 			Burst: 1,
 			Rate:  0.1,
 		},
@@ -129,7 +129,7 @@ var dualStrategyConfigs = []DualStrategyConfig{
 			AddQuota("hour", 100, time.Hour).    // 100 requests per hour
 			AddQuota("day", 1000, 24*time.Hour). // 100 requests per hour
 			Build(),
-		secondaryStrategy: gcra.Config{
+		secondaryStrategy: &gcra.Config{
 			Rate:  5.0,
 			Burst: 5,
 		},

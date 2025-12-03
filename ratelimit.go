@@ -136,11 +136,11 @@ func (r *RateLimiter) allowWithResult(ctx context.Context, dynamicKey string) (b
 func (r *RateLimiter) buildStrategyConfig(dynamicKey string) strategies.Config {
 	// build dual strategy config
 	if r.config.SecondaryConfig != nil {
-		return composite.Config{
+		return (&composite.Config{
 			BaseKey:   r.config.BaseKey,
 			Primary:   r.config.PrimaryConfig,
 			Secondary: r.config.SecondaryConfig,
-		}.
+		}).
 			WithKey(dynamicKey).
 			WithMaxRetries(r.config.maxRetries)
 	}

@@ -57,7 +57,7 @@ type TestResult struct {
 var strategyConfigs = []StrategyConfig{
 	{
 		name: "FixedWindow",
-		strategy: fixedwindow.Config{
+		strategy: &fixedwindow.Config{
 			Key: "test",
 			Quotas: map[string]fixedwindow.Quota{
 				"default": {
@@ -73,21 +73,21 @@ var strategyConfigs = []StrategyConfig{
 	},
 	{
 		name: "LeakyBucket",
-		strategy: leakybucket.Config{
+		strategy: &leakybucket.Config{
 			Burst: expectedAllowed,
 			Rate:  0.1,
 		},
 	},
 	{
 		name: "TokenBucket",
-		strategy: tokenbucket.Config{
+		strategy: &tokenbucket.Config{
 			Burst: expectedAllowed,
 			Rate:  0.1,
 		},
 	},
 	{
 		name: "GCRA",
-		strategy: gcra.Config{
+		strategy: &gcra.Config{
 			Burst: expectedAllowed,
 			Rate:  0.1,
 		},

@@ -30,7 +30,7 @@ func main() {
 				Build(),
 		),
 		// Secondary strategy: burst smoother
-		ratelimit.WithSecondaryStrategy(tokenbucket.Config{
+		ratelimit.WithSecondaryStrategy(&tokenbucket.Config{
 			Burst: 10,  // Allow up to 10 requests in a burst
 			Rate:  1.0, // Refill at 1 token per second
 		}),

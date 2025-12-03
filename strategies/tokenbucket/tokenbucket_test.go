@@ -62,7 +62,7 @@ func TestTokenBucket_Peek(t *testing.T) {
 		t.Cleanup(func() { storage.Close() })
 		strategy := New(storage)
 
-		config := Config{
+		config := &Config{
 			Key:   "result-test-key",
 			Burst: 10,
 			Rate:  10.0, // 10 tokens per second
@@ -108,7 +108,7 @@ func TestTokenBucket_Reset(t *testing.T) {
 		t.Cleanup(func() { storage.Close() })
 		strategy := New(storage)
 
-		config := Config{
+		config := &Config{
 			Key:   "reset-test-key",
 			Burst: 4,
 			Rate:  1.0, // 1 token per second
@@ -146,7 +146,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 			t.Cleanup(func() { storage.Close() })
 			strategy := New(storage)
 
-			config := Config{
+			config := &Config{
 				Key:   "test_initial",
 				Burst: 10,
 				Rate:  10.0, // 10 tokens per second
@@ -166,7 +166,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 			t.Cleanup(func() { storage.Close() })
 			strategy := New(storage)
 
-			config := Config{
+			config := &Config{
 				Key:   "test_capacity",
 				Burst: 3,
 				Rate:  1.0, // 1 token per second
@@ -194,12 +194,12 @@ func TestTokenBucket_Allow(t *testing.T) {
 			t.Cleanup(func() { storage.Close() })
 			strategy := New(storage)
 
-			config1 := Config{
+			config1 := &Config{
 				Key:   "user1",
 				Burst: 2,
 				Rate:  2.0, // 2 tokens per second
 			}
-			config2 := Config{
+			config2 := &Config{
 				Key:   "user2",
 				Burst: 2,
 				Rate:  2.0, // 2 tokens per second
@@ -239,7 +239,7 @@ func TestTokenBucket_Allow(t *testing.T) {
 			t.Cleanup(func() { storage.Close() })
 			strategy := New(storage)
 
-			config := Config{
+			config := &Config{
 				Key:   "test_fractional",
 				Burst: 10,
 				Rate:  2.0, // 2 tokens per second
@@ -275,7 +275,7 @@ func TestTokenBucket_ConcurrentAccess(t *testing.T) {
 		t.Cleanup(func() { storage.Close() })
 		strategy := New(storage)
 
-		config := Config{
+		config := &Config{
 			Key:   "concurrent-key",
 			Burst: 5,
 			Rate:  5.0,

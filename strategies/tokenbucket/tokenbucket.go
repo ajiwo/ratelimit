@@ -19,7 +19,7 @@ func New(storage backends.Backend) *Strategy {
 type TokenBucket = internal.TokenBucket
 
 func (t *Strategy) Allow(ctx context.Context, config strategies.Config) (strategies.Results, error) {
-	tokenConfig, ok := config.(Config)
+	tokenConfig, ok := config.(*Config)
 	if !ok {
 		return nil, ErrInvalidConfig
 	}
@@ -39,7 +39,7 @@ func (t *Strategy) Allow(ctx context.Context, config strategies.Config) (strateg
 }
 
 func (t *Strategy) Peek(ctx context.Context, config strategies.Config) (strategies.Results, error) {
-	tokenConfig, ok := config.(Config)
+	tokenConfig, ok := config.(*Config)
 	if !ok {
 		return nil, ErrInvalidConfig
 	}
@@ -59,7 +59,7 @@ func (t *Strategy) Peek(ctx context.Context, config strategies.Config) (strategi
 }
 
 func (t *Strategy) Reset(ctx context.Context, config strategies.Config) error {
-	tokenConfig, ok := config.(Config)
+	tokenConfig, ok := config.(*Config)
 	if !ok {
 		return ErrInvalidConfig
 	}

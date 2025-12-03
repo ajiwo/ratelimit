@@ -22,7 +22,7 @@ func New(storage backends.Backend) *Strategy {
 
 // Allow checks if a request is allowed and returns detailed statistics
 func (g *Strategy) Allow(ctx context.Context, config strategies.Config) (strategies.Results, error) {
-	gcraConfig, ok := config.(Config)
+	gcraConfig, ok := config.(*Config)
 	if !ok {
 		return nil, ErrInvalidConfig
 	}
@@ -42,7 +42,7 @@ func (g *Strategy) Allow(ctx context.Context, config strategies.Config) (strateg
 
 // Peek inspects current state without consuming quota
 func (g *Strategy) Peek(ctx context.Context, config strategies.Config) (strategies.Results, error) {
-	gcraConfig, ok := config.(Config)
+	gcraConfig, ok := config.(*Config)
 	if !ok {
 		return nil, ErrInvalidConfig
 	}
@@ -62,7 +62,7 @@ func (g *Strategy) Peek(ctx context.Context, config strategies.Config) (strategi
 
 // Reset resets the GCRA state for the given key
 func (g *Strategy) Reset(ctx context.Context, config strategies.Config) error {
-	gcraConfig, ok := config.(Config)
+	gcraConfig, ok := config.(*Config)
 	if !ok {
 		return ErrInvalidConfig
 	}

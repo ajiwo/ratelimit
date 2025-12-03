@@ -84,7 +84,7 @@ limiter, err := ratelimit.New(
             Build(),
     ),
     // Secondary: smoothing/burst window (must support CapSecondary)
-    ratelimit.WithSecondaryStrategy(tokenbucket.Config{
+    ratelimit.WithSecondaryStrategy(&tokenbucket.Config{
         Burst: 10,     // max burst tokens
         Rate:  1.0,    // tokens per second
     }),

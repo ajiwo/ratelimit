@@ -87,7 +87,7 @@ func TestConfig_Validate(t *testing.T) {
 				assert.NoError(t, err, "Unexpected validation error for valid config: %+v", tc.config)
 
 				// If config validation passes, test strategy call
-				_, err := strategy.Allow(ctx, tc.config)
+				_, err := strategy.Allow(ctx, &tc.config)
 				assert.NoError(t, err, "Unexpected strategy error for valid config: %+v", tc.config)
 			}
 		})
@@ -122,13 +122,13 @@ func TestConfig_Properties(t *testing.T) {
 
 	// Test WithKey method to verify it properly updates the key
 	updatedConfig := config.WithKey("new_key")
-	require.Equal(t, "new_key", updatedConfig.(Config).Key,
+	require.Equal(t, "new_key", updatedConfig.(*Config).Key,
 		"WithKey should update the config key")
 
-	require.Equal(t, 2, updatedConfig.(Config).Burst,
+	require.Equal(t, 2, updatedConfig.(*Config).Burst,
 		"WithKey should not change other config properties")
 
-	require.Equal(t, 5.0, updatedConfig.(Config).Rate,
+	require.Equal(t, 5.0, updatedConfig.(*Config).Rate,
 		"WithKey should not change other config properties")
 
 	require.Equal(t, 10, config.WithMaxRetries(10).MaxRetries(),

@@ -192,7 +192,7 @@ func TestConfigValidate(t *testing.T) {
 	}
 
 	// missing fields
-	err = (Config{}).Validate()
+	err = (&Config{}).Validate()
 	require.Error(t, err, "expected error for empty config")
 
 	// missing storage
@@ -302,9 +302,9 @@ func TestPeekAndReset_DualStrategy_PassesCompositeConfig(t *testing.T) {
 
 	// Last config should be CompositeConfig with composite key set after WithKey
 	// In the new atomic design, primary and secondary configs don't get keys since they use singleKeyAdapter
-	if cc, ok := ms.lastConfig.(composite.Config); ok {
+	if cc, ok := ms.lastConfig.(*composite.Config); ok {
 		// Apply key so we can inspect composite key passed down via WithKey inside Peek
-		cc = cc.WithKey("base:default").(composite.Config)
+		cc = cc.WithKey("base:default").(*composite.Config)
 		assert.NotEmpty(t, cc.CompositeKey(), "expected composite key after WithKey")
 		assert.Equal(t, "base:base:default:c", cc.CompositeKey(), "composite key should match expected format")
 

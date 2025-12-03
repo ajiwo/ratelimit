@@ -19,7 +19,7 @@ func TestGCRA_MemoryBackend(t *testing.T) {
 	t.Cleanup(func() { storage.Close() })
 
 	strategy := gcra.New(storage)
-	config := gcra.Config{
+	config := &gcra.Config{
 		Key:   "test_memory",
 		Rate:  10.0, // 10 requests per second
 		Burst: 5,    // burst of 5
@@ -52,7 +52,7 @@ func TestGCRA_PeekBehavior(t *testing.T) {
 	t.Cleanup(func() { storage.Close() })
 
 	strategy := gcra.New(storage)
-	config := gcra.Config{
+	config := &gcra.Config{
 		Key:   "test_peek",
 		Rate:  5.0,
 		Burst: 3,
@@ -87,7 +87,7 @@ func TestGCRA_Reset(t *testing.T) {
 	t.Cleanup(func() { storage.Close() })
 
 	strategy := gcra.New(storage)
-	config := gcra.Config{
+	config := &gcra.Config{
 		Key:   "test_reset",
 		Rate:  2.0,
 		Burst: 2,
@@ -123,7 +123,7 @@ func TestGCRA_RateLimiting(t *testing.T) {
 	t.Cleanup(func() { storage.Close() })
 
 	strategy := gcra.New(storage)
-	config := gcra.Config{
+	config := &gcra.Config{
 		Key:   "test_rate",
 		Rate:  2.0, // 2 requests per second
 		Burst: 1,   // Small burst
@@ -162,7 +162,7 @@ func TestGCRA_ErrorHandling(t *testing.T) {
 	strategy := gcra.New(storage)
 
 	// Test invalid config
-	invalidConfig := gcra.Config{
+	invalidConfig := &gcra.Config{
 		Key:   "test_invalid",
 		Rate:  -1.0, // Invalid rate
 		Burst: 5,
@@ -175,7 +175,7 @@ func TestGCRA_ErrorHandling(t *testing.T) {
 	cancelCtx, cancel := context.WithCancel(ctx)
 	cancel() // Cancel immediately
 
-	validConfig := gcra.Config{
+	validConfig := &gcra.Config{
 		Key:   "test_cancel",
 		Rate:  10.0,
 		Burst: 5,
@@ -204,13 +204,13 @@ func TestGCRA_MultipleKeys(t *testing.T) {
 	for i, config := range configs {
 		// Consume burst for each user
 		for j := 0; j < config.Burst; j++ {
-			result, err := strategy.Allow(ctx, config)
+			result, err := strategy.Allow(ctx, &config)
 			require.NoError(t, err, "Unexpected error for user %d", i+1)
 			assert.True(t, result["default"].Allowed, "Expected user %d request %d to be allowed", i+1, j+1)
 		}
 
 		// Should be denied for each user
-		result, err := strategy.Allow(ctx, config)
+		result, err := strategy.Allow(ctx, &config)
 		require.NoError(t, err, "Unexpected error for user %d", i+1)
 		assert.False(t, result["default"].Allowed, "Expected user %d to be denied after burst", i+1)
 	}
@@ -228,7 +228,7 @@ func TestGCRA_BackendCompatibility(t *testing.T) {
 			t.Cleanup(func() { storage.Close() })
 
 			strategy := gcra.New(storage)
-			config := gcra.Config{Key: "test_" + backendName, Rate: 10.0, Burst: 5}
+			config := &gcra.Config{Key: "test_" + backendName, Rate: 10.0, Burst: 5}
 
 			result, err := strategy.Allow(ctx, config)
 			require.NoError(t, err, "%s backend error", backendName)

@@ -113,11 +113,11 @@ func TestConfig_Properties(t *testing.T) {
 
 	// Test WithKey()
 	updatedConfig := config.WithKey("new_key")
-	require.Equal(t, "new_key", updatedConfig.(Config).Key,
+	require.Equal(t, "new_key", updatedConfig.(*Config).Key,
 		"WithKey should update the config key")
-	require.Equal(t, config.Burst, updatedConfig.(Config).Burst,
+	require.Equal(t, config.Burst, updatedConfig.(*Config).Burst,
 		"WithKey should not change other config properties")
-	require.Equal(t, config.Rate, updatedConfig.(Config).Rate,
+	require.Equal(t, config.Rate, updatedConfig.(*Config).Rate,
 		"WithKey should not change other config properties")
 	require.Equal(t, "test_key", config.GetKey(),
 		"WithKey should not modify the original config")
@@ -126,7 +126,7 @@ func TestConfig_Properties(t *testing.T) {
 	retriesConfig := config.WithMaxRetries(10)
 	require.Equal(t, 10, retriesConfig.MaxRetries(),
 		"WithMaxRetries should update the max retries")
-	require.Equal(t, 10, retriesConfig.(Config).maxRetries,
+	require.Equal(t, 10, retriesConfig.(*Config).maxRetries,
 		"WithMaxRetries should update the max retries")
 	require.Equal(t, 0, config.MaxRetries(),
 		"WithMaxRetries should not modify the original config")

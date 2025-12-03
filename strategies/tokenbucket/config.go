@@ -25,7 +25,7 @@ type Config struct {
 //
 // Note: The Key field is not validated here as it may be set later
 // using WithKey() for dynamic key assignment.
-func (c Config) Validate() error {
+func (c *Config) Validate() error {
 	if c.Burst <= 0 {
 		return NewInvalidBurstError(c.Burst)
 	}
@@ -39,7 +39,7 @@ func (c Config) Validate() error {
 //
 // This method implements the Config interface and returns StrategyTokenBucket,
 // which is used for logging, debugging, and strategy selection.
-func (c Config) ID() strategies.ID {
+func (c *Config) ID() strategies.ID {
 	return strategies.StrategyTokenBucket
 }
 
@@ -47,7 +47,7 @@ func (c Config) ID() strategies.ID {
 //
 // This strategy supports primary and secondary roles but does not support
 // multi-quota configurations.
-func (c Config) Capabilities() strategies.CapabilityFlags {
+func (c *Config) Capabilities() strategies.CapabilityFlags {
 	return strategies.CapPrimary | strategies.CapSecondary
 }
 
@@ -55,7 +55,7 @@ func (c Config) Capabilities() strategies.CapabilityFlags {
 //
 // The role determines whether this strategy acts as a primary limiter
 // or secondary smoothing strategy in dual-strategy configurations.
-func (c Config) GetRole() strategies.Role {
+func (c *Config) GetRole() strategies.Role {
 	return c.role
 }
 
@@ -63,18 +63,20 @@ func (c Config) GetRole() strategies.Role {
 //
 // This method allows the same token bucket configuration to be used
 // in different roles (primary or secondary) without modifying the original.
-func (c Config) WithRole(role strategies.Role) strategies.Config {
-	c.role = role
-	return c
+func (c *Config) WithRole(role strategies.Role) strategies.Config {
+	cfg := *c
+	cfg.role = role
+	return &cfg
 }
 
 // WithKey returns a copy of the config with the provided key applied.
 //
 // The key is used as-is for storage without modification or prefixing.
 // This allows direct control over storage keys for backend compatibility.
-func (c Config) WithKey(key string) strategies.Config {
-	c.Key = key
-	return c
+func (c *Config) WithKey(key string) strategies.Config {
+	cfg := *c
+	cfg.Key = key
+	return &cfg
 }
 
 // WithMaxRetries returns a copy of the config with the provided retry limit applied.
@@ -82,9 +84,10 @@ func (c Config) WithKey(key string) strategies.Config {
 // This controls the maximum number of retry attempts for atomic operations
 // (CheckAndSet) when storage conflicts occur. Set to 0 to use the default
 // retry limit. Higher values may help in high-contention scenarios.
-func (c Config) WithMaxRetries(retries int) strategies.Config {
-	c.maxRetries = retries
-	return c
+func (c *Config) WithMaxRetries(retries int) strategies.Config {
+	cfg := *c
+	cfg.maxRetries = retries
+	return &cfg
 }
 
 // GetKey returns the storage key for the token bucket state.
@@ -93,7 +96,7 @@ func (c Config) WithMaxRetries(retries int) strategies.Config {
 // algorithm. The key is set by the top-level ratelimit package via WithKey()
 // during rate limiter construction and is used for storing token count and
 // last refill timestamp in the backend.
-func (c Config) GetKey() string {
+func (c *Config) GetKey() string {
 	return c.Key
 }
 
@@ -102,7 +105,7 @@ func (c Config) GetKey() string {
 // This method implements the internal.Config interface used by the token bucket
 // algorithm and defines the burst capacity of the token bucket for managing
 // concurrent requests.
-func (c Config) GetBurst() int {
+func (c *Config) GetBurst() int {
 	return c.Burst
 }
 
@@ -111,7 +114,7 @@ func (c Config) GetBurst() int {
 // This method implements the internal.Config interface used by the token bucket
 // algorithm and defines the sustained rate limit in tokens per second for
 // long-term request processing.
-func (c Config) GetRate() float64 {
+func (c *Config) GetRate() float64 {
 	return c.Rate
 }
 
@@ -119,6 +122,6 @@ func (c Config) GetRate() float64 {
 //
 // Returns 0 if not configured, which indicates that `strategies.DefaultMaxRetries`
 // should be used for retry counts.
-func (c Config) MaxRetries() int {
+func (c *Config) MaxRetries() int {
 	return c.maxRetries
 }

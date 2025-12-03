@@ -32,7 +32,7 @@ func Example() error {
 		Build()
 
 	// Secondary: Token Bucket (burst smoother)
-	secondaryCfg := tokenbucket.Config{
+	secondaryCfg := &tokenbucket.Config{
 		Burst: 5,    // up to 5 requests burst
 		Rate:  1.25, // ~1.25 tokens per second
 	}
@@ -48,11 +48,11 @@ func Example() error {
 	baseKey := "api"
 	dynamicKey := "user42" // e.g., user ID, API key, IP
 
-	compCfg := composite.Config{
+	compCfg := (&composite.Config{
 		BaseKey:   baseKey,
 		Primary:   primaryCfg,
 		Secondary: secondaryCfg,
-	}.WithKey(dynamicKey).WithMaxRetries(200)
+	}).WithKey(dynamicKey).WithMaxRetries(200)
 
 	fmt.Println("=== Composite Strategy (Direct Usage) ===")
 	fmt.Println("Primary: Fixed Window 20 per 30s")

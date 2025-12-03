@@ -34,26 +34,26 @@ var dualStrategyConfigs = []dualStrategyConfig{
 	{
 		Name:          "FixedWindow3Quotas_TokenBucket",
 		SecondaryType: "tokenbucket",
-		SecondaryConfig: tokenbucket.Config{
+		SecondaryConfig: (&tokenbucket.Config{
 			Burst: 50,
 			Rate:  10.0,
-		}.WithRole(strategies.RoleSecondary),
+		}).WithRole(strategies.RoleSecondary),
 	},
 	{
 		Name:          "FixedWindow3Quotas_LeakyBucket",
 		SecondaryType: "leakybucket",
-		SecondaryConfig: leakybucket.Config{
+		SecondaryConfig: (&leakybucket.Config{
 			Burst: 50,
 			Rate:  10.0,
-		}.WithRole(strategies.RoleSecondary),
+		}).WithRole(strategies.RoleSecondary),
 	},
 	{
 		Name:          "FixedWindow3Quotas_GCRA",
 		SecondaryType: "gcra",
-		SecondaryConfig: gcra.Config{
+		SecondaryConfig: (&gcra.Config{
 			Burst: 50,
 			Rate:  10.0,
-		}.WithRole(strategies.RoleSecondary),
+		}).WithRole(strategies.RoleSecondary),
 	},
 }
 
@@ -172,21 +172,21 @@ var singleStrategyConfigs = []singleStrategyConfig{
 	},
 	{
 		Name: "TokenBucket",
-		Config: tokenbucket.Config{
+		Config: &tokenbucket.Config{
 			Burst: 100,
 			Rate:  10.0,
 		},
 	},
 	{
 		Name: "LeakyBucket",
-		Config: leakybucket.Config{
+		Config: &leakybucket.Config{
 			Burst: 100,
 			Rate:  10.0,
 		},
 	},
 	{
 		Name: "GCRA",
-		Config: gcra.Config{
+		Config: &gcra.Config{
 			Burst: 100,
 			Rate:  10.0,
 		},

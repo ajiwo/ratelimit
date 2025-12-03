@@ -25,7 +25,7 @@ type Config struct {
 }
 
 // Validate validates the entire configuration
-func (c Config) Validate() error {
+func (c *Config) Validate() error {
 	if err := validateKey(c.BaseKey, "base key"); err != nil {
 		return err
 	}

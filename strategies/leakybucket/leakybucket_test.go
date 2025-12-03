@@ -62,7 +62,7 @@ func TestLeakyBucketAllowWithResult(t *testing.T) {
 
 	strategy := New(storage)
 
-	config := Config{
+	config := &Config{
 		Key:   "test-user",
 		Burst: 5,
 		Rate:  1.0, // 1 request per second
@@ -89,7 +89,7 @@ func TestLeakyBucketLeak(t *testing.T) {
 
 		strategy := New(storage)
 
-		config := Config{
+		config := &Config{
 			Key:   "test-user-2",
 			Burst: 3,
 			Rate:  1.0, // 1 request per second
@@ -124,7 +124,7 @@ func TestLeakyBucketPeek(t *testing.T) {
 	t.Cleanup(func() { storage.Close() })
 	strategy := New(storage)
 
-	config := Config{
+	config := &Config{
 		Key:   "result-test-user",
 		Burst: 5,
 		Rate:  1.0, // 1 request per second
@@ -170,7 +170,7 @@ func TestLeakyBucketReset(t *testing.T) {
 	t.Cleanup(func() { storage.Close() })
 	strategy := New(storage)
 
-	config := Config{
+	config := &Config{
 		Key:   "reset-test-user",
 		Burst: 3,
 		Rate:  1.0, // 1 request per second

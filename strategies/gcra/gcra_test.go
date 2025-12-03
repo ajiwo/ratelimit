@@ -65,7 +65,7 @@ func TestGCRA_Allow(t *testing.T) {
 			t.Cleanup(func() { storage.Close() })
 			strategy := New(storage)
 
-			config := Config{
+			config := &Config{
 				Key:   "test_initial",
 				Rate:  10.0, // 10 requests per second
 				Burst: 10,   // burst size of 10
@@ -85,7 +85,7 @@ func TestGCRA_Allow(t *testing.T) {
 			t.Cleanup(func() { storage.Close() })
 			strategy := New(storage)
 
-			config := Config{
+			config := &Config{
 				Key:   "test_burst",
 				Rate:  5.0, // 5 requests per second
 				Burst: 3,   // burst size of 3
@@ -113,12 +113,12 @@ func TestGCRA_Allow(t *testing.T) {
 			t.Cleanup(func() { storage.Close() })
 			strategy := New(storage)
 
-			config1 := Config{
+			config1 := &Config{
 				Key:   "user1",
 				Rate:  2.0, // 2 requests per second
 				Burst: 2,   // burst size of 2
 			}
-			config2 := Config{
+			config2 := &Config{
 				Key:   "user2",
 				Rate:  2.0, // 2 requests per second
 				Burst: 2,   // burst size of 2
@@ -158,7 +158,7 @@ func TestGCRA_Allow(t *testing.T) {
 			t.Cleanup(func() { storage.Close() })
 			strategy := New(storage)
 
-			config := Config{
+			config := &Config{
 				Key:   "test_recovery",
 				Rate:  10.0, // 10 requests per second
 				Burst: 5,    // burst size of 5
@@ -200,7 +200,7 @@ func TestGCRA_Allow(t *testing.T) {
 			t.Cleanup(func() { storage.Close() })
 			strategy := New(storage)
 
-			config := Config{
+			config := &Config{
 				Key:   "test_high_rate",
 				Rate:  100.0, // 100 requests per second
 				Burst: 10,    // burst size of 10
@@ -237,7 +237,7 @@ func TestGCRA_Allow(t *testing.T) {
 			t.Cleanup(func() { storage.Close() })
 			strategy := New(storage)
 
-			config := Config{
+			config := &Config{
 				Key:   "test_low_rate",
 				Rate:  0.5, // 0.5 requests per second (1 request every 2 seconds)
 				Burst: 2,   // burst size of 2
@@ -274,7 +274,7 @@ func TestGCRA_Peek(t *testing.T) {
 		t.Cleanup(func() { storage.Close() })
 		strategy := New(storage)
 
-		config := Config{
+		config := &Config{
 			Key:   "result-test-key",
 			Rate:  10.0, // 10 requests per second
 			Burst: 10,   // burst size of 10
@@ -320,7 +320,7 @@ func TestGCRA_Reset(t *testing.T) {
 		t.Cleanup(func() { storage.Close() })
 		strategy := New(storage)
 
-		config := Config{
+		config := &Config{
 			Key:   "reset-test-key",
 			Rate:  5.0, // 5 requests per second
 			Burst: 3,   // burst size of 3
@@ -355,7 +355,7 @@ func TestGCRA_ConcurrentAccess(t *testing.T) {
 		t.Cleanup(func() { storage.Close() })
 		strategy := New(storage)
 
-		config := Config{
+		config := &Config{
 			Key:   "concurrent-key",
 			Rate:  10.0, // 10 requests per second
 			Burst: 5,    // burst size of 5
@@ -423,7 +423,7 @@ func TestGCRA_EmissionIntervalCalculation(t *testing.T) {
 				t.Cleanup(func() { storage.Close() })
 				strategy := New(storage)
 
-				config := Config{
+				config := &Config{
 					Key:   fmt.Sprintf("test_rate_%.1f", tc.rate),
 					Rate:  tc.rate,
 					Burst: 2,

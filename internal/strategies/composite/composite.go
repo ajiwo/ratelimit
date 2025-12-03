@@ -73,15 +73,15 @@ func (cs *Strategy) Allow(ctx context.Context, sci strategies.Config) (strategie
 }
 
 // prepareCompositeForAllow validates and extracts composite config essentials
-func prepareCompositeForAllow(sci strategies.Config) (Config, string, int, error) {
-	cfg, ok := sci.(Config)
+func prepareCompositeForAllow(sci strategies.Config) (*Config, string, int, error) {
+	cfg, ok := sci.(*Config)
 	if !ok {
-		return Config{}, "", 0, fmt.Errorf("composite strategy requires CompositeConfig")
+		return nil, "", 0, fmt.Errorf("composite strategy requires CompositeConfig")
 	}
 
 	key := cfg.CompositeKey()
 	if key == "" {
-		return Config{}, "", 0, fmt.Errorf("composite key not set, call WithKey first")
+		return nil, "", 0, fmt.Errorf("composite key not set, call WithKey first")
 	}
 
 	maxRetries := cfg.MaxRetries()
@@ -98,7 +98,7 @@ func prepareCompositeForAllow(sci strategies.Config) (Config, string, int, error
 // - done: true if decision is final (return immediately), false if should retry due to CAS contention
 // - duration: time taken for the operation (for backoff calculation), non-zero if retry required
 // - err: any error occurred during attempt
-func (cs *Strategy) tryAllowOnce(ctx context.Context, cfg Config, key string) (strategies.Results, bool, time.Duration, error) {
+func (cs *Strategy) tryAllowOnce(ctx context.Context, cfg *Config, key string) (strategies.Results, bool, time.Duration, error) {
 	// Start recording time
 	beforeCAS := time.Now()
 
@@ -210,7 +210,7 @@ func anyDenied(results strategies.Results) bool {
 
 // Peek inspects current state without consuming quota using composite state decoding
 func (cs *Strategy) Peek(ctx context.Context, sci strategies.Config) (strategies.Results, error) {
-	cfg, ok := sci.(Config)
+	cfg, ok := sci.(*Config)
 	if !ok {
 		return nil, fmt.Errorf("composite strategy requires CompositeConfig")
 	}
@@ -269,7 +269,7 @@ func (cs *Strategy) Peek(ctx context.Context, sci strategies.Config) (strategies
 
 // Reset atomically clears composite state using CAS
 func (cs *Strategy) Reset(ctx context.Context, sci strategies.Config) error {
-	cfg, ok := sci.(Config)
+	cfg, ok := sci.(*Config)
 	if !ok {
 		return fmt.Errorf("composite strategy requires CompositeConfig")
 	}

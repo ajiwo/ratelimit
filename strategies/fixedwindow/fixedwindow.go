@@ -25,7 +25,7 @@ type FixedWindow = internal.FixedWindow
 
 // Allow checks if a request is allowed and returns detailed statistics
 func (f *Strategy) Allow(ctx context.Context, config strategies.Config) (strategies.Results, error) {
-	fixedConfig, ok := config.(Config)
+	fixedConfig, ok := config.(*Config)
 	if !ok {
 		return nil, ErrInvalidConfig
 	}
@@ -40,7 +40,7 @@ func (f *Strategy) Allow(ctx context.Context, config strategies.Config) (strateg
 
 // Peek inspects current state without consuming quota
 func (f *Strategy) Peek(ctx context.Context, config strategies.Config) (strategies.Results, error) {
-	fixedConfig, ok := config.(Config)
+	fixedConfig, ok := config.(*Config)
 	if !ok {
 		return nil, ErrInvalidConfig
 	}
@@ -55,7 +55,7 @@ func (f *Strategy) Peek(ctx context.Context, config strategies.Config) (strategi
 
 // Reset resets the rate limit counter for the given key
 func (f *Strategy) Reset(ctx context.Context, config strategies.Config) error {
-	fixedConfig, ok := config.(Config)
+	fixedConfig, ok := config.(*Config)
 	if !ok {
 		return ErrInvalidConfig
 	}
