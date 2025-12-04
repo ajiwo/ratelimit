@@ -2,10 +2,10 @@ module github.com/ajiwo/ratelimit/backends/postgres
 
 go 1.25.0
 
-replace github.com/ajiwo/ratelimit v0.0.8 => ../..
+replace github.com/ajiwo/ratelimit v0.0.9 => ../..
 
 require (
-	github.com/ajiwo/ratelimit v0.0.8
+	github.com/ajiwo/ratelimit v0.0.9
 	github.com/jackc/pgx/v5 v5.7.6
 	github.com/stretchr/testify v1.11.1
 )

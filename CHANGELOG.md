@@ -2,15 +2,46 @@
 
 All notable changes to this project will be documented in this file.
 
-## [Unreleased]
+## [0.0.9] - 2025-12-04
+
+### Added
+- **Memory Failover**: Automatic fallback to in-memory storage when primary backend fails with circuit breaker pattern
+  - Circuit breaker with configurable failure thresholds and recovery timeouts
+  - Health monitoring with periodic backend checks
+  - Service availability prioritized over strict consistency
+- **Results Helper Methods**: New `strategies.Results` type with convenient API for accessing rate limit data
+  - `Default()`, `PrimaryDefault()`, `SecondaryDefault()` for common access patterns
+  - `Quota(name)`, `HasQuota(name)` for specific quota retrieval
+  - `AnyAllowed()`, `AllAllowed()` for combined decision checking
+- **Error Contract System**: New error categorization infrastructure to enable backend health detection
+  - `ErrUnhealthy` sentinel and `HealthError` struct for distinguishing connectivity vs operational errors
+  - Customizable connection error patterns for PostgreSQL and Redis backends
+  - Provides the building blocks for library users to implement their own health detection logic
+  - Opt-in error categorization that maintains backward compatibility
+- **Redis URL Support**: Connect to Redis using URL format with individual field overrides
+- **PostgreSQL PurgeExpired**: Method for explicit batch cleanup of expired rate limit entries
+- **CI Benchmarks**: Automated performance measurement in CI pipeline
 
 ### Changed
-- **Breaking**: Move composite strategy implementation to internal package
-  - Move strategies/composite/* files to internal/strategies/composite/*
-  - Internal composite strategy packages are now private and not part of public API
-  - Update import paths in main ratelimit and test files
-  - Use "dual-strategy" terminology in public API and documentation
-  - Keep "composite strategy" terminology for internal/maintainer documentation
+- **PostgreSQL Cleanup**:
+  - Changed from lazy cleanup during `CheckAndSet` to explicit `PurgeExpired` method
+  - Users must now explicitly call `PurgeExpired` to clean up stale entries
+  - CheckAndSet optimized to use `ON CONFLICT UPDATE` for better atomicity
+- **TTL Factor**:
+  - Increased from 2 to 5 for all strategies to improve external observability
+  - Rate limit entries now persist longer in storage (2.5x longer TTL)
+  - May affect storage usage and external observability tools
+- **Fixed Window Performance**: Optimized internal state encoding/decoding for better throughput
+- **Composite Strategy**:
+  - Moved to internal package (now private API)
+  - Use "dual-strategy" terminology in public API
+- **Strategy Configuration**:
+  - Renamed configuration fields for consistency
+    - TokenBucket: `BurstSize` -> `Burst`, `RefillRate` -> `Rate`
+    - LeakyBucket: `Capacity` -> `Burst`, `LeakRate` -> `Rate`
+  - Error functions renamed: `NewInvalidBurstSizeError` -> `NewInvalidBurstError`, etc.
+  - Configuration structs now use pointer receivers, requiring pointer syntax in some cases
+    - Example: `tokenbucket.Config{...}` becomes `&tokenbucket.Config{...}` when passed as arguments
 
 ## [0.0.8] - 2025-11-19
 

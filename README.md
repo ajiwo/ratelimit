@@ -208,7 +208,13 @@ limiter, err := ratelimit.New(
             Build(),
     ),
 )
+if err != nil { log.Fatal(err) }
+defer limiter.Close()  // Release backend resources
 ```
+
+**Closing Backends:**
+- **With limiter wrapper**: Use `limiter.Close()` (recommended)
+- **Direct strategy usage**: Close backend directly with `backend.Close()`
 
 ## Direct usage with strategies and backends (no ratelimit wrapper)
 
@@ -231,6 +237,7 @@ func main() {
 
     // 1) Choose a backend
     store := memory.New()
+    defer store.Close()  // Release backend resources
 
     // 2) Create a strategy bound to the backend
     strat := fw.New(store)
