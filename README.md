@@ -1,10 +1,10 @@
 # ratelimit
 
-Go library for application-level rate limiting with multiple algorithm and storage options. 
+Go rate limiting library with multiple algorithm and storage options. 
 
-- Storage backends: in-memory, Redis, Postgres
-- Algorithms ("strategies"): Fixed Window (multi-quota), Token Bucket, Leaky Bucket, GCRA
-- Dual strategy mode: combine a primary hard limiter with a secondary smoother
+- Storage **backends**: in-memory, Redis, Postgres
+- **Algorithms** ("strategies"): Fixed Window (multi-quota), Token Bucket, Leaky Bucket, GCRA
+- **Dual strategy** mode: combine a primary hard limiter with a secondary smoother
 
 ## Installation
 
@@ -16,11 +16,11 @@ go get github.com/ajiwo/ratelimit
 
 Using the library involves these main steps:
 
-1. **Choose a backend** - Select a storage backend (memory, Redis, or Postgres)
-2. **Create a limiter** - Configure rate limiting strategies using `ratelimit.New()`
-3. **Make access requests** - Call `Allow()` to consume quota or `Peek()` to check status
-4. **Handle results** - Check the allowed status and examine quota information
-5. **Clean up** - Call `Close()` to release backend resources
+1. **Choose a backend**: Select a storage backend (memory, Redis, or Postgres)
+2. **Create a limiter**: Configure rate limiting strategies using `ratelimit.New()`
+3. **Make access requests**: Call `Allow()` to consume quota or `Peek()` to check status
+4. **Handle results**: Check the allowed status and examine quota information
+5. **Clean up**: Call `Close()` to release backend resources
 
 ### Single strategy (Fixed Window, in-memory)
 
@@ -61,10 +61,17 @@ func main() {
 
     for i := 1; i <= 7; i++ {
         var results strategies.Results
-        allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
+        allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{
+            Key: userID,
+            Result: &results,
+        })
         if err != nil { log.Fatal(err) }
-        res := results.Default()
-        fmt.Printf("req %d => allowed=%v remaining=%d reset=%s\n", i, allowed, res.Remaining, res.Reset.Format(time.RFC3339))
+
+        res := results.Default() 
+        fmt.Printf(
+            "req %d => allowed=%v remaining=%d reset=%s\n",
+            i, allowed, res.Remaining, res.Reset.Format(time.RFC3339),
+        )
     }
 }
 ```
@@ -108,46 +115,51 @@ The `strategies.Results` type provides convenient helper methods for accessing q
 
 ```go
 // For single quota scenarios
-result := results.Default()  // Get the "default" quota result
+result := results.Default()                   // Get the "default" quota result
 
 // For dual strategy scenarios
-primaryResult := results.PrimaryDefault()   // Get "primary_default"
+primaryResult := results.PrimaryDefault()     // Get "primary_default"
 secondaryResult := results.SecondaryDefault() // Get "secondary_default"
 
 // For specific named quotas
-result := results.Quota("hourly")  // Get a specific quota by name
-primaryHourly := results.Primary("hourly")  // Get "primary_hourly"
+result := results.Quota("hourly")             // Get a specific quota by name
+primaryHourly := results.Primary("hourly")    // Get "primary_hourly"
 
 // Check if a quota exists
 if results.HasQuota("primary_daily") { ... }
 
 // Utility methods
-anyAllowed := results.AnyAllowed()  // true if any quota allows the request
-allAllowed := results.AllAllowed()  // true if all quotas allow the request
-firstResult := results.First()      // get first result (use with caution)
-count := results.Len()              // number of quotas in results
+anyAllowed := results.AnyAllowed()            // true if any quota allows the request
+allAllowed := results.AllAllowed()            // true if all quotas allow the request
+firstResult := results.First()                // get first result (use with caution)
+count := results.Len()                        // number of quotas in results
 ```
 
 ## API overview
 
-- `New(opts ...Option) (*RateLimiter, error)`
-  - Options: `WithBackend(backends.Backend)`, `WithPrimaryStrategy(strategies.Config)`, `WithSecondaryStrategy(strategies.Config)`, `WithBaseKey(string)`, `WithMaxRetries(int)`
-- `(*RateLimiter) Allow(ctx, AccessOptions) (bool, error)`
+- `New(opts ...Option) (*Limiter, error)`
+  - Options:
+    - `WithBackend(backends.Backend)`
+    - `WithPrimaryStrategy(strategies.Config)`
+    - `WithSecondaryStrategy(strategies.Config)`
+    - `WithBaseKey(string)`
+    - `WithMaxRetries(int)`
+- `(*Limiter) Allow(ctx, AccessOptions) (bool, error)`
   - Consumes quota. If `AccessOptions.Result` is provided, receives `strategies.Results`.
-- `(*RateLimiter) Peek(ctx, AccessOptions) (bool, error)`
+- `(*Limiter) Peek(ctx, AccessOptions) (bool, error)`
   - Read the current rate limit state without consuming quota; also populates results when provided.
-- `(*RateLimiter) Reset(ctx, AccessOptions) error`
+- `(*Limiter) Reset(ctx, AccessOptions) error`
   - Resets counters; mainly for testing.
-- `(*RateLimiter) Close() error`
+- `(*Limiter) Close() error`
   - Releases backend resources, does nothing if backend has been closed.
 
 `AccessOptions`:
 
 ```go
 type AccessOptions struct {
-    Key            string                        // dynamic-key (e.g., user ID)
-    SkipValidation bool                          // skip dynamic-key validation if true
-    Result         *strategies.Results           // optional results pointer
+    Key            string                     // dynamic-key (e.g., user ID)
+    SkipValidation bool                       // skip dynamic-key validation if true
+    Result         *strategies.Results        // optional results pointer
 }
 ```
 
@@ -172,18 +184,19 @@ Available strategy IDs and capabilities:
   - Builder: `fixedwindow.NewConfig().SetKey(k).AddQuota(name, limit, window).Build()`
 - token_bucket
   - Capabilities: Primary, Secondary
-  - Config: `tokenbucket.Config{Burst: int, Rate: float64}`
+  - Config: `tokenbucket.Config{Key: string, Burst: int, Rate: float64}`
 - leaky_bucket
   - Capabilities: Primary, Secondary
-  - Config: `leakybucket.Config{Burst: int, Rate: float64}`
+  - Config: `leakybucket.Config{Key: string, Burst: int, Rate: float64}`
 - gcra
   - Capabilities: Primary, Secondary
-  - Config: `gcra.Config{Burst: int, Rate: float64}`
+  - Config: `gcra.Config{Key: string, Burst: int, Rate: float64}`
 
 Notes:
 - Only Fixed Window supports multiple named quotas simultaneously. See [additional multi-quota documentation](strategies/fixedwindow/MULTI_QUOTA.md).
 - When setting a secondary strategy via `WithSecondaryStrategy`, it must advertise `CapSecondary`.
 - If a secondary strategy is specified, the primary strategy must not itself be a `CapSecondary`-only secondary in this dual strategy context; the library validates incompatible combinations.
+- When using strategies with the limiter wrapper (via `ratelimit.New()`), the `Key` field in strategy configs or `SetKey(string)` calls are ignored. The key is constructed from the limiter's `WithBaseKey` option and the dynamic key provided during `Allow()`/`Peek()` calls. These key configurations are only relevant when using strategies directly without the limiter wrapper.
 
 
 ## Backends
@@ -202,7 +215,6 @@ limiter, err := ratelimit.New(
     ratelimit.WithBaseKey("api"),
     ratelimit.WithPrimaryStrategy(
         fixedwindow.NewConfig().
-            SetKey("user").
             AddQuota("minute", 10, time.Minute).    // 10 requests per minute
             AddQuota("hour", 100, time.Hour).       // 100 requests per hour
             Build(),
@@ -257,16 +269,24 @@ func main() {
     if err != nil {
         panic(err)
     }
+
     r := results.Default()
-    fmt.Printf("allowed=%v remaining=%d reset=%s\n", r.Allowed, r.Remaining, r.Reset.Format(time.RFC3339))
+    fmt.Printf(
+        "allowed=%v remaining=%d reset=%s\n",
+        r.Allowed, r.Remaining, r.Reset.Format(time.RFC3339),
+    )
 
     // Peek inspects current state without consuming quota
     peek, err := strat.Peek(ctx, cfg)
     if err != nil {
         panic(err)
     }
+
     pr := peek.Default()
-    fmt.Printf("peek remaining=%d reset=%s\n", pr.Remaining, pr.Reset.Format(time.RFC3339))
+    fmt.Printf(
+        "peek remaining=%d reset=%s\n",
+        pr.Remaining, pr.Reset.Format(time.RFC3339),
+    )
 }
 ```
 
@@ -313,7 +333,7 @@ Run the full test suite (root + strategies/backends/tests):
 
 ## Adjusting Max retries
 
-The `WithMaxRetries` option controls retry attempts for atomic CheckAndSet operations under high contention. While general recommendations exist, optimal values vary by workload.
+The `WithMaxRetries` option controls retry attempts for atomic `CheckAndSet` operations under high contention. While general recommendations exist, optimal values vary by workload.
 
 **Experiment with concurrent tests** to fine-tune for your use case:
 
@@ -339,21 +359,28 @@ Run the concurrent test to validate your configuration:
 
 ```bash
 cd tests
-go test -v -run=TestConcurrent -count=5
+go test -v -run=TestConcurrentAccess -count=5
+
+# or run Redis only tests
+go test -run="TestConcurrentAccess.*/.*redis.*" -v
 ```
 
 Monitor for failed requests and adjust `maxRetries` accordingly. Start with 50-75% of expected concurrent users and increase only if you observe request failures under load.
 
+Retries are per-key, if 100 users access with different keys, each gets its own retry counter. The retry mechanism only affects concurrent access to the **same rate limit key** (same user/IP), not total system capacity.
+
 ## Memory failover
 
-Memory failover provides automatic failover from the primary storage backend (for example Redis or Postgres) to an in-memory backend when the primary experiences repeated failures. It is enabled via `ratelimit.WithMemoryFailover(...)`, which wraps the backend configured with `ratelimit.WithBackend(...)` in an internal composite backend with a circuit breaker and background health checks.
+Memory failover, **disabled by default**, provides automatic failover from the primary storage backend (for example Redis or Postgres) to an in-memory backend when the primary experiences repeated failures. It is enabled via `ratelimit.WithMemoryFailover(...)`, which wraps the backend configured with `ratelimit.WithBackend(...)` in an internal composite backend with a circuit breaker and background health checks.
 
 ### Behind the scenes:
 
-- **Primary backend** – the storage configured with `WithBackend(...)`; all operations go here while the circuit breaker is **CLOSED**.
-- **Secondary (in-memory) backend** – a fresh in-memory backend that is used when the primary is considered unhealthy.
-- **Circuit breaker** – tracks consecutive failures from the primary. After a configurable number of failures it moves to **OPEN** and routes all operations to the in-memory backend. After a configured recovery timeout it moves to **HALF-OPEN** and retries the primary; if that test succeeds the breaker returns to **CLOSED** and normal primary usage resumes. It doesn't categorize error types - any error from the primary counts as a failure toward the threshold.
-- **Health checker** – periodically performs a lightweight `Get` on the primary using a test key and, when successful, helps transition back to using the primary.
+Memory failover uses **simplified** circuit breaker and health checker components:
+
+- **Primary backend**: the storage configured with `WithBackend(...)`. Used while healthy.
+- **Secondary (in-memory) backend**: a fresh in-memory backend used during primary failures.
+- **Circuit breaker**: tracks consecutive failures from the primary. It doesn't categorize error types, any error from the primary counts as a failure toward the threshold. When the threshold is reached, it switches to the in-memory backend.
+- **Health checker**: periodically performs a `Get` on the primary to detect when it's healthy again.
 
 By default (when `WithMemoryFailover()` is called with no extra options):
 
@@ -367,11 +394,11 @@ By default (when `WithMemoryFailover()` is called with no extra options):
 
 Enable memory failover when constructing the limiter:
 
-- `WithMemoryFailover(opts ...MemoryFailoverOption)` – turns on memory failover for the primary backend.
-- `WithFailureThreshold(threshold int)` – sets how many consecutive primary failures are required before the circuit breaker opens.
-- `WithRecoveryTimeout(timeout time.Duration)` – controls how long the breaker stays OPEN before it retries the primary in HALF-OPEN state.
-- `WithHealthCheckInterval(interval time.Duration)` – how frequently the background health checker probes the primary.
-- `WithHealthCheckTimeout(timeout time.Duration)` – timeout applied to each health check operation.
+- `WithMemoryFailover(opts ...MemoryFailoverOption)`: turns on memory failover for the primary backend.
+  - `WithFailureThreshold(threshold int)`: sets how many consecutive primary failures are required before the circuit breaker opens.
+  - `WithRecoveryTimeout(timeout time.Duration)`: controls how long the breaker stays OPEN before it retries the primary in HALF-OPEN state.
+  - `WithHealthCheckInterval(interval time.Duration)`: how frequently the background health checker probes the primary.
+  - `WithHealthCheckTimeout(timeout time.Duration)`: timeout applied to each health check operation.
 
 If you do not provide any options, the defaults listed above are used. `WithMemoryFailover` must be used with a non-memory primary backend that is not already a composite backend; calling it without a configured primary, or with a memory/composite backend, will return an error.
 
@@ -427,12 +454,19 @@ func main() {
     userID := "user123"
 
     var results strategies.Results
-    allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{Key: userID, Result: &results})
+    allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{
+        Key: userID,
+        Result: &results},
+    )
     if err != nil {
         log.Fatal(err)
     }
+
     res := results.Default()
-    fmt.Printf("allowed=%v remaining=%d reset=%s\n", allowed, res.Remaining, res.Reset.Format(time.RFC3339))
+    fmt.Printf(
+        "allowed=%v remaining=%d reset=%s\n",
+        allowed, res.Remaining, res.Reset.Format(time.RFC3339),
+    )
 }
 ```
 
