@@ -12,7 +12,6 @@ limiter, _ := ratelimit.New(
     ratelimit.WithBackend(memory.New()),
     ratelimit.WithPrimaryStrategy(
         fixedwindow.NewConfig().
-            SetKey("api_calls").
             AddQuota("minute", 10, time.Minute).    // 10 calls per minute
             AddQuota("hour", 100, time.Hour).       // 100 calls per hour
             AddQuota("day", 1000, 24*time.Hour).    // 1000 calls per day
@@ -38,7 +37,6 @@ allowed, err := limiter.Allow(ctx, ratelimit.AccessOptions{
 limiter, _ := ratelimit.New(
     ratelimit.WithPrimaryStrategy(
         fixedwindow.NewConfig().
-            SetKey("mixed_operations").
             AddQuota("auth", 5, time.Minute).      // Different operation types
             AddQuota("search", 100, time.Minute).  // should use separate limiters
             AddQuota("upload", 10, time.Hour).     // not multi-quota for same operation
@@ -59,7 +57,6 @@ Because mixing different operation types in one limiter is not supported, do the
 authLimiter, _ := ratelimit.New(
     ratelimit.WithPrimaryStrategy(
         fixedwindow.NewConfig().
-            SetKey("auth").
             AddQuota("minute", 5, time.Minute).
             AddQuota("hour", 50, time.Hour).
             Build(),
@@ -69,7 +66,6 @@ authLimiter, _ := ratelimit.New(
 searchLimiter, _ := ratelimit.New(
     ratelimit.WithPrimaryStrategy(
         fixedwindow.NewConfig().
-            SetKey("search").
             AddQuota("minute", 100, time.Minute).
             AddQuota("hour", 1000, time.Hour).
             Build(),
@@ -85,7 +81,6 @@ searchLimiter, _ := ratelimit.New(
 standardLimiter, _ := ratelimit.New(
     ratelimit.WithPrimaryStrategy(
         fixedwindow.NewConfig().
-            SetKey("standard").
             AddQuota("minute", 2, time.Minute).
             AddQuota("hour", 100, time.Hour).
             Build(),
@@ -96,7 +91,6 @@ standardLimiter, _ := ratelimit.New(
 premiumLimiter, _ := ratelimit.New(
     ratelimit.WithPrimaryStrategy(
         fixedwindow.NewConfig().
-            SetKey("premium").
             AddQuota("minute", 20, time.Minute).
             AddQuota("hour", 1000, time.Hour).
             Build(),
