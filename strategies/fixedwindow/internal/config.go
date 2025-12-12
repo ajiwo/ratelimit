@@ -8,11 +8,12 @@ const MaxQuota = 8
 
 type Config interface {
 	GetKey() string
-	GetQuotas() map[string]Quota
+	GetQuotas() []Quota
 	MaxRetries() int
 }
 
 type Quota struct {
+	Name   string
 	Limit  int
 	Window time.Duration
 }

@@ -50,9 +50,9 @@ func (m *mockConfig) GetKey() string {
 	return args.String(0)
 }
 
-func (m *mockConfig) GetQuotas() map[string]Quota {
+func (m *mockConfig) GetQuotas() []Quota {
 	args := m.Called()
-	return args.Get(0).(map[string]Quota)
+	return args.Get(0).([]Quota)
 }
 
 func (m *mockConfig) MaxRetries() int {
@@ -67,7 +67,8 @@ func TestAllow(t *testing.T) {
 		Limit:  10,
 		Window: time.Minute,
 	}
-	quotas := map[string]Quota{"default": quota}
+	quota.Name = "default"
+	quotas := []Quota{quota}
 	maxRetries := 3
 
 	t.Run("ReadOnly mode", func(t *testing.T) {
@@ -95,10 +96,11 @@ func TestAllow(t *testing.T) {
 			config := new(mockConfig)
 
 			window := FixedWindow{
+				Name:  "default",
 				Count: 5,
 				Start: time.Now().Add(-30 * time.Second),
 			}
-			quotaStates := map[string]FixedWindow{"default": window}
+			quotaStates := []FixedWindow{window}
 			encodedState := encodeState(quotaStates)
 
 			config.On("GetKey").Return(key)
@@ -124,7 +126,7 @@ func TestAllow(t *testing.T) {
 				Count: 5,
 				Start: time.Now().Add(-2 * time.Minute), // Expired
 			}
-			quotaStates := map[string]FixedWindow{"default": window}
+			quotaStates := []FixedWindow{window}
 			encodedState := encodeState(quotaStates)
 
 			config.On("GetKey").Return(key)
@@ -197,10 +199,11 @@ func TestAllow(t *testing.T) {
 			config := new(mockConfig)
 
 			window := FixedWindow{
+				Name:  "default",
 				Count: 5,
 				Start: time.Now().Add(-30 * time.Second),
 			}
-			quotaStates := map[string]FixedWindow{"default": window}
+			quotaStates := []FixedWindow{window}
 			encodedState := encodeState(quotaStates)
 
 			config.On("GetKey").Return(key)
@@ -223,10 +226,11 @@ func TestAllow(t *testing.T) {
 			config := new(mockConfig)
 
 			window := FixedWindow{
+				Name:  "default",
 				Count: quota.Limit, // At limit
 				Start: time.Now().Add(-30 * time.Second),
 			}
-			quotaStates := map[string]FixedWindow{"default": window}
+			quotaStates := []FixedWindow{window}
 			encodedState := encodeState(quotaStates)
 
 			config.On("GetKey").Return(key)
@@ -258,8 +262,8 @@ func TestAllow(t *testing.T) {
 			storage.On("CheckAndSet", ctx, "test-key", "", mock.AnythingOfType("string"), mock.AnythingOfType("time.Duration")).Return(false, nil).Once()
 
 			// Second Get returns some state
-			window := FixedWindow{Count: 5, Start: time.Now().Add(-30 * time.Second)}
-			quotaStates := map[string]FixedWindow{"default": window}
+			window := FixedWindow{Name: "default", Count: 5, Start: time.Now().Add(-30 * time.Second)}
+			quotaStates := []FixedWindow{window}
 			encodedState := encodeState(quotaStates)
 			storage.On("Get", ctx, "test-key").Return(encodedState, nil).Once()
 			// Second CheckAndSet succeeds
@@ -311,9 +315,9 @@ func TestAllow(t *testing.T) {
 			storage := new(mockBackend)
 			config := new(mockConfig)
 
-			multiQuotas := map[string]Quota{
-				"requests": {Limit: 100, Window: time.Minute},
-				"writes":   {Limit: 10, Window: time.Minute},
+			multiQuotas := []Quota{
+				{Name: "requests", Limit: 100, Window: time.Minute},
+				{Name: "writes", Limit: 10, Window: time.Minute},
 			}
 
 			config.On("GetKey").Return(key)
@@ -343,15 +347,15 @@ func TestAllow(t *testing.T) {
 			storage := new(mockBackend)
 			config := new(mockConfig)
 
-			multiQuotas := map[string]Quota{
-				"requests": {Limit: 100, Window: time.Minute},
-				"writes":   {Limit: 1, Window: time.Minute}, // Will be at limit
+			multiQuotas := []Quota{
+				{Name: "requests", Limit: 100, Window: time.Minute},
+				{Name: "writes", Limit: 1, Window: time.Minute}, // Will be at limit
 			}
 
 			// Setup combined state with writes at limit
-			combinedState := map[string]FixedWindow{
-				"requests": {Count: 0, Start: time.Now().Add(-30 * time.Second)}, // Not at limit
-				"writes":   {Count: 1, Start: time.Now().Add(-30 * time.Second)}, // At limit (denied)
+			combinedState := []FixedWindow{
+				{Name: "requests", Count: 0, Start: time.Now().Add(-30 * time.Second)}, // Not at limit
+				{Name: "writes", Count: 1, Start: time.Now().Add(-30 * time.Second)},   // At limit (denied)
 			}
 			fullWindowState := encodeState(combinedState)
 

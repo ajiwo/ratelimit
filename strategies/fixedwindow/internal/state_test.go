@@ -11,12 +11,14 @@ func TestEncodeDecodeState(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now()
-	quotaStates := map[string]FixedWindow{
-		"default": {
+	quotaStates := []FixedWindow{
+		{
+			Name:  "default",
 			Count: 42,
 			Start: now,
 		},
-		"burst": {
+		{
+			Name:  "burst",
 			Count: 5,
 			Start: now.Add(-10 * time.Second),
 		},
@@ -32,15 +34,21 @@ func TestEncodeDecodeState(t *testing.T) {
 	assert.True(t, ok)
 	assert.Len(t, decoded, 2)
 
+	// Create a map for easier verification
+	decodedMap := make(map[string]FixedWindow, len(decoded))
+	for _, state := range decoded {
+		decodedMap[state.Name] = state
+	}
+
 	// Verify both expected keys exist
-	assert.Contains(t, decoded, "burst")
-	assert.Contains(t, decoded, "default")
+	assert.Contains(t, decodedMap, "burst")
+	assert.Contains(t, decodedMap, "default")
 
 	// Check values
-	assert.Equal(t, 5, decoded["burst"].Count)
-	assert.Equal(t, now.Add(-10*time.Second).UnixNano(), decoded["burst"].Start.UnixNano())
-	assert.Equal(t, 42, decoded["default"].Count)
-	assert.Equal(t, now.UnixNano(), decoded["default"].Start.UnixNano())
+	assert.Equal(t, 5, decodedMap["burst"].Count)
+	assert.Equal(t, now.Add(-10*time.Second).UnixNano(), decodedMap["burst"].Start.UnixNano())
+	assert.Equal(t, 42, decodedMap["default"].Count)
+	assert.Equal(t, now.UnixNano(), decodedMap["default"].Start.UnixNano())
 }
 
 func TestDecodeStateInvalid(t *testing.T) {
@@ -97,22 +105,26 @@ func TestComputeMaxResetTTL(t *testing.T) {
 	t.Parallel()
 
 	now := time.Now()
-	quotaStates := map[string]FixedWindow{
-		"default": {
+	quotaStates := []FixedWindow{
+		{
+			Name:  "default",
 			Count: 42,
 			Start: now,
 		},
-		"burst": {
+		{
+			Name:  "burst",
 			Count: 5,
 			Start: now.Add(-30 * time.Second),
 		},
 	}
-	quotas := map[string]Quota{
-		"default": {
+	quotas := []Quota{
+		{
+			Name:   "default",
 			Limit:  100,
 			Window: time.Minute,
 		},
-		"burst": {
+		{
+			Name:   "burst",
 			Limit:  10,
 			Window: 30 * time.Second,
 		},

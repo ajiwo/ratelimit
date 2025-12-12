@@ -32,7 +32,7 @@ type parameter struct {
 	key        string
 	maxRetries int
 	now        time.Time
-	quotas     map[string]Quota
+	quotas     []Quota
 	storage    backends.Backend
 }
 
@@ -81,15 +81,23 @@ func (p *parameter) allowReadOnly(ctx context.Context) (map[string]Result, error
 		return nil, err
 	}
 
+	// Create a map for quick lookup of quota states by name
+	quotaStateMap := make(map[string]FixedWindow, len(quotaStates))
+	for _, state := range quotaStates {
+		quotaStateMap[state.Name] = state
+	}
+
 	// Normalize per-quota windows in-memory and calculate results
-	for name, quota := range p.quotas {
+	for _, quota := range p.quotas {
+		name := quota.Name
 		var window FixedWindow
-		if existingState, exists := quotaStates[name]; exists {
+		if existingState, exists := quotaStateMap[name]; exists {
 			window = existingState
 			// Check if current window has expired
 			if p.now.Sub(window.Start) >= quota.Window {
 				// Window has expired, use fresh state
 				window = FixedWindow{
+					Name:  name,
 					Count: 0,
 					Start: p.now,
 				}
@@ -97,6 +105,7 @@ func (p *parameter) allowReadOnly(ctx context.Context) (map[string]Result, error
 		} else {
 			// This quota doesn't exist in state yet, initialize it
 			window = FixedWindow{
+				Name:  name,
 				Count: 0,
 				Start: p.now,
 			}
@@ -145,11 +154,11 @@ func (p *parameter) allowTryAndUpdate(ctx context.Context) (map[string]Result, e
 		}
 
 		// All quotas allowed, increment counts
-		p.incrementAllQuotas(normalizedStates)
+		incrementedStates := p.incrementAllQuotas(normalizedStates)
 
 		// Use CheckAndSet for atomic update
-		newValue := encodeState(normalizedStates)
-		newTTL := computeMaxResetTTL(normalizedStates, p.quotas, p.now)
+		newValue := encodeState(incrementedStates)
+		newTTL := computeMaxResetTTL(incrementedStates, p.quotas, p.now)
 		success, err := p.storage.CheckAndSet(ctx, p.key, oldValue, newValue, newTTL)
 		if err != nil {
 			return nil, err
@@ -157,7 +166,7 @@ func (p *parameter) allowTryAndUpdate(ctx context.Context) (map[string]Result, e
 
 		if success {
 			// Atomic update succeeded - update results with final remaining counts
-			finalResults := p.calculateFinalResults(normalizedStates)
+			finalResults := p.calculateFinalResults(incrementedStates)
 			return finalResults, nil
 		}
 
@@ -178,22 +187,24 @@ func (p *parameter) allowTryAndUpdate(ctx context.Context) (map[string]Result, e
 }
 
 // getAndParseState retrieves and parses the current state from storage
-func (p *parameter) getAndParseState(ctx context.Context) (map[string]FixedWindow, string, error) {
+func (p *parameter) getAndParseState(ctx context.Context) ([]FixedWindow, string, error) {
 	data, err := p.storage.Get(ctx, p.key)
 	if err != nil {
 		return nil, "", NewStateRetrievalError(err)
 	}
 
-	var quotaStates map[string]FixedWindow
+	var quotaStates []FixedWindow
 	var oldValue string
 	if data == "" {
-		// Initialize new combined state from config
-		quotaStates = make(map[string]FixedWindow, len(p.quotas))
-		for name := range p.quotas {
-			quotaStates[name] = FixedWindow{
+		// Initialize new combined state from config - maintain order
+		quotaStates = make([]FixedWindow, 0, len(p.quotas))
+		for _, quota := range p.quotas {
+			name := quota.Name
+			quotaStates = append(quotaStates, FixedWindow{
+				Name:  name,
 				Count: 0,
 				Start: p.now,
-			}
+			})
 		}
 		oldValue = "" // Key doesn't exist
 	} else {
@@ -208,34 +219,41 @@ func (p *parameter) getAndParseState(ctx context.Context) (map[string]FixedWindo
 }
 
 // normalizeWindows normalizes per-quota windows in-memory
-func (p *parameter) normalizeWindows(quotaStates map[string]FixedWindow) map[string]FixedWindow {
-	normalizedStates := make(map[string]FixedWindow, len(p.quotas))
-	for name, quota := range p.quotas {
+func (p *parameter) normalizeWindows(quotaStates []FixedWindow) []FixedWindow {
+	// Create a map for quick lookup of existing quota states
+	quotaStateMap := make(map[string]FixedWindow, len(quotaStates))
+	for _, state := range quotaStates {
+		quotaStateMap[state.Name] = state
+	}
+
+	normalizedStates := make([]FixedWindow, 0, len(p.quotas))
+	for _, quota := range p.quotas {
+		name := quota.Name
 		var window FixedWindow
-		if existingState, exists := quotaStates[name]; exists {
-			window = existingState
-			// Check if current window has expired
-			if p.now.Sub(window.Start) >= quota.Window {
-				// Start new window
-				window.Count = 0
-				window.Start = p.now
-			}
-		} else {
-			// This quota doesn't exist in state yet, initialize it
-			window = FixedWindow{
-				Count: 0,
-				Start: p.now,
-			}
+		existingState := quotaStateMap[name]
+		window = existingState
+		// Check if current window has expired
+		if p.now.Sub(window.Start) >= quota.Window {
+			// Start new window
+			window.Count = 0
+			window.Start = p.now
 		}
-		normalizedStates[name] = window
+		normalizedStates = append(normalizedStates, window)
 	}
 	return normalizedStates
 }
 
 // areAllQuotasAllowed checks if all quotas are allowed (have capacity)
-func (p *parameter) areAllQuotasAllowed(normalizedStates map[string]FixedWindow) bool {
-	for name, quota := range p.quotas {
-		window := normalizedStates[name]
+func (p *parameter) areAllQuotasAllowed(normalizedStates []FixedWindow) bool {
+	// Create a map for quick lookup of normalized states
+	stateMap := make(map[string]FixedWindow, len(normalizedStates))
+	for _, state := range normalizedStates {
+		stateMap[state.Name] = state
+	}
+
+	for _, quota := range p.quotas {
+		name := quota.Name
+		window := stateMap[name]
 		if window.Count >= quota.Limit {
 			return false
 		}
@@ -244,10 +262,17 @@ func (p *parameter) areAllQuotasAllowed(normalizedStates map[string]FixedWindow)
 }
 
 // calculateResults calculates the results for all quotas based on current state
-func (p *parameter) calculateResults(normalizedStates map[string]FixedWindow) map[string]Result {
+func (p *parameter) calculateResults(normalizedStates []FixedWindow) map[string]Result {
+	// Create a map for quick lookup of normalized states
+	stateMap := make(map[string]FixedWindow, len(normalizedStates))
+	for _, state := range normalizedStates {
+		stateMap[state.Name] = state
+	}
+
 	tempResults := make(map[string]Result, len(p.quotas))
-	for name, quota := range p.quotas {
-		window := normalizedStates[name]
+	for _, quota := range p.quotas {
+		name := quota.Name
+		window := stateMap[name]
 		allowed := window.Count < quota.Limit
 		remaining := max(quota.Limit-window.Count, 0)
 		resetTime := window.Start.Add(quota.Window)
@@ -263,19 +288,31 @@ func (p *parameter) calculateResults(normalizedStates map[string]FixedWindow) ma
 }
 
 // incrementAllQuotas increments the count for all quotas
-func (p *parameter) incrementAllQuotas(normalizedStates map[string]FixedWindow) {
-	for name := range normalizedStates {
-		window := normalizedStates[name]
-		window.Count++
-		normalizedStates[name] = window
+func (p *parameter) incrementAllQuotas(normalizedStates []FixedWindow) []FixedWindow {
+	// Create a copy and increment all quotas
+	incrementedStates := make([]FixedWindow, len(normalizedStates))
+	for i, window := range normalizedStates {
+		incrementedStates[i] = FixedWindow{
+			Name:  window.Name,
+			Count: window.Count + 1,
+			Start: window.Start,
+		}
 	}
+	return incrementedStates
 }
 
 // calculateFinalResults calculates the final results after state update
-func (p *parameter) calculateFinalResults(normalizedStates map[string]FixedWindow) map[string]Result {
+func (p *parameter) calculateFinalResults(normalizedStates []FixedWindow) map[string]Result {
+	// Create a map for quick lookup of normalized states
+	stateMap := make(map[string]FixedWindow, len(normalizedStates))
+	for _, state := range normalizedStates {
+		stateMap[state.Name] = state
+	}
+
 	finalResults := make(map[string]Result, len(p.quotas))
-	for name, quota := range p.quotas {
-		window := normalizedStates[name]
+	for _, quota := range p.quotas {
+		name := quota.Name
+		window := stateMap[name]
 		remaining := max(quota.Limit-window.Count, 0)
 		finalResults[name] = Result{
 			Allowed:      true,

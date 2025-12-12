@@ -59,12 +59,14 @@ var strategyConfigs = []StrategyConfig{
 		name: "FixedWindow",
 		strategy: &fixedwindow.Config{
 			Key: "test",
-			Quotas: map[string]fixedwindow.Quota{
-				"default": {
+			Quotas: []fixedwindow.Quota{
+				{
+					Name:   "default",
 					Limit:  expectedAllowed,
 					Window: 5 * time.Second,
 				},
-				"hourly": {
+				{
+					Name:   "hourly",
 					Limit:  10 * expectedAllowed,
 					Window: 5 * time.Second,
 				},

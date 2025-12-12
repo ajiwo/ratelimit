@@ -28,9 +28,9 @@ type Quota = internal.Quota
 // with its own counter and window state. Quotas must have unique rate ratios
 // (requests per second) to prevent duplicate rate limits.
 type Config struct {
-	Key        string           // Storage key for the rate limit state
-	Quotas     map[string]Quota // Named quotas with their limits and windows
-	maxRetries int              // Maximum retry attempts for atomic operations, 0 means use default
+	Key        string  // Storage key for the rate limit state
+	Quotas     []Quota // Named quotas with their limits and windows (sorted for determinism)
+	maxRetries int     // Maximum retry attempts for atomic operations, 0 means use default
 }
 
 // GetKey returns the storage key for rate limit state.
@@ -49,7 +49,7 @@ func (c *Config) GetKey() string {
 // algorithm and provides access to all named quotas that will be tracked
 // independently for this key. Each quota maintains its own counter and window
 // state.
-func (c *Config) GetQuotas() map[string]internal.Quota {
+func (c *Config) GetQuotas() []internal.Quota {
 	return c.Quotas
 }
 
@@ -76,16 +76,16 @@ func (c *Config) Validate() error {
 		return ErrTooManyQuotas
 	}
 
-	for name, quota := range c.Quotas {
+	for _, quota := range c.Quotas {
 		// Validate quota name
-		if err := utils.ValidateQuotaName(name); err != nil {
+		if err := utils.ValidateQuotaName(quota.Name); err != nil {
 			return err
 		}
 		if quota.Limit <= 0 {
-			return NewInvalidQuotaLimitError(name, quota.Limit)
+			return NewInvalidQuotaLimitError(quota.Name, quota.Limit)
 		}
 		if quota.Window <= 0 {
-			return NewInvalidQuotaWindowError(name, quota.Window)
+			return NewInvalidQuotaWindowError(quota.Name, quota.Window)
 		}
 	}
 
@@ -106,7 +106,7 @@ func (c *Config) validateUniqueRateRatios() error {
 	// Map to track rate ratios: normalized requests per second
 	rateRatios := make(map[float64]string)
 
-	for name, quota := range c.Quotas {
+	for _, quota := range c.Quotas {
 		// Calculate rate as requests per second
 		ratePerSecond := float64(quota.Limit) / quota.Window.Seconds()
 
@@ -114,11 +114,11 @@ func (c *Config) validateUniqueRateRatios() error {
 		tolerance := 1e-9
 		for existingRate, existingName := range rateRatios {
 			if math.Abs(ratePerSecond-existingRate) < tolerance {
-				return NewDuplicateRateRatioError(name, existingName, ratePerSecond)
+				return NewDuplicateRateRatioError(quota.Name, existingName, ratePerSecond)
 			}
 		}
 
-		rateRatios[ratePerSecond] = name
+		rateRatios[ratePerSecond] = quota.Name
 	}
 
 	return nil
@@ -193,13 +193,13 @@ func (c *Config) MaxRetries() int {
 // configBuilder provides a fluent interface for building multi-quota configurations
 type configBuilder struct {
 	key    string
-	quotas map[string]Quota
+	quotas []Quota
 }
 
 // NewConfig creates a multi-quota FixedWindowConfig with a builder pattern
 func NewConfig() *configBuilder {
 	return &configBuilder{
-		quotas: make(map[string]Quota),
+		quotas: make([]Quota, 0),
 	}
 }
 
@@ -211,10 +211,11 @@ func (b *configBuilder) SetKey(key string) *configBuilder {
 
 // AddQuota adds a new quota to the configuration
 func (b *configBuilder) AddQuota(name string, limit int, window time.Duration) *configBuilder {
-	b.quotas[name] = Quota{
+	b.quotas = append(b.quotas, Quota{
+		Name:   name,
 		Limit:  limit,
 		Window: window,
-	}
+	})
 	return b
 }
 

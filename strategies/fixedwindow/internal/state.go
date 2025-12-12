@@ -10,13 +10,14 @@ import (
 
 // FixedWindow represents the state of a fixed window
 type FixedWindow struct {
+	Name  string    `json:"name"`  // Quota name
 	Count int       `json:"count"` // Current request count in the window
 	Start time.Time `json:"start"` // Window start time
 }
 
 // encodeState serializes multiple quotas into a combined ASCII format:
 // 23|N|quotaName1|count1|startUnixNano1|...|quotaNameN|countN|startUnixNanoN
-func encodeState(quotaStates map[string]FixedWindow) string {
+func encodeState(quotaStates []FixedWindow) string {
 	count := len(quotaStates)
 	if count == 0 {
 		return ""
@@ -28,9 +29,9 @@ func encodeState(quotaStates map[string]FixedWindow) string {
 	sb.WriteString("23|")
 	sb.WriteString(strconv.Itoa(count))
 
-	for name, window := range quotaStates {
+	for _, window := range quotaStates {
 		sb.WriteByte('|')
-		sb.WriteString(name)
+		sb.WriteString(window.Name)
 		sb.WriteByte('|')
 		sb.WriteString(strconv.Itoa(window.Count))
 		sb.WriteByte('|')
@@ -94,7 +95,7 @@ func parseStartTime(data string, isLastQuota bool) (int64, string, bool) {
 	return startNS, data[pos+1:], true
 }
 
-func decodeState(s string) (map[string]FixedWindow, bool) {
+func decodeState(s string) ([]FixedWindow, bool) {
 	// example minimal valid state:
 	// "23|1|a|1|0"
 	if len(s) < 10 || s[:3] != "23|" || s[4:5] != "|" {
@@ -109,7 +110,7 @@ func decodeState(s string) (map[string]FixedWindow, bool) {
 		return nil, false
 	}
 
-	result := make(map[string]FixedWindow, n)
+	result := make([]FixedWindow, 0, n)
 
 	// Parse each quota
 	for i := range n {
@@ -137,24 +138,35 @@ func decodeState(s string) (map[string]FixedWindow, bool) {
 			return nil, false
 		}
 
-		result[name] = FixedWindow{
+		result = append(result, FixedWindow{
+			Name:  name,
 			Count: count,
 			Start: time.Unix(0, startNS),
-		}
+		})
 		data = remainingData
 	}
 
 	return result, true
 }
 
+// findQuotaByName finds a quota by name in the quotas slice
+func findQuotaByName(name string, quotas []Quota) (Quota, bool) {
+	for _, q := range quotas {
+		if q.Name == name {
+			return q, true
+		}
+	}
+	return Quota{}, false
+}
+
 // computeMaxResetTTL calculates the TTL as the maximum reset time across all quotas minus now
 // with a minimum of 1 second (non-configurable)
-func computeMaxResetTTL(quotaStates map[string]FixedWindow, quotas map[string]Quota, now time.Time) time.Duration {
+func computeMaxResetTTL(quotaStates []FixedWindow, quotas []Quota, now time.Time) time.Duration {
 	var maxReset time.Time
 
 	// Find the latest reset time across all quotas
-	for name, window := range quotaStates {
-		if quota, exists := quotas[name]; exists {
+	for _, window := range quotaStates {
+		if quota, exists := findQuotaByName(window.Name, quotas); exists {
 			resetTime := window.Start.Add(quota.Window)
 			if resetTime.After(maxReset) {
 				maxReset = resetTime

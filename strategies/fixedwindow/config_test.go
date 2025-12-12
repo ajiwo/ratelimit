@@ -5,6 +5,7 @@ import (
 	"time"
 
 	"github.com/ajiwo/ratelimit/strategies"
+	"github.com/ajiwo/ratelimit/strategies/fixedwindow/internal"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -20,8 +21,8 @@ func TestConfig_Validate(t *testing.T) {
 			name: "Valid config with single quota",
 			config: Config{
 				Key: "valid_single",
-				Quotas: map[string]Quota{
-					"per_second": {Limit: 10, Window: time.Second},
+				Quotas: []Quota{
+					{Name: "per_second", Limit: 10, Window: time.Second},
 				},
 			},
 			expectError: false,
@@ -30,9 +31,9 @@ func TestConfig_Validate(t *testing.T) {
 			name: "Valid config with multiple quotas",
 			config: Config{
 				Key: "valid_multiple",
-				Quotas: map[string]Quota{
-					"per_second": {Limit: 10, Window: time.Second},
-					"per_minute": {Limit: 100, Window: time.Minute},
+				Quotas: []Quota{
+					{Name: "per_second", Limit: 10, Window: time.Second},
+					{Name: "per_minute", Limit: 100, Window: time.Minute},
 				},
 			},
 			expectError: false,
@@ -41,7 +42,7 @@ func TestConfig_Validate(t *testing.T) {
 			name: "No quotas",
 			config: Config{
 				Key:    "no_quotas",
-				Quotas: map[string]Quota{},
+				Quotas: []Quota{},
 			},
 			expectError: true,
 		},
@@ -49,8 +50,8 @@ func TestConfig_Validate(t *testing.T) {
 			name: "Zero limit",
 			config: Config{
 				Key: "zero_limit",
-				Quotas: map[string]Quota{
-					"invalid": {Limit: 0, Window: time.Second},
+				Quotas: []Quota{
+					{Name: "invalid", Limit: 0, Window: time.Second},
 				},
 			},
 			expectError: true,
@@ -59,8 +60,8 @@ func TestConfig_Validate(t *testing.T) {
 			name: "Negative limit",
 			config: Config{
 				Key: "neg_limit",
-				Quotas: map[string]Quota{
-					"invalid": {Limit: -1, Window: time.Second},
+				Quotas: []Quota{
+					{Name: "invalid", Limit: -1, Window: time.Second},
 				},
 			},
 			expectError: true,
@@ -69,8 +70,8 @@ func TestConfig_Validate(t *testing.T) {
 			name: "Zero window",
 			config: Config{
 				Key: "zero_window",
-				Quotas: map[string]Quota{
-					"invalid": {Limit: 10, Window: 0},
+				Quotas: []Quota{
+					{Name: "invalid", Limit: 10, Window: 0},
 				},
 			},
 			expectError: true,
@@ -79,8 +80,8 @@ func TestConfig_Validate(t *testing.T) {
 			name: "Negative window",
 			config: Config{
 				Key: "neg_window",
-				Quotas: map[string]Quota{
-					"invalid": {Limit: 10, Window: -time.Second},
+				Quotas: []Quota{
+					{Name: "invalid", Limit: 10, Window: -time.Second},
 				},
 			},
 			expectError: true,
@@ -89,9 +90,9 @@ func TestConfig_Validate(t *testing.T) {
 			name: "Duplicate rate ratio",
 			config: Config{
 				Key: "duplicate_rate",
-				Quotas: map[string]Quota{
-					"per_second": {Limit: 10, Window: time.Second},
-					"equivalent": {Limit: 20, Window: 2 * time.Second},
+				Quotas: []Quota{
+					{Name: "per_second", Limit: 10, Window: time.Second},
+					{Name: "equivalent", Limit: 20, Window: 2 * time.Second},
 				},
 			},
 			expectError: true,
@@ -100,16 +101,16 @@ func TestConfig_Validate(t *testing.T) {
 			name: "More than 8 quotas",
 			config: Config{
 				Key: "too_many_quotas",
-				Quotas: map[string]Quota{
-					"q1": {Limit: 1, Window: time.Second},
-					"q2": {Limit: 2, Window: time.Second},
-					"q3": {Limit: 3, Window: time.Second},
-					"q4": {Limit: 4, Window: time.Second},
-					"q5": {Limit: 5, Window: time.Second},
-					"q6": {Limit: 6, Window: time.Second},
-					"q7": {Limit: 7, Window: time.Second},
-					"q8": {Limit: 8, Window: time.Second},
-					"q9": {Limit: 9, Window: time.Second}, // 9th quota - should fail
+				Quotas: []Quota{
+					{Name: "q1", Limit: 1, Window: time.Second},
+					{Name: "q2", Limit: 2, Window: time.Second},
+					{Name: "q3", Limit: 3, Window: time.Second},
+					{Name: "q4", Limit: 4, Window: time.Second},
+					{Name: "q5", Limit: 5, Window: time.Second},
+					{Name: "q6", Limit: 6, Window: time.Second},
+					{Name: "q7", Limit: 7, Window: time.Second},
+					{Name: "q8", Limit: 8, Window: time.Second},
+					{Name: "q9", Limit: 9, Window: time.Second}, // 9th quota - should fail
 				},
 			},
 			expectError: true,
@@ -118,8 +119,8 @@ func TestConfig_Validate(t *testing.T) {
 			name: "Empty key",
 			config: Config{
 				Key: "",
-				Quotas: map[string]Quota{
-					"per_second": {Limit: 10, Window: time.Second},
+				Quotas: []Quota{
+					{Name: "per_second", Limit: 10, Window: time.Second},
 				},
 			},
 			expectError: false, // Empty key should be valid
@@ -143,8 +144,8 @@ func TestConfig_Validate(t *testing.T) {
 func TestConfig_Properties(t *testing.T) {
 	config := Config{
 		Key: "test_key",
-		Quotas: map[string]Quota{
-			"per_minute": {Limit: 100, Window: time.Minute},
+		Quotas: []Quota{
+			{Name: "per_minute", Limit: 100, Window: time.Minute},
 		},
 	}
 
@@ -187,17 +188,32 @@ func TestConfig_Properties(t *testing.T) {
 	// Test getters
 	require.Equal(t, "test_key", config.GetKey(),
 		"GetKey should return the correct key")
-	require.Equal(t, config.Quotas, config.GetQuotas(),
-		"GetQuotas should return the correct quotas")
+
+	// GetQuotas returns a slice, so verify the quotas are correct
+	quotas := config.GetQuotas()
+	require.Len(t, quotas, 1, "GetQuotas should return one quota")
+
+	// Find the quota by name
+	var perMinuteQuota internal.Quota
+	for _, quota := range quotas {
+		if quota.Name == "per_minute" {
+			perMinuteQuota = quota
+			break
+		}
+	}
+	require.Equal(t, "per_minute", perMinuteQuota.Name, "GetQuotas should contain per_minute quota")
+	require.Equal(t, 100, perMinuteQuota.Limit, "GetQuotas should return correct limit")
+	require.Equal(t, time.Minute, perMinuteQuota.Window, "GetQuotas should return correct window")
+
 	require.Equal(t, 0, config.MaxRetries(),
 		"MaxRetries should return the correct max retries")
 }
 
 func TestConfig_Builder(t *testing.T) {
 	key := "builder_key"
-	quotas := map[string]Quota{
-		"q1": {Limit: 10, Window: time.Second},
-		"q2": {Limit: 100, Window: time.Minute},
+	quotas := []Quota{
+		{Name: "q1", Limit: 10, Window: time.Second},
+		{Name: "q2", Limit: 100, Window: time.Minute},
 	}
 
 	builder := NewConfig().
