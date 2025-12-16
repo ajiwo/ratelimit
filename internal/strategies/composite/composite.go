@@ -84,7 +84,7 @@ func prepareCompositeForAllow(sci strategies.Config) (*Config, string, int, erro
 		return nil, "", 0, fmt.Errorf("composite key not set, call WithKey first")
 	}
 
-	maxRetries := cfg.MaxRetries()
+	maxRetries := cfg.GetMaxRetries()
 	if maxRetries <= 0 {
 		maxRetries = strategies.DefaultMaxRetries
 	}

@@ -9,7 +9,7 @@ const MaxQuota = 8
 type Config interface {
 	GetKey() string
 	GetQuotas() []Quota
-	MaxRetries() int
+	GetMaxRetries() int
 }
 
 type Quota struct {

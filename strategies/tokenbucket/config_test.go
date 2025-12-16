@@ -124,11 +124,11 @@ func TestConfig_Properties(t *testing.T) {
 
 	// Test WithMaxRetries()
 	retriesConfig := config.WithMaxRetries(10)
-	require.Equal(t, 10, retriesConfig.MaxRetries(),
+	require.Equal(t, 10, retriesConfig.GetMaxRetries(),
 		"WithMaxRetries should update the max retries")
-	require.Equal(t, 10, retriesConfig.(*Config).maxRetries,
+	require.Equal(t, 10, retriesConfig.(*Config).MaxRetries,
 		"WithMaxRetries should update the max retries")
-	require.Equal(t, 0, config.MaxRetries(),
+	require.Equal(t, 0, config.GetMaxRetries(),
 		"WithMaxRetries should not modify the original config")
 
 	// Test getters
@@ -138,6 +138,6 @@ func TestConfig_Properties(t *testing.T) {
 		"GetBurst should return the correct burst")
 	require.Equal(t, 5.0, config.GetRate(),
 		"GetRate should return the correct rate")
-	require.Equal(t, 0, config.MaxRetries(),
+	require.Equal(t, 0, config.GetMaxRetries(),
 		"MaxRetries should return the correct max retries")
 }

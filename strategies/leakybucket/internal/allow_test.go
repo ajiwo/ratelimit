@@ -60,7 +60,7 @@ func (m *mockConfig) GetRate() float64 {
 	return args.Get(0).(float64)
 }
 
-func (m *mockConfig) MaxRetries() int {
+func (m *mockConfig) GetMaxRetries() int {
 	args := m.Called()
 	return args.Int(0)
 }
@@ -79,7 +79,7 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetBurst").Return(capacity)
-			config.On("MaxRetries").Return(maxRetries)
+			config.On("GetMaxRetries").Return(maxRetries)
 			config.On("GetRate").Return(leakRate)
 			storage.On("Get", ctx, key).Return("", nil)
 
@@ -103,7 +103,7 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetBurst").Return(capacity)
-			config.On("MaxRetries").Return(maxRetries)
+			config.On("GetMaxRetries").Return(maxRetries)
 			config.On("GetRate").Return(leakRate)
 			storage.On("Get", ctx, key).Return(encodedState, nil)
 
@@ -126,7 +126,7 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetBurst").Return(capacity)
-			config.On("MaxRetries").Return(maxRetries)
+			config.On("GetMaxRetries").Return(maxRetries)
 			config.On("GetRate").Return(leakRate)
 			storage.On("Get", ctx, key).Return("", errors.New("storage error"))
 
@@ -141,7 +141,7 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetBurst").Return(capacity)
-			config.On("MaxRetries").Return(maxRetries)
+			config.On("GetMaxRetries").Return(maxRetries)
 			config.On("GetRate").Return(leakRate)
 			storage.On("Get", ctx, key).Return("invalid-state", nil)
 
@@ -158,7 +158,7 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetBurst").Return(capacity)
-			config.On("MaxRetries").Return(maxRetries)
+			config.On("GetMaxRetries").Return(maxRetries)
 			config.On("GetRate").Return(leakRate)
 			storage.On("Get", ctx, key).Return("", nil)
 
@@ -185,7 +185,7 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetBurst").Return(capacity)
-			config.On("MaxRetries").Return(maxRetries)
+			config.On("GetMaxRetries").Return(maxRetries)
 			config.On("GetRate").Return(leakRate)
 			storage.On("Get", ctx, key).Return(encodedState, nil)
 
@@ -209,7 +209,7 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetBurst").Return(capacity)
-			config.On("MaxRetries").Return(maxRetries)
+			config.On("GetMaxRetries").Return(maxRetries)
 			config.On("GetRate").Return(leakRate)
 			storage.On("Get", ctx, key).Return(encodedState, nil)
 
@@ -226,7 +226,7 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetBurst").Return(capacity)
-			config.On("MaxRetries").Return(maxRetries)
+			config.On("GetMaxRetries").Return(maxRetries)
 			config.On("GetRate").Return(leakRate)
 
 			// First Get returns empty
@@ -254,7 +254,7 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetBurst").Return(capacity)
-			config.On("MaxRetries").Return(maxRetries)
+			config.On("GetMaxRetries").Return(maxRetries)
 			config.On("GetRate").Return(leakRate)
 
 			storage.On("Get", ctx, key).Return("", nil)
@@ -273,7 +273,7 @@ func TestAllow(t *testing.T) {
 
 			config.On("GetKey").Return(key)
 			config.On("GetBurst").Return(capacity)
-			config.On("MaxRetries").Return(maxRetries)
+			config.On("GetMaxRetries").Return(maxRetries)
 			config.On("GetRate").Return(leakRate)
 
 			_, err := Allow(canceledCtx, storage, config, TryUpdate)

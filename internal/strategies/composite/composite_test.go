@@ -52,7 +52,7 @@ func (m compMockConfig) WithRole(role strategies.Role) strategies.Config {
 	return m
 }
 func (m compMockConfig) WithKey(key string) strategies.Config { m.key = key; return m }
-func (m compMockConfig) MaxRetries() int                      { return m.maxRetries }
+func (m compMockConfig) GetMaxRetries() int                   { return m.maxRetries }
 func (m compMockConfig) WithMaxRetries(retries int) strategies.Config {
 	m.maxRetries = retries
 	return m

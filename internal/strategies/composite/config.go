@@ -127,14 +127,14 @@ func (c *Config) CompositeKey() string {
 	return c.compositeKey
 }
 
-// MaxRetries returns the maximum retry attempts for CAS operations.
+// GetMaxRetries returns the maximum retry attempts for CAS operations.
 //
 // Returns the retry limit from the primary config, which should be the same
 // as the secondary config when properly configured via WithMaxRetries().
 // Returns 0 if not configured, which indicates that `strategies.DefaultMaxRetries`
 // should be used for retry counts.
-func (c *Config) MaxRetries() int {
-	return c.Primary.MaxRetries()
+func (c *Config) GetMaxRetries() int {
+	return c.Primary.GetMaxRetries()
 }
 
 // WithMaxRetries applies the retry limit to both primary and secondary configs

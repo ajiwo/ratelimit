@@ -83,11 +83,11 @@ type Config interface {
 	// Implementations should ensure the key is properly formatted for their storage needs.
 	WithKey(key string) Config
 
-	// MaxRetries returns the maximum retry attempts for `backends.CheckAndSet` operations.
+	// GetMaxRetries returns the maximum retry attempts for `backends.CheckAndSet` operations.
 	//
 	// Returns 0 if not configured, which indicates that `DefaultMaxRetries` should be used
 	// for retry counts.
-	MaxRetries() int
+	GetMaxRetries() int
 
 	// WithMaxRetries returns a copy of the config with the provided retry limit applied.
 	//

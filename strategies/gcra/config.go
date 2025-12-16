@@ -12,7 +12,7 @@ type Config struct {
 	Key        string          // Storage key for GCRA state (theoretical arrival time)
 	Rate       float64         // Requests per second (sustained rate limit)
 	Burst      int             // Maximum burst size (concurrent request tolerance)
-	maxRetries int             // Maximum retry attempts for atomic operations, 0 means use default
+	MaxRetries int             // Maximum retry attempts for atomic operations, 0 means use default
 	role       strategies.Role // Strategy role (primary or secondary)
 }
 
@@ -85,7 +85,7 @@ func (c *Config) WithKey(key string) strategies.Config {
 // retry limit. Higher values may help in high-contention scenarios.
 func (c *Config) WithMaxRetries(retries int) strategies.Config {
 	cfg := *c
-	cfg.maxRetries = retries
+	cfg.MaxRetries = retries
 	return &cfg
 }
 
@@ -117,10 +117,10 @@ func (c *Config) GetRate() float64 {
 	return c.Rate
 }
 
-// MaxRetries returns the configured maximum retry attempts for atomic operations.
+// GetMaxRetries returns the configured maximum retry attempts for atomic operations.
 //
 // Returns 0 if not configured, which indicates that `strategies.DefaultMaxRetries`
 // should be used for retry counts.
-func (c *Config) MaxRetries() int {
-	return c.maxRetries
+func (c *Config) GetMaxRetries() int {
+	return c.MaxRetries
 }

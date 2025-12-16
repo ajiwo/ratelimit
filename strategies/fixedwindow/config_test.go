@@ -178,11 +178,11 @@ func TestConfig_Properties(t *testing.T) {
 
 	// Test WithMaxRetries()
 	retriesConfig := config.WithMaxRetries(10)
-	require.Equal(t, 10, retriesConfig.MaxRetries(),
+	require.Equal(t, 10, retriesConfig.GetMaxRetries(),
 		"WithMaxRetries should update the max retries")
-	require.Equal(t, 10, retriesConfig.(*Config).maxRetries,
+	require.Equal(t, 10, retriesConfig.(*Config).MaxRetries,
 		"WithMaxRetries should update the max retries")
-	require.Equal(t, 0, config.MaxRetries(),
+	require.Equal(t, 0, config.GetMaxRetries(),
 		"WithMaxRetries should not modify the original config")
 
 	// Test getters
@@ -205,7 +205,7 @@ func TestConfig_Properties(t *testing.T) {
 	require.Equal(t, 100, perMinuteQuota.Limit, "GetQuotas should return correct limit")
 	require.Equal(t, time.Minute, perMinuteQuota.Window, "GetQuotas should return correct window")
 
-	require.Equal(t, 0, config.MaxRetries(),
+	require.Equal(t, 0, config.GetMaxRetries(),
 		"MaxRetries should return the correct max retries")
 }
 
@@ -218,12 +218,14 @@ func TestConfig_Builder(t *testing.T) {
 
 	builder := NewConfig().
 		SetKey(key).
+		SetMaxRetries(10).
 		AddQuota("q1", 10, time.Second).
 		AddQuota("q2", 100, time.Minute)
 
 	config := builder.Build()
 
 	require.Equal(t, key, config.Key, "Builder should set the key correctly")
+	require.Equal(t, 10, config.MaxRetries, "Builder should set max retries correctly")
 	require.Equal(t, quotas, config.Quotas, "Builder should add quotas correctly")
 
 	// Test building with no key

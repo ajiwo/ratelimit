@@ -30,7 +30,7 @@ type Quota = internal.Quota
 type Config struct {
 	Key        string  // Storage key for the rate limit state
 	Quotas     []Quota // Named quotas with their limits and windows (sorted for determinism)
-	maxRetries int     // Maximum retry attempts for atomic operations, 0 means use default
+	MaxRetries int     // Maximum retry attempts for atomic operations, 0 means use default
 }
 
 // GetKey returns the storage key for rate limit state.
@@ -178,22 +178,23 @@ func (c *Config) WithKey(key string) strategies.Config {
 // retry limit. Higher values may help in high-contention scenarios.
 func (c *Config) WithMaxRetries(retries int) strategies.Config {
 	cfg := *c
-	cfg.maxRetries = retries
+	cfg.MaxRetries = retries
 	return &cfg
 }
 
-// MaxRetries returns the configured maximum retry attempts for atomic operations.
+// GetMaxRetries returns the configured maximum retry attempts for atomic operations.
 //
 // Returns 0 if not configured, which indicates that `strategies.DefaultMaxRetries`
 // should be used for retry counts.
-func (c *Config) MaxRetries() int {
-	return c.maxRetries
+func (c *Config) GetMaxRetries() int {
+	return c.MaxRetries
 }
 
 // configBuilder provides a fluent interface for building multi-quota configurations
 type configBuilder struct {
-	key    string
-	quotas []Quota
+	key        string
+	quotas     []Quota
+	maxRetries int
 }
 
 // NewConfig creates a multi-quota FixedWindowConfig with a builder pattern
@@ -206,6 +207,12 @@ func NewConfig() *configBuilder {
 // SetKey sets the key for the configuration
 func (b *configBuilder) SetKey(key string) *configBuilder {
 	b.key = key
+	return b
+}
+
+// SetMaxRetries sets the maximum number of retries for the configuration
+func (b *configBuilder) SetMaxRetries(retries int) *configBuilder {
+	b.maxRetries = retries
 	return b
 }
 
@@ -222,8 +229,9 @@ func (b *configBuilder) AddQuota(name string, limit int, window time.Duration) *
 // Build creates the FixedWindowConfig from the builder
 func (b *configBuilder) Build() *Config {
 	return &Config{
-		Key:    b.key,
-		Quotas: b.quotas,
+		Key:        b.key,
+		MaxRetries: b.maxRetries,
+		Quotas:     b.quotas,
 	}
 }
 

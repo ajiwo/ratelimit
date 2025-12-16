@@ -52,7 +52,7 @@ func Allow(
 		return Result{}, NewContextCanceledError(err)
 	}
 
-	maxRetries := config.MaxRetries()
+	maxRetries := config.GetMaxRetries()
 	if maxRetries <= 0 {
 		maxRetries = strategies.DefaultMaxRetries
 	}

@@ -49,7 +49,7 @@ func Allow(
 		return nil, NewContextCanceledError(err)
 	}
 
-	maxRetries := config.MaxRetries()
+	maxRetries := config.GetMaxRetries()
 	if maxRetries <= 0 {
 		maxRetries = strategies.DefaultMaxRetries
 	}
@@ -221,17 +221,15 @@ func (p *parameter) getAndParseState(ctx context.Context) ([]FixedWindow, string
 // normalizeWindows normalizes per-quota windows in-memory
 func (p *parameter) normalizeWindows(quotaStates []FixedWindow) []FixedWindow {
 	// Create a map for quick lookup of existing quota states
-	quotaStateMap := make(map[string]FixedWindow, len(quotaStates))
+	stateMap := make(map[string]FixedWindow, len(quotaStates))
 	for _, state := range quotaStates {
-		quotaStateMap[state.Name] = state
+		stateMap[state.Name] = state
 	}
 
 	normalizedStates := make([]FixedWindow, 0, len(p.quotas))
 	for _, quota := range p.quotas {
 		name := quota.Name
-		var window FixedWindow
-		existingState := quotaStateMap[name]
-		window = existingState
+		window := stateMap[name]
 		// Check if current window has expired
 		if p.now.Sub(window.Start) >= quota.Window {
 			// Start new window

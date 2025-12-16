@@ -181,22 +181,54 @@ Available strategy IDs and capabilities:
 
 - fixed_window
   - Capabilities: Primary, Up to 8 Quotas per key
-  - Builder: `fixedwindow.NewConfig().SetKey(k).AddQuota(name, limit, window).Build()`
+  - Config:
+    ```go
+    fixedwindow.NewConfig().
+        SetKey(k).                      // ignored when used with limiter
+        SetMaxRetries(r).               // optional, unset or 0 uses default (30), 1 to disable retries
+        AddQuota(name, limit, window).
+        Build()
+    ```
 - token_bucket
   - Capabilities: Primary, Secondary
-  - Config: `tokenbucket.Config{Key: string, Burst: int, Rate: float64}`
+  - Config: 
+    ```go
+    &tokenbucket.Config{
+        Key:        string,             // ignored when used with limiter
+        MaxRetries: int,                // unset or 0 uses default (30), 1 to disable retries
+        Burst:      int,                // max burst tokens
+        Rate:       float64,            // refill rate (tokens per second)
+    }
+    ```
 - leaky_bucket
   - Capabilities: Primary, Secondary
-  - Config: `leakybucket.Config{Key: string, Burst: int, Rate: float64}`
+  - Config: 
+    ```go
+    &leakybucket.Config{
+        Key:        string,
+        MaxRetries: int,
+        Burst:      int,                // max burst requests
+        Rate:       float64,            // leak rate (requests per second)
+    }
+    ```
 - gcra
   - Capabilities: Primary, Secondary
-  - Config: `gcra.Config{Key: string, Burst: int, Rate: float64}`
+  - Config:
+    ```go
+    &gcra.Config{
+        Key:        string,
+        MaxRetries: int,
+        Burst:      int,                // max burst requests
+        Rate:       float64,            // spaced rate (requests per second)
+    }
+    ```
 
 Notes:
 - Only Fixed Window supports multiple named quotas simultaneously. See [additional multi-quota documentation](strategies/fixedwindow/MULTI_QUOTA.md).
 - When setting a secondary strategy via `WithSecondaryStrategy`, it must advertise `CapSecondary`.
 - If a secondary strategy is specified, the primary strategy must not itself be a `CapSecondary`-only secondary in this dual strategy context; the library validates incompatible combinations.
 - When using strategies with the limiter wrapper (via `ratelimit.New()`), the `Key` field in strategy configs or `SetKey(string)` calls are ignored. The key is constructed from the limiter's `WithBaseKey` option and the dynamic key provided during `Allow()`/`Peek()` calls. These key configurations are only relevant when using strategies directly without the limiter wrapper.
+- Similarly, the `MaxRetries` field in strategy configs or `SetMaxRetries(int)` calls are ignored when using the limiter wrapper. Use `WithMaxRetries(int)` option when creating the limiter instead. The strategy-level retry settings are only relevant when using strategies directly without the limiter wrapper.
 
 
 ## Backends

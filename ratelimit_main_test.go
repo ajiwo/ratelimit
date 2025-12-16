@@ -111,7 +111,7 @@ func (m mockStrategyConfig) WithKey(key string) strategies.Config {
 	m.key = key
 	return m
 }
-func (m mockStrategyConfig) MaxRetries() int { return m.maxRetries }
+func (m mockStrategyConfig) GetMaxRetries() int { return m.maxRetries }
 func (m mockStrategyConfig) WithMaxRetries(retries int) strategies.Config {
 	m.maxRetries = retries
 	return m
