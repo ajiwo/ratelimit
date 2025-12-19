@@ -120,8 +120,11 @@ func (c *Config) GetRate() float64 {
 
 // GetMaxRetries returns the configured maximum retry attempts for atomic operations.
 //
-// Returns 0 if not configured, which indicates that `strategies.DefaultMaxRetries`
-// should be used for retry counts.
+// When MaxRetries is 0 (default), returns the Burst + 1 value as the optimal retry count
+// for leaky bucket operations. When MaxRetries > 0, returns the explicitly configured value.
 func (c *Config) GetMaxRetries() int {
-	return c.MaxRetries
+	if c.MaxRetries > 0 {
+		return c.MaxRetries
+	}
+	return c.Burst + 1
 }

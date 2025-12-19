@@ -50,9 +50,6 @@ func Allow(
 	}
 
 	maxRetries := config.GetMaxRetries()
-	if maxRetries <= 0 {
-		maxRetries = strategies.DefaultMaxRetries
-	}
 
 	p := &parameter{
 		storage:    storage,

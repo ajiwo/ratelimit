@@ -21,7 +21,7 @@ import (
 
 var (
 	numGoroutines   = getNumGoroutines()
-	maxRetries      = numGoroutines / 2
+	maxRetries      = 0                            // auto, derive from strategy-specific config
 	expectedAllowed = 1 + rand.IntN(numGoroutines) // #nosec: G404
 	expectedDenied  = numGoroutines - expectedAllowed
 )

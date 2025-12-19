@@ -13,7 +13,7 @@ const (
 	// The current implementation (with 8-bit shift and 10s max feedback) overflows at 7,205,759 attempts.
 	// This value provides a large safety margin while preventing indefinite retries that could
 	// overwhelm the system. In practice, much lower values  are typically sufficient for
-	// high-contention scenarios. it overflowed at 9,391 atttempt before 0bb1997
+	// high-contention scenarios. it overflowed at 9,391 atttempt before commit 0bb1997
 	MaxRetries = 9390
 	TTLFactor  = 5
 )

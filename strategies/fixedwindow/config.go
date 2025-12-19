@@ -173,9 +173,9 @@ func (c *Config) WithKey(key string) strategies.Config {
 
 // WithMaxRetries returns a copy of the config with the provided retry limit applied.
 //
-// This controls the maximum number of retry attempts for atomic operations
-// (CheckAndSet) when storage conflicts occur. Set to 0 to use the default
-// retry limit. Higher values may help in high-contention scenarios.
+// When retries is 0, the implementation will automatically calculate the optimal
+// max retries value based on the most restrictive quota. When retries > 0,
+// the explicit value will be used instead of the automatic calculation.
 func (c *Config) WithMaxRetries(retries int) strategies.Config {
 	cfg := *c
 	cfg.MaxRetries = retries
@@ -184,10 +184,27 @@ func (c *Config) WithMaxRetries(retries int) strategies.Config {
 
 // GetMaxRetries returns the configured maximum retry attempts for atomic operations.
 //
-// Returns 0 if not configured, which indicates that `strategies.DefaultMaxRetries`
-// should be used for retry counts.
+// When MaxRetries is 0 (default), returns the limit of the most restrictive quota
+// plus 1 as the optimal retry count for fixed window operations. When MaxRetries > 0,
+// returns the explicitly configured value.
 func (c *Config) GetMaxRetries() int {
-	return c.MaxRetries
+	if c.MaxRetries > 0 {
+		return c.MaxRetries
+	}
+	ql := len(c.Quotas)
+	mostRestrictive := c.Quotas[0]
+	minRate := float64(mostRestrictive.Limit) / mostRestrictive.Window.Seconds()
+
+	for i := 1; i < ql; i++ {
+		quota := c.Quotas[i]
+		rate := float64(quota.Limit) / quota.Window.Seconds()
+		if rate < minRate {
+			minRate = rate
+			mostRestrictive = quota
+		}
+	}
+
+	return mostRestrictive.Limit + 1
 }
 
 // configBuilder provides a fluent interface for building multi-quota configurations

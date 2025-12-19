@@ -185,7 +185,7 @@ Available strategy IDs and capabilities:
     ```go
     fixedwindow.NewConfig().
         SetKey(k).                      // ignored when used with limiter
-        SetMaxRetries(r).               // optional, unset or 0 uses default (30), 1 to disable retries
+        SetMaxRetries(r).               // optional, unset or 0 uses default, 1 to disable retries
         AddQuota(name, limit, window).
         Build()
     ```
@@ -195,7 +195,7 @@ Available strategy IDs and capabilities:
     ```go
     &tokenbucket.Config{
         Key:        string,             // ignored when used with limiter
-        MaxRetries: int,                // unset or 0 uses default (30), 1 to disable retries
+        MaxRetries: int,                // unset or 0 uses default, 1 to disable retries
         Burst:      int,                // max burst tokens
         Rate:       float64,            // refill rate (tokens per second)
     }
@@ -294,10 +294,15 @@ func main() {
         SetKey(key).
         AddQuota("default", 5, 3*time.Second).
         Build()
+    
+    err := cfg.Validate()
+    if err != nil {
+        panic(err)
+    }
 
     // 4) Perform checks
     // Allow consumes quota and returns per-quota results
-    results, err := strat.Allow(ctx, cfg)
+    results, err = strat.Allow(ctx, cfg)
     if err != nil {
         panic(err)
     }
@@ -362,44 +367,6 @@ Run the full test suite (root + strategies/backends/tests):
 ```bash
 ./test.sh
 ```
-
-## Adjusting Max retries
-
-The `WithMaxRetries` option controls retry attempts for atomic `CheckAndSet` operations under high contention. While general recommendations exist, optimal values vary by workload.
-
-**Experiment with concurrent tests** to fine-tune for your use case:
-
-```bash
-# Modify tests/ratelimit_concurrent_test.go
-# Adjust these variables and observe behavior:
-numGoroutines = 100      # your expected/predicted concurrent users
-maxRetries = numGoroutines / 2  # start with 50% of concurrent users
-```
-
-Configure backend connections for testing with environment variables:
-
-```bash
-# For PostgreSQL backend tests
-export TEST_POSTGRES_DSN="postgres://user:pass@localhost:5432/testdb"
-
-# For Redis backend tests
-export REDIS_ADDR="localhost:6379"
-export REDIS_PASSWORD=""  # optional, if Redis requires auth
-```
-
-Run the concurrent test to validate your configuration:
-
-```bash
-cd tests
-go test -v -run=TestConcurrentAccess -count=5
-
-# or run Redis only tests
-go test -run="TestConcurrentAccess.*/.*redis.*" -v
-```
-
-Monitor for failed requests and adjust `maxRetries` accordingly. Start with 50-75% of expected concurrent users and increase only if you observe request failures under load.
-
-Retries are per-key, if 100 users access with different keys, each gets its own retry counter. The retry mechanism only affects concurrent access to the **same rate limit key** (same user/IP), not total system capacity.
 
 ## Memory failover
 

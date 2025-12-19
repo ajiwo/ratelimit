@@ -182,8 +182,8 @@ func TestConfig_Properties(t *testing.T) {
 		"WithMaxRetries should update the max retries")
 	require.Equal(t, 10, retriesConfig.(*Config).MaxRetries,
 		"WithMaxRetries should update the max retries")
-	require.Equal(t, 0, config.GetMaxRetries(),
-		"WithMaxRetries should not modify the original config")
+	require.Equal(t, 101, config.GetMaxRetries(),
+		"WithMaxRetries should not modify the calculated config")
 
 	// Test getters
 	require.Equal(t, "test_key", config.GetKey(),
@@ -205,8 +205,8 @@ func TestConfig_Properties(t *testing.T) {
 	require.Equal(t, 100, perMinuteQuota.Limit, "GetQuotas should return correct limit")
 	require.Equal(t, time.Minute, perMinuteQuota.Window, "GetQuotas should return correct window")
 
-	require.Equal(t, 0, config.GetMaxRetries(),
-		"MaxRetries should return the correct max retries")
+	require.Equal(t, 101, config.GetMaxRetries(),
+		"MaxRetries should return the computed max retries when unset or set to 0")
 }
 
 func TestConfig_Builder(t *testing.T) {

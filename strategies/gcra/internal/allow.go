@@ -53,9 +53,6 @@ func Allow(
 	}
 
 	maxRetries := config.GetMaxRetries()
-	if maxRetries <= 0 {
-		maxRetries = strategies.DefaultMaxRetries
-	}
 
 	now := time.Now()
 	emissionInterval := time.Duration(1e9/config.GetRate()) * time.Nanosecond
