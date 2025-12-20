@@ -83,18 +83,10 @@ func WithBackend(backend backends.Backend) Option {
 // between 30ns and 10s, and checks for context cancellation (except for short delays, which bypass context checks)
 // on each attempt.
 //
-// Recommended values, not strictly:
-//   - Low contention (< 10 concurrent users): 5-8 retries
-//   - Medium contention (10-100 concurrent users): 75% of concurrent users retries
-//   - High contention (100+ concurrent users): max(30, 75% of concurrent users) retries
+// If retries is 0 or not set, the system uses retry calculation:
+//   - For continuous strategies (Token Bucket, Leaky Bucket, GCRA): uses burst capacity
+//   - For Fixed Window: uses limit from the most restrictive quota available
 //
-// Examples:
-//   - 20 concurrent users: ~15 retries
-//   - 50 concurrent users: ~38 retries
-//   - 100 concurrent users: 75 retries
-//   - 500 concurrent users: 375 retries
-//
-// If retries is 0 or not set, the default value (30) will be used.
 // To disable retries entirely, set retries to 1 (a single attempt without any retries).
 func WithMaxRetries(retries int) Option {
 	return func(config *Config) error {

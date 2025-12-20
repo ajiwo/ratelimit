@@ -85,9 +85,6 @@ func prepareCompositeForAllow(sci strategies.Config) (*Config, string, int, erro
 	}
 
 	maxRetries := cfg.GetMaxRetries()
-	if maxRetries <= 0 {
-		maxRetries = strategies.DefaultMaxRetries
-	}
 
 	return cfg, key, maxRetries, nil
 }

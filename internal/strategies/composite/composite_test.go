@@ -52,7 +52,7 @@ func (m compMockConfig) WithRole(role strategies.Role) strategies.Config {
 	return m
 }
 func (m compMockConfig) WithKey(key string) strategies.Config { m.key = key; return m }
-func (m compMockConfig) GetMaxRetries() int                   { return m.maxRetries }
+func (m compMockConfig) GetMaxRetries() int                   { return m.maxRetries + 1 }
 func (m compMockConfig) WithMaxRetries(retries int) strategies.Config {
 	m.maxRetries = retries
 	return m
@@ -354,7 +354,7 @@ func TestCompositeCASRetry(t *testing.T) {
 	require.NoError(t, err, "Failed to create composite strategy")
 
 	cfg := &Config{BaseKey: "k", Primary: priConfig, Secondary: secConfig}
-	cfg = cfg.WithKey("retry").(*Config)
+	cfg = cfg.WithKey("retry").WithMaxRetries(3).(*Config)
 
 	// Should succeed after retries
 	res, err := comp.Allow(t.Context(), cfg)

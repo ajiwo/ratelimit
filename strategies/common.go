@@ -7,7 +7,7 @@ import (
 
 const (
 	// DefaultMaxRetries is the default maximum number of retry attempts for CheckAndSet operations
-	DefaultMaxRetries = 30
+	DefaultMaxRetries = 0
 	// MaxRetries is the maximum number of retry attempts for CheckAndSet operations before giving up.
 	//
 	// The current implementation (with 8-bit shift and 10s max feedback) overflows at 7,205,759 attempts.
@@ -19,6 +19,7 @@ const (
 )
 
 // CalcExpiration calculates an appropriate expiration time for storage operations
+//
 // based on capacity and rate, with a minimum of 1 second
 // it's currently used by gcra, leaky bucket, and token bucket strategy
 func CalcExpiration(capacity int, rate float64) time.Duration {
@@ -30,6 +31,7 @@ func CalcExpiration(capacity int, rate float64) time.Duration {
 }
 
 // NextDelay calculates the next delay.
+//
 // It produces a sawtooth-like pattern of exponential backoff for constant feedback.
 // In practice, feedback is random, measured from the time before and after of the
 // last failed CheckAndSet operation.
