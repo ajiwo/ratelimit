@@ -144,23 +144,6 @@ func (c *Config) Capabilities() strategies.CapabilityFlags {
 	return strategies.CapPrimary | strategies.CapQuotas
 }
 
-// GetRole returns the current role of the fixed window strategy.
-//
-// Fixed window strategy always returns RolePrimary since it only supports
-// primary operation and cannot be used as a secondary strategy.
-func (c *Config) GetRole() strategies.Role {
-	return strategies.RolePrimary
-}
-
-// WithRole returns a copy of the config with the specified role applied.
-//
-// For fixed window strategy, this method ignores the role parameter and
-// returns the original config since this strategy only supports primary roles.
-// Attempting to use it as a secondary strategy will fail validation.
-func (c *Config) WithRole(role strategies.Role) strategies.Config {
-	return c // Fixed window strategy only supports primary role
-}
-
 // WithKey returns a copy of the config with the provided key applied.
 //
 // The key is used as-is for storage without modification or prefixing.

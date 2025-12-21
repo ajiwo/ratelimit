@@ -92,7 +92,6 @@ func (m *mockStrategyOne) Reset(ctx context.Context, cfg strategies.Config) erro
 type mockStrategyConfig struct {
 	id         strategies.ID
 	caps       strategies.CapabilityFlags
-	role       strategies.Role
 	key        string
 	valid      error
 	maxRetries int
@@ -101,11 +100,6 @@ type mockStrategyConfig struct {
 func (m mockStrategyConfig) Validate() error                          { return m.valid }
 func (m mockStrategyConfig) ID() strategies.ID                        { return m.id }
 func (m mockStrategyConfig) Capabilities() strategies.CapabilityFlags { return m.caps }
-func (m mockStrategyConfig) GetRole() strategies.Role                 { return m.role }
-func (m mockStrategyConfig) WithRole(role strategies.Role) strategies.Config {
-	m.role = role
-	return m
-}
 
 func (m mockStrategyConfig) WithKey(key string) strategies.Config {
 	m.key = key
@@ -271,7 +265,6 @@ func TestAllowAndResultFlow_SingleStrategy(t *testing.T) {
 	// Verify key composed and passed via WithKey to strategy config
 	if c, ok := ms.lastConfig.(mockStrategyConfig); ok {
 		assert.Equal(t, "base:user", c.key, "expected composed key 'base:user'")
-		assert.Equal(t, strategies.RolePrimary, c.role, "expected primary role")
 	} else {
 		t.Fatalf("strategy config type mismatch")
 	}

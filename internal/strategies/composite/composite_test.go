@@ -37,7 +37,6 @@ func (m *compMockStrategy) Reset(ctx context.Context, cfg strategies.Config) err
 type compMockConfig struct {
 	id         strategies.ID
 	caps       strategies.CapabilityFlags
-	role       strategies.Role
 	key        string
 	valid      error
 	maxRetries int
@@ -46,11 +45,7 @@ type compMockConfig struct {
 func (m compMockConfig) Validate() error                          { return m.valid }
 func (m compMockConfig) ID() strategies.ID                        { return m.id }
 func (m compMockConfig) Capabilities() strategies.CapabilityFlags { return m.caps }
-func (m compMockConfig) GetRole() strategies.Role                 { return m.role }
-func (m compMockConfig) WithRole(role strategies.Role) strategies.Config {
-	m.role = role
-	return m
-}
+
 func (m compMockConfig) WithKey(key string) strategies.Config { m.key = key; return m }
 func (m compMockConfig) GetMaxRetries() int                   { return m.maxRetries + 1 }
 func (m compMockConfig) WithMaxRetries(retries int) strategies.Config {
@@ -102,12 +97,7 @@ func TestCompositeConfigHelpers_IDCapsRole(t *testing.T) {
 	if cc.Capabilities() != (strategies.CapPrimary | strategies.CapSecondary) {
 		t.Fatalf("capabilities mismatch")
 	}
-	if cc.GetRole() != strategies.RolePrimary {
-		t.Fatalf("GetRole should be primary")
-	}
-	if got := cc.WithRole(strategies.RoleSecondary).(*Config); got.GetRole() != cc.GetRole() {
-		t.Fatalf("WithRole should return same config")
-	}
+
 }
 
 func TestCompositeConfigHelpers_WithKey(t *testing.T) {

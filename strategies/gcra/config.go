@@ -9,11 +9,10 @@ import (
 // GCRA uses a theoretical arrival time (TAT) to track when the next request would be allowed.
 // The algorithm updates the TAT based on the configured rate and burst parameters.
 type Config struct {
-	Key        string          // Storage key for GCRA state (theoretical arrival time)
-	Rate       float64         // Requests per second (sustained rate limit)
-	Burst      int             // Maximum burst size (concurrent request tolerance)
-	MaxRetries int             // Maximum retry attempts for atomic operations, 0 means use default
-	role       strategies.Role // Strategy role (primary or secondary)
+	Key        string  // Storage key for GCRA state (theoretical arrival time)
+	Rate       float64 // Requests per second (sustained rate limit)
+	Burst      int     // Maximum burst size (concurrent request tolerance)
+	MaxRetries int     // Maximum retry attempts for atomic operations, 0 means use default
 }
 
 // Validate performs configuration validation for the GCRA strategy.
@@ -48,24 +47,6 @@ func (c *Config) ID() strategies.ID {
 // multi-quota configurations.
 func (c *Config) Capabilities() strategies.CapabilityFlags {
 	return strategies.CapPrimary | strategies.CapSecondary
-}
-
-// GetRole returns the current role of the GCRA strategy.
-//
-// The role determines whether this strategy acts as a primary limiter
-// or secondary smoothing strategy in dual-strategy configurations.
-func (c *Config) GetRole() strategies.Role {
-	return c.role
-}
-
-// WithRole returns a copy of the config with the specified role applied.
-//
-// This method allows the same GCRA configuration to be used
-// in different roles (primary or secondary) without modifying the original.
-func (c *Config) WithRole(role strategies.Role) strategies.Config {
-	cfg := *c
-	cfg.role = role
-	return &cfg
 }
 
 // WithKey returns a copy of the config with the provided key applied.

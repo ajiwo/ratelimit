@@ -160,13 +160,6 @@ func TestConfig_Properties(t *testing.T) {
 	require.True(t, caps.Has(strategies.CapQuotas),
 		"FixedWindow config should have quotas capability")
 
-	// Test GetRole() and WithRole()
-	require.Equal(t, strategies.RolePrimary, config.GetRole(),
-		"FixedWindow config should have primary role by default")
-	secondaryConfig := config.WithRole(strategies.RoleSecondary)
-	require.Equal(t, strategies.RolePrimary, secondaryConfig.GetRole(),
-		"WithRole should not change the role for FixedWindow (primary only)")
-
 	// Test WithKey()
 	updatedConfig := config.WithKey("new_key")
 	require.Equal(t, "new_key", updatedConfig.(*Config).Key,

@@ -100,17 +100,6 @@ func TestConfig_Properties(t *testing.T) {
 	require.True(t, config.Capabilities().Has(strategies.CapSecondary),
 		"LeakyBucket config should have secondary capability")
 
-	// Test GetRole() and WithRole()
-	require.Equal(t, strategies.RolePrimary, config.GetRole(),
-		"LeakyBucket config should have primary role by default")
-	secondaryConfig := config.WithRole(strategies.RoleSecondary)
-	require.Equal(t, strategies.RoleSecondary, secondaryConfig.GetRole(),
-		"WithRole should set the role to secondary")
-
-	// check original is not modified
-	require.Equal(t, strategies.RolePrimary, config.GetRole(),
-		"WithRole should not modify the original config")
-
 	// Test WithKey()
 	updatedConfig := config.WithKey("new_key")
 	require.Equal(t, "new_key", updatedConfig.(*Config).Key,

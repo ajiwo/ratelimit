@@ -79,24 +79,6 @@ func (c *Config) Capabilities() strategies.CapabilityFlags {
 	return strategies.CapPrimary | strategies.CapSecondary
 }
 
-// GetRole returns the current role of the composite strategy.
-//
-// Composite strategy always returns RolePrimary since it acts as the main
-// rate limiter, coordinating both primary and secondary strategies internally.
-func (c *Config) GetRole() strategies.Role {
-	return strategies.RolePrimary // Composite always acts as primary
-}
-
-// WithRole returns a copy of the config with the specified role applied.
-//
-// For composite strategy, this method ignores the role parameter and
-// returns the original config since composite strategies only support
-// primary operation by design.
-func (c *Config) WithRole(role strategies.Role) strategies.Config {
-	// Composite strategies don't change roles
-	return c
-}
-
 // WithKey applies a new fully-qualified-key to the composite config.
 //
 // This method generates a composite storage key using the format:

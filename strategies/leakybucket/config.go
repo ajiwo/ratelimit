@@ -10,11 +10,10 @@ import (
 // with a hole at the bottom. The bucket has a maximum capacity, and requests
 // leak out at a constant rate. If the bucket overflows, requests are rejected.
 type Config struct {
-	Key        string          // Storage key for the leaky bucket state
-	Burst      int             // Maximum requests the bucket can hold
-	Rate       float64         // Requests to process per second (output rate)
-	role       strategies.Role // Strategy role (primary or secondary)
-	MaxRetries int             // Maximum retry attempts for atomic operations, 0 means use default
+	Key        string  // Storage key for the leaky bucket state
+	Burst      int     // Maximum requests the bucket can hold
+	Rate       float64 // Requests to process per second (output rate)
+	MaxRetries int     // Maximum retry attempts for atomic operations, 0 means use default
 }
 
 // Validate performs configuration validation for the leaky bucket.
@@ -49,24 +48,6 @@ func (c *Config) ID() strategies.ID {
 // multi-quota configurations.
 func (c *Config) Capabilities() strategies.CapabilityFlags {
 	return strategies.CapPrimary | strategies.CapSecondary
-}
-
-// GetRole returns the current role of the leaky bucket strategy.
-//
-// The role determines whether this strategy acts as a primary limiter
-// or secondary smoothing strategy in dual-strategy configurations.
-func (c *Config) GetRole() strategies.Role {
-	return c.role
-}
-
-// WithRole returns a copy of the config with the specified role applied.
-//
-// This method allows the same leaky bucket configuration to be used
-// in different roles (primary or secondary) without modifying the original.
-func (c *Config) WithRole(role strategies.Role) strategies.Config {
-	cfg := *c
-	cfg.role = role
-	return &cfg
 }
 
 // WithKey returns a copy of the config with the provided key applied.

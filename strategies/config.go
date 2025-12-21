@@ -34,22 +34,6 @@ func (id ID) String() string {
 	}
 }
 
-// Role defines the role a strategy instance will play in dual-strategy configurations.
-type Role int
-
-const (
-	// RolePrimary indicates the strategy acts as the primary hard limiter.
-	//
-	// Primary strategy is evaluated first and enforces strict rate limits.
-	RolePrimary Role = iota
-
-	// RoleSecondary indicates the strategy acts as a secondary limiter.
-	//
-	// Secondary strategies are evaluated after primary limits pass and provide
-	// additional smoothing or burst handling capabilities.
-	RoleSecondary
-)
-
 // Config defines the interface for all strategy configurations
 type Config interface {
 	// Validate performs configuration validation and returns an error if invalid.
@@ -66,16 +50,6 @@ type Config interface {
 	//
 	// Strategies declare whether they can be used as primary, secondary, or support quotas.
 	Capabilities() CapabilityFlags
-
-	// Role-based methods for managing strategy roles in dual-strategy configurations
-
-	// GetRole returns the current role of the strategy instance.
-	GetRole() Role
-
-	// WithRole returns a new config with the specified role applied.
-	//
-	// This enables role-based configuration without modifying the original.
-	WithRole(role Role) Config
 
 	// WithKey returns a copy of the config with the provided fully-qualified key applied.
 	//
