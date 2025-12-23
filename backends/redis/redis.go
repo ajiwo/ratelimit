@@ -57,10 +57,11 @@ func (r *Backend) GetClient() redis.UniversalClient {
 func (r *Backend) loadCheckAndSetScript(ctx context.Context) error {
 	sha, err := r.client.ScriptLoad(ctx, cnsScript).Result()
 	if err != nil {
-		return r.maybeConnError("redis:ScriptLoad", NewEvalFailedError("load check-and-set script", err))
+		return r.maybeConnError("redis:ScriptLoad",
+			fmt.Errorf("failed to evaluate lua script: %w", err))
 	}
 	if sha != checkAndSetSHA {
-		return ErrScriptSHAInvalid
+		return fmt.Errorf("invalid script SHA hash for lua script")
 	}
 	return nil
 }
@@ -108,7 +109,8 @@ func New(config Config) (*Backend, error) {
 	}
 
 	if _, err := client.Ping(context.Background()).Result(); err != nil {
-		return nil, backends.NewHealthError("redis:Ping", NewPingFailedError(err))
+		return nil, backends.NewHealthError("redis:Ping",
+			fmt.Errorf("redis ping failed: %w", err))
 	}
 
 	return &Backend{
@@ -133,28 +135,28 @@ func (r *Backend) Get(ctx context.Context, key string) (string, error) {
 		return "", nil // Key doesn't exist, return empty string with no error
 	}
 	if err != nil {
-		return "", NewGetFailedError(key, err)
+		return "", fmt.Errorf("failed to get key '%s': %w", key, err)
 	}
 	return val, nil
 }
 
 func (r *Backend) Set(ctx context.Context, key string, value string, expiration time.Duration) error {
 	if err := r.client.Set(ctx, key, value, expiration).Err(); err != nil {
-		return NewSetFailedError(key, err)
+		return fmt.Errorf("failed to set key '%s': %w", key, err)
 	}
 	return nil
 }
 
 func (r *Backend) Delete(ctx context.Context, key string) error {
 	if err := r.client.Del(ctx, key).Err(); err != nil {
-		return NewDeleteFailedError(key, err)
+		return fmt.Errorf("failed to delete key '%s': %w", key, err)
 	}
 	return nil
 }
 
 func (r *Backend) Close() error {
 	if err := r.client.Close(); err != nil {
-		return NewCloseFailedError(err)
+		return fmt.Errorf("failed to close redis connection: %w", err)
 	}
 	return nil
 }
@@ -202,16 +204,18 @@ func (r *Backend) CheckAndSet(ctx context.Context, key, oldValue, newValue strin
 		// If script was not cached or flushed from Redis, load it and retry
 		if strings.Contains(err.Error(), "NOSCRIPT") {
 			if loadErr := r.loadCheckAndSetScript(ctx); loadErr != nil {
-				return false, NewEvalFailedError("reload check-and-set script", loadErr)
+				return false, fmt.Errorf("failed to evaluate lua script: %w", loadErr)
 			}
 			result, err = r.client.
 				EvalSha(ctx, checkAndSetSHA, []string{key}, oldStr, newStr, expMs).
 				Result()
 			if err != nil {
-				return false, r.maybeConnError("redis:CheckAndSet", NewEvalFailedError("check-and-set cached script", err))
+				return false, r.maybeConnError("redis:CheckAndSet",
+					fmt.Errorf("failed to evaluate lua script: %w", err))
 			}
 		} else {
-			return false, r.maybeConnError("redis:CheckAndSet", NewEvalFailedError("check-and-set cached script", err))
+			return false, r.maybeConnError("redis:CheckAndSet",
+				fmt.Errorf("failed to evaluate lua script: %w", err))
 		}
 	}
 

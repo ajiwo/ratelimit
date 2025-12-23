@@ -1,6 +1,8 @@
 package leakybucket
 
 import (
+	"fmt"
+
 	"github.com/ajiwo/ratelimit/strategies"
 )
 
@@ -19,17 +21,17 @@ type Config struct {
 // Validate performs configuration validation for the leaky bucket.
 //
 // Returns an error if any of the following conditions are met:
-//   - Burst <= 0 (NewInvalidBurstError)
-//   - Rate <= 0 (NewInvalidRateError)
+//   - Burst <= 0
+//   - Rate <= 0
 //
 // Note: The Key field is not validated here as it may be set later
 // using WithKey() for dynamic key assignment.
 func (c *Config) Validate() error {
 	if c.Burst <= 0 {
-		return NewInvalidBurstError(c.Burst)
+		return fmt.Errorf("leaky bucket burst must be positive, got %d", c.Burst)
 	}
 	if c.Rate <= 0 {
-		return NewInvalidRateError(c.Rate)
+		return fmt.Errorf("leaky bucket rate must be positive, got %f", c.Rate)
 	}
 	return nil
 }

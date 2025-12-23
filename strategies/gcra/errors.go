@@ -1,18 +1,6 @@
 package gcra
 
-import (
-	"errors"
-	"fmt"
-)
+import "errors"
 
-// Configuration errors
+// ErrInvalidConfig is returned when the provided config is not of type gcra.Config.
 var ErrInvalidConfig = errors.New("gcra strategy requires gcra.Config")
-
-// Configuration validation error functions
-func NewInvalidRateError(rate float64) error {
-	return fmt.Errorf("gcra rate must be positive, got %f", rate)
-}
-
-func NewInvalidBurstError(burst int) error {
-	return fmt.Errorf("gcra burst must be positive, got %d", burst)
-}

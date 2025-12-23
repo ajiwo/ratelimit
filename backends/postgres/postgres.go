@@ -55,7 +55,8 @@ func New(config Config) (*Backend, error) {
 
 	poolConfig, err := pgxpool.ParseConfig(config.ConnString)
 	if err != nil {
-		return nil, backends.MaybeConnError("postgres:ParseConfig", NewInvalidConnStringError(err), patterns)
+		return nil, backends.MaybeConnError("postgres:ParseConfig",
+			fmt.Errorf("invalid postgres connection string: %w", err), patterns)
 	}
 
 	poolConfig.MaxConns = config.MaxConns
@@ -63,15 +64,17 @@ func New(config Config) (*Backend, error) {
 
 	pool, err := pgxpool.NewWithConfig(context.Background(), poolConfig)
 	if err != nil {
-		return nil, backends.MaybeConnError("postgres:NewPool", NewPoolCreationFailedError(err), patterns)
+		return nil, backends.MaybeConnError("postgres:NewPool",
+			fmt.Errorf("failed to create postgres connection pool: %w", err), patterns)
 	}
 
 	if err := pool.Ping(context.Background()); err != nil {
-		return nil, backends.MaybeConnError("postgres:Ping", NewPingFailedError(err), patterns)
+		return nil, backends.MaybeConnError("postgres:Ping",
+			fmt.Errorf("postgres ping failed: %w", err), patterns)
 	}
 
 	if err := createTable(context.Background(), pool); err != nil {
-		return nil, NewTableCreationFailedError(err)
+		return nil, fmt.Errorf("failed to create ratelimit table: %w", err)
 	}
 
 	return &Backend{
@@ -99,7 +102,7 @@ func createTable(ctx context.Context, pool *pgxpool.Pool) error {
 		)
 	`)
 	if err != nil {
-		return NewTableQueryFailedError("CREATE TABLE", err)
+		return fmt.Errorf("failed to execute table query 'CREATE TABLE': %w", err)
 	}
 	return nil
 }
@@ -121,7 +124,8 @@ func (p *Backend) Get(ctx context.Context, key string) (string, error) {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", nil
 		}
-		return "", p.maybeConnError("postgres:Get", NewGetFailedError(key, err))
+		return "", p.maybeConnError("postgres:Get",
+			fmt.Errorf("failed to get key '%s' from postgres: %w", key, err))
 	}
 
 	if expiresAt != nil && time.Now().After(*expiresAt) {
@@ -146,7 +150,8 @@ func (p *Backend) Set(ctx context.Context, key string, value string, expiration 
 			expires_at = EXCLUDED.expires_at
 	`, key, value, expiresAt)
 	if err != nil {
-		return p.maybeConnError("postgres:Set", NewSetFailedError(key, err))
+		return p.maybeConnError("postgres:Set",
+			fmt.Errorf("failed to set key '%s' in postgres: %w", key, err))
 	}
 	return nil
 }
@@ -154,7 +159,8 @@ func (p *Backend) Set(ctx context.Context, key string, value string, expiration 
 func (p *Backend) Delete(ctx context.Context, key string) error {
 	_, err := p.pool.Exec(ctx, `DELETE FROM ratelimit_kv WHERE key = $1`, key)
 	if err != nil {
-		return p.maybeConnError("postgres:Delete", NewDeleteFailedError(key, err))
+		return p.maybeConnError("postgres:Delete",
+			fmt.Errorf("failed to delete key '%s' from postgres: %w", key, err))
 	}
 	return nil
 }
@@ -199,7 +205,7 @@ func (p *Backend) CheckAndSet(ctx context.Context, key, oldValue, newValue strin
 	}
 
 	if oldValue == "" {
-		// Insert new key only if it doesn't exist (atomic operation)
+		// Insert new key if it doesn't exist, or replace it if the existing key is expired.
 		result, err := p.pool.Exec(ctx, `
 			INSERT INTO ratelimit_kv (key, value, expires_at)
 			VALUES ($1, $2, $3)
@@ -211,7 +217,8 @@ func (p *Backend) CheckAndSet(ctx context.Context, key, oldValue, newValue strin
 
 		`, key, newValue, expiresAt)
 		if err != nil {
-			return false, p.maybeConnError("postgres:CheckAndSet:Insert", NewCheckAndSetFailedError(key, err))
+			return false, p.maybeConnError("postgres:CheckAndSet:Insert",
+				fmt.Errorf("check-and-set operation failed for key '%s': %w", key, err))
 		}
 
 		// Return true if a row was inserted, false if key already existed
@@ -227,7 +234,8 @@ func (p *Backend) CheckAndSet(ctx context.Context, key, oldValue, newValue strin
 			AND (expires_at IS NULL OR expires_at > NOW())
 	`, newValue, expiresAt, key, oldValue)
 	if err != nil {
-		return false, p.maybeConnError("postgres:CheckAndSet:Update", NewCheckAndSetFailedError(key, err))
+		return false, p.maybeConnError("postgres:CheckAndSet:Update",
+			fmt.Errorf("check-and-set operation failed for key '%s': %w", key, err))
 	}
 
 	return result.RowsAffected() == 1, nil

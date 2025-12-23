@@ -1,6 +1,7 @@
 package fixedwindow
 
 import (
+	"fmt"
 	"math"
 	"time"
 
@@ -56,24 +57,24 @@ func (c *Config) GetQuotas() []internal.Quota {
 // Validate performs comprehensive configuration validation.
 //
 // Returns an error if any of the following conditions are met:
-//   - No quotas are configured (ErrNoQuotas)
-//   - More than 8 quotas are configured (ErrTooManyQuotas)
-//   - Any quota has a limit <= 0 (NewInvalidQuotaLimitError)
-//   - Any quota has a window duration <= 0 (NewInvalidQuotaWindowError)
+//   - No quotas are configured
+//   - More than 8 quotas are configured
+//   - Any quota has a limit <= 0
+//   - Any quota has a window duration <= 0
 //   - Any quota name is invalid (utils.ValidateQuotaName)
-//   - Multiple quotas have the same rate ratio (NewDuplicateRateRatioError)
+//   - Multiple quotas have the same rate ratio
 //
 // Rate ratio validation ensures each quota enforces a distinct rate limit
 // by checking that requests per second values are unique (with 1e-9 tolerance
 // for floating-point precision).
 func (c *Config) Validate() error {
 	if len(c.Quotas) == 0 {
-		return ErrNoQuotas
+		return fmt.Errorf("fixed window must have at least one quota")
 	}
 
 	// Validate maximum of 8 quotas per key
 	if len(c.Quotas) > internal.MaxQuota {
-		return ErrTooManyQuotas
+		return fmt.Errorf("fixed window maximum of %d quotas per key exceeded", internal.MaxQuota)
 	}
 
 	for _, quota := range c.Quotas {
@@ -82,10 +83,10 @@ func (c *Config) Validate() error {
 			return err
 		}
 		if quota.Limit <= 0 {
-			return NewInvalidQuotaLimitError(quota.Name, quota.Limit)
+			return fmt.Errorf("fixed window quota '%s' limit must be positive, got %d", quota.Name, quota.Limit)
 		}
 		if quota.Window <= 0 {
-			return NewInvalidQuotaWindowError(quota.Name, quota.Window)
+			return fmt.Errorf("fixed window quota '%s' window must be positive, got %v", quota.Name, quota.Window)
 		}
 	}
 
@@ -114,7 +115,9 @@ func (c *Config) validateUniqueRateRatios() error {
 		tolerance := 1e-9
 		for existingRate, existingName := range rateRatios {
 			if math.Abs(ratePerSecond-existingRate) < tolerance {
-				return NewDuplicateRateRatioError(quota.Name, existingName, ratePerSecond)
+				return fmt.Errorf(
+					"fixed window quotas '%s' and '%s' have duplicate rate ratios (both %.6f requests/second). Each quota must have a unique rate limit",
+					quota.Name, existingName, ratePerSecond)
 			}
 		}
 
