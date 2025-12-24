@@ -2,6 +2,28 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Removed
+- Public error variables and error creation functions from backend implementations (memory, postgres, redis) and strategy configurations (fixedwindow, gcra, leakybucket, tokenbucket)
+- Unused `Role` concept from strategy configurations, including `GetRole()` and `WithRole()` methods from the `Config` interface and all strategy implementations (Fixed Window, Token Bucket, Leaky Bucket, GCRA, and Composite)
+
+### Added
+- **Auto-calculated Max Retries**: When `MaxRetries` field is set to 0 (default), strategies now automatically calculate optimal retry counts based on their specific parameters:
+  - Token Bucket, Leaky Bucket, and GCRA use their burst capacity plus 1
+  - Fixed Window uses the limit of the most restrictive quota plus 1
+  - Dual strategy returns the minimum of primary and secondary retries
+- `SetMaxRetries` method to FixedWindow builder for setting retry limits
+
+### Changed
+- **Strategy Configs**: Renamed `MaxRetries()` method to `GetMaxRetries()` to follow getter naming conventions
+- **Composite Strategy**: Retry logic now uses minimum of primary and secondary retry counts instead of defaulting to primary only
+- **WithMaxRetries**: When set to 0 (or unset), strategies now auto-calculate optimal retries based on their parameters instead of defaulting to 30
+  - Token Bucket, Leaky Bucket, GCRA: burst capacity + 1
+  - Fixed Window: most restrictive quota limit + 1
+  - Composite: minimum of primary and secondary calculated values
+- **Fixed Window**: Quota storage changed from map to slice for deterministic iteration order and consistent serialization
+
 ## [0.0.9] - 2025-12-04
 
 ### Added
@@ -132,6 +154,8 @@ All notable changes to this project will be documented in this file.
 ### Changed
 - **Terminology update**: "tier" renamed to "quota" throughout codebase for clarity
 - **Strategy interface redesigned** to return `map[string]Result` for better multi-quota support
+  - The v0.0.4 deprecation of `Allow` in favor of `AllowWithResult` has been cancelled
+  - `AllowWithResult` was removed; `Allow` is now the single unified method returning detailed results
 - **Dual-strategy orchestration** moved from main limiter to dedicated Composite Strategy
 - **Strategy configurations** moved to individual strategy packages with `WithKey()` interface
 - **Backend configuration** standardized across all storage backends
