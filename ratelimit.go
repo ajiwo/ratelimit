@@ -136,13 +136,17 @@ func (r *RateLimiter) allowWithResult(ctx context.Context, dynamicKey string) (b
 func (r *RateLimiter) buildStrategyConfig(dynamicKey string) strategies.Config {
 	// build dual strategy config
 	if r.config.SecondaryConfig != nil {
-		return (&composite.Config{
+		cc := (&composite.Config{
 			BaseKey:   r.config.BaseKey,
 			Primary:   r.config.PrimaryConfig,
 			Secondary: r.config.SecondaryConfig,
 		}).
-			WithKey(dynamicKey).
-			WithMaxRetries(r.config.maxRetries)
+			WithKey(dynamicKey)
+
+		if r.config.maxRetries > 0 {
+			return cc.WithMaxRetries(r.config.maxRetries)
+		}
+		return cc
 	}
 
 	// build single strategy config
@@ -152,9 +156,13 @@ func (r *RateLimiter) buildStrategyConfig(dynamicKey string) strategies.Config {
 	sb.WriteString(r.basePrefix)
 	sb.WriteString(dynamicKey)
 
-	return r.config.PrimaryConfig.
-		WithKey(sb.String()).
-		WithMaxRetries(r.config.maxRetries)
+	cc := r.config.PrimaryConfig.
+		WithKey(sb.String())
+
+	if r.config.maxRetries > 0 {
+		return cc.WithMaxRetries(r.config.maxRetries)
+	}
+	return cc
 }
 
 // checkDynamicKey validates (if enabled) and returns the dynamic key

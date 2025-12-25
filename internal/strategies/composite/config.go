@@ -89,15 +89,16 @@ func (c *Config) Capabilities() strategies.CapabilityFlags {
 // Primary and secondary configs are not given keys directly since they use
 // the singleKeyAdapter internally for coordinated storage.
 func (c *Config) WithKey(key string) strategies.Config {
+	cfg := *c
 	sb := builderpool.Get()
 	defer builderpool.Put(sb)
 	sb.WriteString(c.BaseKey)
 	sb.WriteString(":")
 	sb.WriteString(key)
 	sb.WriteString(":c")
-	c.compositeKey = sb.String()
+	cfg.compositeKey = sb.String()
 
-	return c
+	return &cfg
 }
 
 // CompositeKey returns the composite storage key.
@@ -124,7 +125,8 @@ func (c *Config) GetMaxRetries() int {
 // the explicit value will be applied to both strategies, overriding their
 // automatic calculations.
 func (c *Config) WithMaxRetries(retries int) strategies.Config {
-	c.Primary = c.Primary.WithMaxRetries(retries)
-	c.Secondary = c.Secondary.WithMaxRetries(retries)
-	return c
+	cfg := *c
+	cfg.Primary = c.Primary.WithMaxRetries(retries)
+	cfg.Secondary = c.Secondary.WithMaxRetries(retries)
+	return &cfg
 }
