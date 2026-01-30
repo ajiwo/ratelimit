@@ -54,18 +54,21 @@ func Allow(
 
 	maxRetries := config.GetMaxRetries()
 
+	burst := config.GetBurst()
+	rate := config.GetRate()
+
 	now := time.Now()
-	emissionInterval := time.Duration(1e9/config.GetRate()) * time.Nanosecond
-	limit := time.Duration(float64(config.GetBurst()) * float64(emissionInterval))
+	emissionInterval := time.Duration(1e9 / rate)
+	limit := time.Duration(float64(burst) * float64(emissionInterval))
 
 	p := &parameter{
-		burst:            config.GetBurst(),
+		burst:            burst,
 		emissionInterval: emissionInterval,
 		key:              config.GetKey(),
 		limit:            limit,
 		maxRetries:       maxRetries,
 		now:              now,
-		rate:             config.GetRate(),
+		rate:             rate,
 		storage:          storage,
 	}
 
@@ -75,7 +78,7 @@ func Allow(
 	}
 
 	// Try-and-update mode: attempt to consume quota with retries
-	return p.consumeQuota(ctx)
+	return p.allowTryAndUpdate(ctx)
 }
 
 // allowReadOnly implements read-only mode
@@ -116,8 +119,8 @@ func (p *parameter) allowReadOnly(ctx context.Context) (Result, error) {
 	}, nil
 }
 
-// consumeQuota consumes quota using atomic CheckAndSet with retries
-func (p *parameter) consumeQuota(ctx context.Context) (Result, error) {
+// allowTryAndUpdate implements try-and-update mode with retries
+func (p *parameter) allowTryAndUpdate(ctx context.Context) (Result, error) {
 	// Try atomic CheckAndSet operations first
 	for attempt := range p.maxRetries {
 		// Check if context is canceled or timed out

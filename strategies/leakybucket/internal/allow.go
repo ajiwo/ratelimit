@@ -97,8 +97,8 @@ func (p *parameter) allowReadOnly(ctx context.Context) (Result, error) {
 	}
 
 	// Leak requests based on time elapsed
-	timeElapsed := p.now.Sub(bucket.LastLeak).Seconds()
-	requestsToLeak := timeElapsed * p.leakRate
+	elapsed := p.now.Sub(bucket.LastLeak).Seconds()
+	requestsToLeak := elapsed * p.leakRate
 	bucket.Requests = max(0.0, bucket.Requests-requestsToLeak)
 	bucket.LastLeak = p.now
 
@@ -147,8 +147,8 @@ func (p *parameter) allowTryAndUpdate(ctx context.Context) (Result, error) {
 			oldValue = data
 
 			// Leak requests based on elapsed time
-			elapsed := p.now.Sub(bucket.LastLeak)
-			requestsToLeak := float64(elapsed.Nanoseconds()) * p.leakRate / 1e9
+			elapsed := p.now.Sub(bucket.LastLeak).Seconds()
+			requestsToLeak := elapsed * p.leakRate
 			bucket.Requests = max(0.0, bucket.Requests-requestsToLeak)
 			bucket.LastLeak = p.now
 		}

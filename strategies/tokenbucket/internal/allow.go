@@ -2,7 +2,6 @@ package internal
 
 import (
 	"context"
-	"math"
 	"time"
 
 	"github.com/ajiwo/ratelimit/backends"
@@ -84,9 +83,9 @@ func (p *parameter) allowReadOnly(ctx context.Context) (Result, error) {
 		return Result{}, ErrStateParsing
 	}
 
-	timeElapsed := p.now.Sub(bucket.LastRefill).Seconds()
-	tokensToAdd := timeElapsed * p.refillRate
-	bucket.Tokens = math.Min(bucket.Tokens+tokensToAdd, p.capacity)
+	elapsed := p.now.Sub(bucket.LastRefill).Seconds()
+	tokensToAdd := elapsed * p.refillRate
+	bucket.Tokens = min(bucket.Tokens+tokensToAdd, p.capacity)
 	bucket.LastRefill = p.now
 
 	remaining := max(int(bucket.Tokens), 0)
@@ -126,13 +125,13 @@ func (p *parameter) allowTryAndUpdate(ctx context.Context) (Result, error) {
 			}
 			oldValue = data
 
-			elapsed := p.now.Sub(bucket.LastRefill)
-			tokensToAdd := float64(elapsed.Nanoseconds()) * p.refillRate / 1e9
-			bucket.Tokens = math.Min(bucket.Tokens+tokensToAdd, p.capacity)
+			elapsed := p.now.Sub(bucket.LastRefill).Seconds()
+			tokensToAdd := elapsed * p.refillRate
+			bucket.Tokens = min(bucket.Tokens+tokensToAdd, p.capacity)
 			bucket.LastRefill = p.now
 		}
 
-		allowed := math.Floor(bucket.Tokens) >= 1.0
+		allowed := bucket.Tokens >= 1.0
 
 		if allowed {
 			beforeCAS := time.Now()
