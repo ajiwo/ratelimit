@@ -19,6 +19,7 @@ sleep 1
 # Run integration tests
 echo "Running integration tests..."
 cd tests
+go mod tidy
 go test -count=1 -timeout=120s -race  .
 
 cd ..
