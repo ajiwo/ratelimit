@@ -19,7 +19,7 @@ func UseBackend(t *testing.T, name string) backends.Backend {
 
 	postgresConn := os.Getenv("TEST_POSTGRES_DSN")
 	if postgresConn == "" {
-		postgresConn = "postgres://postgres:postgres@localhost:5432/ratelimit_test?sslmode=disable"
+		postgresConn = "postgres://postgres:postgres@localhost:5432/ratelimit_test?sslmode=disable" // #nosec G101
 	}
 
 	redisAddr := os.Getenv("REDIS_ADDR")

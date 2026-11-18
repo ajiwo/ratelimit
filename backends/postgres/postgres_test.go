@@ -15,7 +15,7 @@ func setupPostgresTest(t *testing.T) (*Backend, func()) {
 
 	postgresConn := os.Getenv("TEST_POSTGRES_DSN")
 	if postgresConn == "" {
-		postgresConn = "postgres://postgres:postgres@localhost:5432/ratelimit_test?sslmode=disable"
+		postgresConn = "postgres://postgres:postgres@localhost:5432/ratelimit_test?sslmode=disable" // #nosec G101
 	}
 
 	storage, err := New(Config{
@@ -201,7 +201,7 @@ func TestPostgresStorage_ConcurrentAccess(t *testing.T) {
 func TestPostgresStorage_Close(t *testing.T) {
 	postgresConn := os.Getenv("TEST_POSTGRES_DSN")
 	if postgresConn == "" {
-		postgresConn = "postgres://postgres:postgres@localhost:5432/ratelimit_test?sslmode=disable"
+		postgresConn = "postgres://postgres:postgres@localhost:5432/ratelimit_test?sslmode=disable" // #nosec G101
 	}
 
 	storage, err := New(Config{
