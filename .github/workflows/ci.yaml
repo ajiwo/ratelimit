@@ -12,6 +12,33 @@ on:
       - main
 
 jobs:
+  lint:
+    name: lint (${{ matrix.working-directory }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        working-directory:
+          - .
+          - backends/postgres
+          - backends/redis
+          - tests
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v5
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version-file: "go.mod"
+          cache-dependency-path: ${{ matrix.working-directory }}/go.sum
+
+      - name: Run golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.15.0
+          working-directory: ${{ matrix.working-directory }}
+
   ci:
     name: CI
     runs-on: ubuntu-latest
@@ -45,11 +72,6 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version-file: "go.mod"
-
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: v2.4.0
 
       - name: Run tests with coverage
         run: ./test.sh
